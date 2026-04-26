@@ -1368,36 +1368,94 @@ nav.tabbar {
 .field-manage-btn:active { transform: scale(0.9); }
 .field-manage-btn:hover { background: rgba(106,134,108,0.15); }
 
-/* v1.6: Row action menu (tap tx → menu) */
+/* v2.5: Full-width transaction preview card */
 .action-menu-wrap {
-  padding: 20px 8px max(20px, env(safe-area-inset-bottom));
+  padding: 20px 16px max(20px, env(safe-area-inset-bottom));
 }
 .action-menu-preview {
-  display: flex; align-items: center; gap: 12px;
-  padding: 14px 16px; border-radius: 14px;
   background: var(--surface2); border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px 18px 14px;
   margin-bottom: 16px;
 }
-.action-menu-preview .ico {
-  width: 44px; height: 44px; border-radius: 50%;
-  background: var(--surface); border: 1px solid var(--line);
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 20px; flex-shrink: 0;
+/* Header row: type badge + amount */
+.action-menu-preview .head-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
 }
-.action-menu-preview .info { flex: 1; min-width: 0; }
-.action-menu-preview .title {
-  font-size: 14px; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.action-menu-preview .type-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 11px; letter-spacing: 0.04em;
+  border: 1px solid var(--line);
 }
-.action-menu-preview .sub {
-  font-size: 11px; color: var(--text-faint); margin-top: 2px;
+.action-menu-preview .type-pill.in {
+  color: var(--income-soft); border-color: rgba(47,107,61,0.35);
+  background: rgba(47,107,61,0.08);
+}
+.action-menu-preview .type-pill.out {
+  color: var(--expense-soft); border-color: rgba(184,88,66,0.35);
+  background: rgba(184,88,66,0.08);
 }
 .action-menu-preview .amt {
-  font-family: 'IBM Plex Mono', monospace; font-size: 15px;
+  font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums;
+  font-size: 22px; font-weight: 600;
   flex-shrink: 0;
 }
 .action-menu-preview .amt.in { color: var(--income-soft); }
 .action-menu-preview .amt.out { color: var(--expense-soft); }
+
+/* Title (item name / payee) */
+.action-menu-preview .title {
+  font-size: 18px; color: var(--text); line-height: 1.3;
+  font-family: 'Noto Serif Thai', serif;
+  margin-bottom: 10px;
+  word-break: break-word;
+}
+
+/* Detail rows */
+.action-menu-preview .detail-list {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.action-menu-preview .det {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 13px;
+}
+.action-menu-preview .det .lbl {
+  flex: 0 0 78px;
+  color: var(--text-faint);
+  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  padding-top: 2px;
+}
+.action-menu-preview .det .val {
+  flex: 1; min-width: 0;
+  color: var(--text);
+  word-break: break-word;
+}
+.action-menu-preview .det .val.muted { color: var(--text-dim); font-style: italic; }
+.action-menu-preview .det .val.mono {
+  font-family: 'IBM Plex Mono', monospace;
+}
+.action-menu-preview .det .ico-em {
+  margin-right: 4px; font-size: 14px;
+}
+
+/* Photo strip inside preview */
+.preview-photos {
+  display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap;
+}
+.preview-photos .ph {
+  width: 56px; height: 56px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--line);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--gold); font-size: 11px;
+  font-family: 'IBM Plex Mono', monospace;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.preview-photos .ph img { width: 100%; height: 100%; object-fit: cover; }
 
 /* v2.2: Compact icon-only action menu (4 buttons in a row) */
 .action-btn-list {
@@ -2629,6 +2687,7 @@ function App() {
         <TxActionMenu
           tx={actionTx}
           accounts={state.accounts || []}
+          customCats={state.categories || []}
           onClose={() => setActionTx(null)}
           onEdit={() => { setEditing(actionTx); setActionTx(null); }}
           onDuplicate={() => { duplicateTx(actionTx); setActionTx(null); }}
@@ -3597,7 +3656,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
-      <div className="vstrip">my money · v2.4 · ธีม Sage Green</div>
+      <div className="vstrip">my money · v2.5 · Preview เต็มหน้า</div>
     </div>
   );
 }
@@ -4451,17 +4510,24 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
 }
 
 // ============ Row Action Menu (Edit/Duplicate/Delete) ============
-function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts }) {
-  const cat = getCat(tx.type, tx.category);
+function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, customCats }) {
+  const cat = getCat(tx.type, tx.category, customCats);
   const timeStr = timeFromIso(tx.createdAt);
-  const title = (tx.item || tx.payee || '').trim() || tx.note?.trim() || cat.label;
+  const title = (tx.item || tx.payee || '').trim() || tx.note?.trim() || (tx.category ? cat.label : 'รายการ');
   const isIn = tx.type === 'income';
   const photoCount = Array.isArray(tx.photos) ? tx.photos.length : (tx.photoId ? 1 : 0);
   const decimals = getAccountDecimals(tx.accountName, accounts);
-  const subParts = [cat.label];
-  if (timeStr) subParts.push(timeStr);
-  if (tx.project) subParts.push('📁 ' + tx.project);
-  if (photoCount > 0) subParts.push(`📷 ${photoCount}`);
+
+  // Format date as DD/MM/YYYY (Buddhist year)
+  const dStr = (() => {
+    if (!tx.date) return '';
+    const d = new Date(tx.date + 'T00:00:00');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yy = d.getFullYear() + 543;
+    const dayName = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'][d.getDay()];
+    return `${dd}/${mm}/${yy} (${dayName})`;
+  })();
 
   return (
     <div className="sheet-backdrop fade" onClick={onClose}>
@@ -4470,13 +4536,58 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts }) 
           <div className="sheet-handle"></div>
           <div className="action-menu-wrap">
             <div className="action-menu-preview">
-              <div className="ico">{cat.icon}</div>
-              <div className="info">
-                <div className="title">{title}</div>
-                <div className="sub">{subParts.join(' · ')}</div>
+              <div className="head-row">
+                <span className={`type-pill ${isIn ? 'in' : 'out'}`}>
+                  {isIn ? <><Ic.ArrowIn size={11}/> รายรับ</> : <><Ic.ArrowOut size={11}/> รายจ่าย</>}
+                </span>
+                <span className={`amt ${isIn ? 'in' : 'out'}`}>
+                  {isIn ? '+' : '−'}฿{fmtMoney(tx.amount, decimals)}
+                </span>
               </div>
-              <div className={`amt ${isIn ? 'in' : 'out'}`}>
-                {isIn ? '+' : '−'}฿{fmtMoney(tx.amount, decimals)}
+
+              <div className="title">{title}</div>
+
+              <div className="detail-list">
+                <div className="det">
+                  <span className="lbl">วันที่</span>
+                  <span className="val mono">{dStr || '—'}</span>
+                </div>
+                <div className="det">
+                  <span className="lbl">เวลา</span>
+                  <span className="val mono">{timeStr || '—'}</span>
+                </div>
+                <div className="det">
+                  <span className="lbl">บัญชี</span>
+                  <span className="val">{tx.accountName || <span className="muted">—</span>}</span>
+                </div>
+                <div className="det">
+                  <span className="lbl">หมวดหมู่</span>
+                  <span className="val">
+                    {tx.category ? (
+                      <><span className="ico-em">{cat.icon}</span>{cat.label}</>
+                    ) : (
+                      <span className="muted">ไม่ระบุ</span>
+                    )}
+                  </span>
+                </div>
+                {tx.project && (
+                  <div className="det">
+                    <span className="lbl">โครงการ</span>
+                    <span className="val"><span className="ico-em">📁</span>{tx.project}</span>
+                  </div>
+                )}
+                {tx.note && tx.note.trim() && (
+                  <div className="det">
+                    <span className="lbl">บันทึก</span>
+                    <span className="val">{tx.note}</span>
+                  </div>
+                )}
+                {photoCount > 0 && (
+                  <div className="det">
+                    <span className="lbl">รูป</span>
+                    <span className="val mono">{photoCount} รูป</span>
+                  </div>
+                )}
               </div>
             </div>
 
