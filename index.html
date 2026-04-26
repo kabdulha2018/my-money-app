@@ -1369,43 +1369,48 @@ nav.tabbar {
 .action-menu-preview .amt.in { color: var(--income-soft); }
 .action-menu-preview .amt.out { color: var(--expense-soft); }
 
+/* v2.2: Compact icon-only action menu (4 buttons in a row) */
 .action-btn-list {
-  display: flex; flex-direction: column; gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
 }
 .action-btn-row {
-  display: flex; align-items: center; gap: 14px;
-  padding: 16px 18px; border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px;
+  padding: 14px 6px;
+  border-radius: 14px;
   background: var(--surface2); border: 1px solid var(--line);
-  font-size: 15px; color: var(--text);
-  text-align: left;
-  transition: transform .15s, background .2s;
+  text-align: center;
+  transition: transform .15s, background .2s, border-color .2s;
 }
-.action-btn-row:active { transform: scale(0.98); background: var(--surface); }
+.action-btn-row:active { transform: scale(0.94); background: var(--surface); }
 .action-btn-row .ico {
-  width: 38px; height: 38px; border-radius: 10px;
+  width: 44px; height: 44px; border-radius: 12px;
   background: var(--surface); border: 1px solid var(--line);
   display: inline-flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
-.action-btn-row .lbl { flex: 1; }
-.action-btn-row .lbl .t1 { font-size: 15px; font-weight: 500; }
-.action-btn-row .lbl .t2 { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
-.action-btn-row.primary .ico { background: rgba(212,165,116,0.14); color: var(--gold); border-color: var(--line-strong); }
-.action-btn-row.primary .lbl .t1 { color: var(--gold); }
-.action-btn-row.neutral .ico { color: var(--text-dim); }
-.action-btn-row.danger .ico { background: rgba(212,136,107,0.1); color: var(--expense-soft); border-color: rgba(212,136,107,0.3); }
-.action-btn-row.danger .lbl .t1 { color: var(--expense-soft); }
-.action-btn-row .chev { color: var(--text-faint); flex-shrink: 0; }
-
-.action-cancel-btn {
-  width: 100%; margin-top: 10px; padding: 14px;
-  border-radius: 14px;
-  background: transparent; color: var(--text-dim);
-  border: 1px solid var(--line);
-  font-size: 14px;
-  transition: transform .15s;
+.action-btn-row .lbl {
+  font-size: 11px; line-height: 1.1;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
 }
-.action-cancel-btn:active { transform: scale(0.98); }
+.action-btn-row.primary { border-color: rgba(212,165,116,0.35); }
+.action-btn-row.primary .ico {
+  background: rgba(212,165,116,0.14); color: var(--gold); border-color: var(--line-strong);
+}
+.action-btn-row.primary .lbl { color: var(--gold); font-weight: 500; }
+.action-btn-row.neutral .ico { color: var(--text-dim); }
+.action-btn-row.danger { border-color: rgba(212,136,107,0.3); }
+.action-btn-row.danger .ico {
+  background: rgba(212,136,107,0.1); color: var(--expense-soft); border-color: rgba(212,136,107,0.3);
+}
+.action-btn-row.danger .lbl { color: var(--expense-soft); }
+.action-btn-row.cancel .ico { color: var(--text-faint); }
+.action-btn-row.cancel .lbl { color: var(--text-faint); }
+/* legacy chevron (no longer rendered, kept hidden in case stale markup appears) */
+.action-btn-row .chev { display: none; }
 
 /* Confirm delete modal */
 .confirm-backdrop {
@@ -3528,7 +3533,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
-      <div className="vstrip">my money · v2.1 · หมวดหมู่ optional + Manager</div>
+      <div className="vstrip">my money · v2.2 · Action menu icon-only</div>
     </div>
   );
 }
@@ -4405,35 +4410,23 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts }) 
             </div>
 
             <div className="action-btn-list">
-              <button className="action-btn-row primary" onClick={onEdit}>
-                <div className="ico"><Ic.Pencil size={18}/></div>
-                <div className="lbl">
-                  <div className="t1">แก้ไข</div>
-                  <div className="t2">เปลี่ยนแปลงข้อมูลรายการนี้</div>
-                </div>
-                <Ic.ChevR size={16} className="chev"/>
+              <button className="action-btn-row primary" onClick={onEdit} aria-label="แก้ไข">
+                <div className="ico"><Ic.Pencil size={20}/></div>
+                <div className="lbl">แก้ไข</div>
               </button>
-              <button className="action-btn-row neutral" onClick={onDuplicate}>
-                <div className="ico"><Ic.Copy size={18}/></div>
-                <div className="lbl">
-                  <div className="t1">คัดลอก</div>
-                  <div className="t2">สร้างรายการใหม่ที่เหมือนกัน (ไม่รวมรูป)</div>
-                </div>
-                <Ic.ChevR size={16} className="chev"/>
+              <button className="action-btn-row neutral" onClick={onDuplicate} aria-label="คัดลอก">
+                <div className="ico"><Ic.Copy size={20}/></div>
+                <div className="lbl">คัดลอก</div>
               </button>
-              <button className="action-btn-row danger" onClick={onDelete}>
-                <div className="ico"><Ic.Trash size={18}/></div>
-                <div className="lbl">
-                  <div className="t1">ลบ</div>
-                  <div className="t2">ลบออกจากประวัติ (รวมรูปบน OneDrive)</div>
-                </div>
-                <Ic.ChevR size={16} className="chev"/>
+              <button className="action-btn-row danger" onClick={onDelete} aria-label="ลบ">
+                <div className="ico"><Ic.Trash size={20}/></div>
+                <div className="lbl">ลบ</div>
+              </button>
+              <button className="action-btn-row cancel" onClick={onClose} aria-label="ยกเลิก">
+                <div className="ico"><Ic.X size={20}/></div>
+                <div className="lbl">ยกเลิก</div>
               </button>
             </div>
-
-            <button className="action-cancel-btn" onClick={onClose}>
-              ยกเลิก
-            </button>
           </div>
         </div>
       </div>
