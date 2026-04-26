@@ -1442,6 +1442,37 @@ nav.tabbar {
   margin-right: 4px; font-size: 14px;
 }
 
+/* v2.7: Navigation header for swipeable preview */
+.nav-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 0 4px;
+}
+.nav-btn {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(106,134,108,0.08); color: var(--gold);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+  transition: transform .15s, background .2s, opacity .2s;
+}
+.nav-btn:active:not(:disabled) { transform: scale(0.88); background: rgba(106,134,108,0.18); }
+.nav-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+.nav-counter {
+  flex: 1; text-align: center;
+  font-family: 'IBM Plex Mono', monospace; font-size: 13px;
+  color: var(--text-dim); font-weight: 500;
+  letter-spacing: 0.05em;
+}
+.nav-counter .nav-hint {
+  font-family: 'IBM Plex Sans Thai', sans-serif;
+  font-size: 9.5px; color: var(--text-faint);
+  margin-top: 2px; letter-spacing: 0.18em;
+}
+.swipe-area {
+  touch-action: pan-y; /* allow vertical scroll, but we control horizontal */
+}
+
 /* v2.6: Thumbnail strip in preview (separate card, full width) */
 .preview-thumbs {
   margin-top: 12px; margin-bottom: 16px;
@@ -2711,6 +2742,8 @@ function App() {
       {actionTx && (
         <TxActionMenu
           tx={actionTx}
+          txList={monthTx}
+          onNavigate={(t) => setActionTx(t)}
           accounts={state.accounts || []}
           customCats={state.categories || []}
           onClose={() => setActionTx(null)}
@@ -3681,7 +3714,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
-      <div className="vstrip">my money · v2.6 · Thumbnail ในรายละเอียด</div>
+      <div className="vstrip">my money · v2.7 · ปัด ← → ดูรายการอื่น</div>
     </div>
   );
 }
@@ -4535,12 +4568,78 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
 }
 
 // ============ Row Action Menu (Edit/Duplicate/Delete) ============
-function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, customCats }) {
+function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, customCats, txList, onNavigate }) {
   const cat = getCat(tx.type, tx.category, customCats);
   const timeStr = timeFromIso(tx.createdAt);
   const title = (tx.item || tx.payee || '').trim() || tx.note?.trim() || (tx.category ? cat.label : 'รายการ');
   const isIn = tx.type === 'income';
   const decimals = getAccountDecimals(tx.accountName, accounts);
+
+  // Find current index + neighbors in the list
+  const list = Array.isArray(txList) ? txList : [];
+  const curIdx = list.findIndex(t => t.id === tx.id);
+  const hasPrev = curIdx > 0;
+  const hasNext = curIdx >= 0 && curIdx < list.length - 1;
+  const goPrev = () => { if (hasPrev) onNavigate?.(list[curIdx - 1]); };
+  const goNext = () => { if (hasNext) onNavigate?.(list[curIdx + 1]); };
+
+  // Swipe gesture state
+  const [dragX, setDragX] = useState(0);   // current finger offset
+  const [animX, setAnimX] = useState(null); // when set, sheet glides to this X then resets
+  const dragRef = useRef({ startX: 0, startY: 0, active: false, locked: null });
+  const SWIPE_THRESH = 70;  // px to trigger
+  const onTouchStart = (e) => {
+    const t = e.touches[0];
+    dragRef.current = { startX: t.clientX, startY: t.clientY, active: true, locked: null };
+    setAnimX(null);
+  };
+  const onTouchMove = (e) => {
+    if (!dragRef.current.active) return;
+    const t = e.touches[0];
+    const dx = t.clientX - dragRef.current.startX;
+    const dy = t.clientY - dragRef.current.startY;
+    if (dragRef.current.locked === null) {
+      if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+        dragRef.current.locked = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+      }
+    }
+    if (dragRef.current.locked === 'h') {
+      // prevent vertical scroll only when horizontal swipe is active
+      e.preventDefault?.();
+      // resistance at the boundary: if no neighbor, dampen
+      let adjusted = dx;
+      if ((dx > 0 && !hasPrev) || (dx < 0 && !hasNext)) adjusted = dx * 0.3;
+      setDragX(adjusted);
+    }
+  };
+  const onTouchEnd = () => {
+    if (!dragRef.current.active) return;
+    const final = dragX;
+    dragRef.current.active = false;
+    if (final <= -SWIPE_THRESH && hasNext) {
+      // swiped left → next; glide off-screen to the left then load next
+      setAnimX(-window.innerWidth);
+      setTimeout(() => { setDragX(0); setAnimX(null); goNext(); }, 180);
+    } else if (final >= SWIPE_THRESH && hasPrev) {
+      setAnimX(window.innerWidth);
+      setTimeout(() => { setDragX(0); setAnimX(null); goPrev(); }, 180);
+    } else {
+      // snap back
+      setAnimX(0);
+      setTimeout(() => { setDragX(0); setAnimX(null); }, 200);
+    }
+  };
+
+  // Keyboard arrows for desktop / accessibility
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'ArrowLeft') goPrev();
+      else if (e.key === 'ArrowRight') goNext();
+      else if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [curIdx, hasPrev, hasNext]);
 
   // Normalize photos: support both v1.4 photos[] and legacy v1.3 single photoId
   const photoList = useMemo(() => {
@@ -4575,12 +4674,48 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
     return `${dd}/${mm}/${yy} (${dayName})`;
   })();
 
+  // CSS transform style for the swipe-aware section (preview + thumbnails)
+  const swipeTransform = animX !== null ? animX : dragX;
+  const swipeStyle = {
+    transform: `translateX(${swipeTransform}px)`,
+    transition: animX !== null ? 'transform .18s cubic-bezier(.2,.8,.2,1)' : 'none',
+    willChange: 'transform',
+  };
+  // Subtle opacity hint while dragging
+  const swipeOpacity = Math.max(0.55, 1 - Math.min(Math.abs(dragX), 200) / 400);
+
   return (
     <div className="sheet-backdrop fade" onClick={onClose}>
       <div className="sheet-wrap sheet-in" onClick={e => e.stopPropagation()}>
         <div className="sheet">
           <div className="sheet-handle"></div>
           <div className="action-menu-wrap">
+
+            {/* Navigation header: prev / counter / next */}
+            {list.length > 1 && (
+              <div className="nav-header">
+                <button className="nav-btn" onClick={goPrev} disabled={!hasPrev}
+                        aria-label="รายการก่อนหน้า">
+                  <Ic.ChevL size={16}/>
+                </button>
+                <div className="nav-counter">
+                  {curIdx >= 0 ? `${curIdx + 1} / ${list.length}` : ''}
+                  <div className="nav-hint">ปัด ← →</div>
+                </div>
+                <button className="nav-btn" onClick={goNext} disabled={!hasNext}
+                        aria-label="รายการถัดไป">
+                  <Ic.ChevR size={16}/>
+                </button>
+              </div>
+            )}
+
+            {/* Swipe-aware container */}
+            <div className="swipe-area"
+                 style={{ ...swipeStyle, opacity: swipeOpacity }}
+                 onTouchStart={onTouchStart}
+                 onTouchMove={onTouchMove}
+                 onTouchEnd={onTouchEnd}
+                 onTouchCancel={onTouchEnd}>
             <div className="action-menu-preview">
               <div className="head-row">
                 <span className={`type-pill ${isIn ? 'in' : 'out'}`}>
@@ -4652,6 +4787,7 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
                 </div>
               </div>
             )}
+            </div>{/* /swipe-area */}
 
             <div className="action-btn-list">
               <button className="action-btn-row primary" onClick={onEdit} aria-label="แก้ไข">
