@@ -1442,20 +1442,45 @@ nav.tabbar {
   margin-right: 4px; font-size: 14px;
 }
 
-/* Photo strip inside preview */
-.preview-photos {
-  display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap;
+/* v2.6: Thumbnail strip in preview (separate card, full width) */
+.preview-thumbs {
+  margin-top: 12px; margin-bottom: 16px;
+  background: var(--surface2); border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
 }
-.preview-photos .ph {
-  width: 56px; height: 56px; border-radius: 8px;
-  background: var(--surface); border: 1px solid var(--line);
-  display: inline-flex; align-items: center; justify-content: center;
-  color: var(--gold); font-size: 11px;
+.preview-thumbs-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 10px;
+}
+.preview-thumbs-head > span:first-child {
+  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+.preview-thumbs-head .ct {
   font-family: 'IBM Plex Mono', monospace;
-  overflow: hidden;
-  flex-shrink: 0;
+  font-size: 11px; color: var(--gold);
 }
-.preview-photos .ph img { width: 100%; height: 100%; object-fit: cover; }
+.preview-thumbs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.thumb-cell {
+  position: relative; aspect-ratio: 1;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  padding: 0;
+  transition: transform .15s, border-color .2s;
+}
+.thumb-cell:active { transform: scale(0.96); border-color: var(--gold); }
+.thumb-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb-cell .loading {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--gold);
+}
 
 /* v2.2: Compact icon-only action menu (4 buttons in a row) */
 .action-btn-list {
@@ -3656,7 +3681,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
-      <div className="vstrip">my money · v2.5 · Preview เต็มหน้า</div>
+      <div className="vstrip">my money · v2.6 · Thumbnail ในรายละเอียด</div>
     </div>
   );
 }
@@ -4515,8 +4540,29 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
   const timeStr = timeFromIso(tx.createdAt);
   const title = (tx.item || tx.payee || '').trim() || tx.note?.trim() || (tx.category ? cat.label : 'รายการ');
   const isIn = tx.type === 'income';
-  const photoCount = Array.isArray(tx.photos) ? tx.photos.length : (tx.photoId ? 1 : 0);
   const decimals = getAccountDecimals(tx.accountName, accounts);
+
+  // Normalize photos: support both v1.4 photos[] and legacy v1.3 single photoId
+  const photoList = useMemo(() => {
+    if (Array.isArray(tx.photos) && tx.photos.length > 0) return tx.photos;
+    if (tx.photoId) return [{ id: tx.photoId, name: tx.photoName || 'photo' }];
+    return [];
+  }, [tx.photos, tx.photoId, tx.photoName]);
+  const photoCount = photoList.length;
+
+  // Load photo thumbnails (uses local cache first, then fetches from OneDrive)
+  const [photoUrls, setPhotoUrls] = useState({}); // { id: blobUrl }
+  const [viewerIdx, setViewerIdx] = useState(-1);
+  useEffect(() => {
+    let cancelled = false;
+    photoList.forEach(p => {
+      if (photoUrls[p.id]) return;
+      fetchPhotoUrl(p.id)
+        .then(url => { if (!cancelled) setPhotoUrls(prev => ({ ...prev, [p.id]: url })); })
+        .catch(() => {});
+    });
+    return () => { cancelled = true; };
+  }, [photoList]);
 
   // Format date as DD/MM/YYYY (Buddhist year)
   const dStr = (() => {
@@ -4582,14 +4628,30 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
                     <span className="val">{tx.note}</span>
                   </div>
                 )}
-                {photoCount > 0 && (
-                  <div className="det">
-                    <span className="lbl">รูป</span>
-                    <span className="val mono">{photoCount} รูป</span>
-                  </div>
-                )}
               </div>
             </div>
+
+            {/* Thumbnail strip outside the detail card so it can grow full width */}
+            {photoCount > 0 && (
+              <div className="preview-thumbs">
+                <div className="preview-thumbs-head">
+                  <span>รูปใบเสร็จ</span>
+                  <span className="ct">{photoCount} รูป</span>
+                </div>
+                <div className="preview-thumbs-grid">
+                  {photoList.map((p, i) => (
+                    <button key={p.id} type="button" className="thumb-cell"
+                            onClick={() => photoUrls[p.id] && setViewerIdx(i)}>
+                      {photoUrls[p.id] ? (
+                        <img src={photoUrls[p.id]} alt="receipt"/>
+                      ) : (
+                        <div className="loading"><Ic.Refresh size={14} className="spin"/></div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="action-btn-list">
               <button className="action-btn-row primary" onClick={onEdit} aria-label="แก้ไข">
@@ -4612,6 +4674,16 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
           </div>
         </div>
       </div>
+
+      {/* Full-screen photo viewer */}
+      {viewerIdx >= 0 && photoList[viewerIdx] && photoUrls[photoList[viewerIdx].id] && (
+        <div className="photo-viewer fade" onClick={() => setViewerIdx(-1)}>
+          <button className="close-btn" onClick={() => setViewerIdx(-1)}>
+            <Ic.X size={18}/>
+          </button>
+          <img src={photoUrls[photoList[viewerIdx].id]} alt="receipt"/>
+        </div>
+      )}
     </div>
   );
 }
