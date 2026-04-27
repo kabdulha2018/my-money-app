@@ -460,6 +460,14 @@ h1.page-title {
 nav.tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
   padding: 8px 0 max(14px, env(safe-area-inset-bottom));
+  transition: opacity .2s, transform .25s cubic-bezier(.2,.8,.2,1);
+}
+/* v3.2: hide tab bar while a bottom sheet is open so its sticky buttons aren't covered.
+   Uses :has() — supported on Chrome 105+, Safari 15.4+ (Samsung S25 covered). */
+body:has(.sheet-backdrop) nav.tabbar {
+  opacity: 0;
+  transform: translateY(100%);
+  pointer-events: none;
 }
 .tabbar-inner {
   max-width: 560px; margin: 0 auto; padding: 0 20px;
