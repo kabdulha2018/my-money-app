@@ -38,6 +38,10 @@
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
 html, body { height: 100%; }
+/* v2.8: text-zoom levels (สำหรับสายตายาว) - ใช้ zoom property ปรับขนาดทั้งแอปแบบรักษา layout */
+html[data-zoom="1"] body { zoom: 1.15; }
+html[data-zoom="2"] body { zoom: 1.30; }
+html[data-zoom="3"] body { zoom: 1.45; }
 body {
   font-family: 'IBM Plex Sans Thai', system-ui, -apple-system, sans-serif;
   background: var(--bg);
@@ -1442,6 +1446,38 @@ nav.tabbar {
   margin-right: 4px; font-size: 14px;
 }
 
+/* v2.8: text zoom toggle button */
+.zoom-btn {
+  position: relative;
+  width: 36px; height: 36px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(106,134,108,0.06);
+  border: 1px solid var(--line);
+  color: var(--gold);
+  flex-shrink: 0;
+  transition: all .2s;
+}
+.zoom-btn:active { transform: scale(0.9); background: rgba(106,134,108,0.18); }
+.zoom-btn.active { background: rgba(106,134,108,0.18); border-color: var(--gold); }
+.zoom-btn .zoom-icon {
+  font-family: 'Noto Serif Thai', serif;
+  font-size: 16px; font-weight: 700;
+  line-height: 1;
+}
+.zoom-btn .zoom-plus {
+  position: absolute; top: 6px; right: 7px;
+  font-size: 10px; font-weight: 700; line-height: 1;
+  color: var(--gold);
+}
+.zoom-btn .zoom-level {
+  position: absolute; bottom: 4px; right: 5px;
+  background: var(--gold); color: var(--bg);
+  font-size: 9px; font-weight: 700; line-height: 1;
+  width: 14px; height: 14px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
 /* v2.7: Navigation header for swipeable preview */
 .nav-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -2113,6 +2149,20 @@ function App() {
   const [showAccountsManager, setShowAccountsManager] = useState(false);
   const [showProjectsManager, setShowProjectsManager] = useState(false);
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
+  // v2.8: text zoom level — 0=normal, 1=large (115%), 2=larger (130%), 3=largest (145%)
+  const [zoomLevel, setZoomLevel] = useState(() => {
+    try {
+      const v = localStorage.getItem('mymoney:zoom');
+      const n = parseInt(v, 10);
+      return Number.isFinite(n) && n >= 0 && n <= 3 ? n : 0;
+    } catch { return 0; }
+  });
+  useEffect(() => {
+    if (zoomLevel === 0) document.documentElement.removeAttribute('data-zoom');
+    else document.documentElement.setAttribute('data-zoom', String(zoomLevel));
+    try { localStorage.setItem('mymoney:zoom', String(zoomLevel)); } catch {}
+  }, [zoomLevel]);
+  const cycleZoom = () => setZoomLevel(z => (z + 1) % 4);
   const [toast, setToast] = useState(null);
   const pushToast = (m) => { setToast(m); setTimeout(() => setToast(null), 2200); };
 
@@ -2514,6 +2564,8 @@ function App() {
             onManageProjects={() => setShowProjectsManager(true)}
             onManageItems={() => setShowItemsManager(true)}
             onManageCategories={() => setShowCategoriesManager(true)}
+            zoomLevel={zoomLevel}
+            onZoom={cycleZoom}
           />
         )}
         {tab === 'home' && homeView === 'summary' && (
@@ -2532,6 +2584,8 @@ function App() {
             onManageProjects={() => setShowProjectsManager(true)}
             onManageItems={() => setShowItemsManager(true)}
             onManageCategories={() => setShowCategoriesManager(true)}
+            zoomLevel={zoomLevel}
+            onZoom={cycleZoom}
             onBack={() => setHomeView('overview')}
           />
         )}
@@ -2549,6 +2603,8 @@ function App() {
             onManageProjects={() => setShowProjectsManager(true)}
             onManageItems={() => setShowItemsManager(true)}
             onManageCategories={() => setShowCategoriesManager(true)}
+            zoomLevel={zoomLevel}
+            onZoom={cycleZoom}
           />
         )}
         {tab === 'chart' && (
@@ -2564,6 +2620,8 @@ function App() {
             onManageProjects={() => setShowProjectsManager(true)}
             onManageItems={() => setShowItemsManager(true)}
             onManageCategories={() => setShowCategoriesManager(true)}
+            zoomLevel={zoomLevel}
+            onZoom={cycleZoom}
           />
         )}
         {tab === 'settings' && (
@@ -2842,6 +2900,22 @@ function SyncPill({ status, account, skipSync, compact = false }) {
 }
 
 // ============ Kebab Menu (3-dot) with Accordion ============
+function ZoomBtn({ level, onCycle }) {
+  // level: 0=normal, 1=115%, 2=130%, 3=145%
+  const active = level > 0;
+  const labels = ['100%', '115%', '130%', '145%'];
+  return (
+    <button className={`zoom-btn ${active ? 'active' : ''}`}
+            onClick={onCycle}
+            aria-label="ปรับขนาดตัวอักษร" type="button"
+            title={`ขนาด ${labels[level]}`}>
+      <span className="zoom-icon">A</span>
+      {active && <span className="zoom-plus">+</span>}
+      {active && <span className="zoom-level">{level}</span>}
+    </button>
+  );
+}
+
 function KebabMenu({ onOpenAccounts, onOpenProjects, onOpenItems, onOpenCategories }) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(null); // 'accounts' | 'projects' | 'items' | 'categories' | null
@@ -3023,7 +3097,7 @@ function AccountFilter({ accountList, selected, onSelect, onManage }) {
 }
 
 // ============ Accounts Overview (Home tab default view) ============
-function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAccounts, onManageProjects, onManageItems, onManageCategories }) {
+function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom }) {
   // Aggregate per-account stats (cumulative, all-time)
   const accountsList = useMemo(() => {
     const stats = new Map(); // key: name.toLowerCase()
@@ -3061,6 +3135,7 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
       <header className="page-head rise">
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap: 10}}>
           <div className="crumb">สมุดเงินส่วนตัว</div>
+          <ZoomBtn level={zoomLevel} onCycle={onZoom}/>
           <KebabMenu
             onOpenAccounts={onManageAccounts}
             onOpenProjects={onManageProjects}
@@ -3116,7 +3191,7 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
   );
 }
 
-function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth, totals, monthTx, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, onBack }) {
+function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth, totals, monthTx, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, onBack, zoomLevel, onZoom }) {
   const [sortDir, setSortDir] = useState('desc'); // 'desc' = newest first (Z→A), 'asc' = oldest first (A→Z)
   const sortedTx = useMemo(() => {
     const list = [...monthTx];
@@ -3144,6 +3219,7 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
           </div>
           <div style={{display:'flex', alignItems:'center', gap: 8}}>
             <SyncPill status={status} account={account} skipSync={skipSync}/>
+            <ZoomBtn level={zoomLevel} onCycle={onZoom}/>
             <KebabMenu
               onOpenAccounts={onManageAccounts}
               onOpenProjects={onManageProjects}
@@ -3210,7 +3286,7 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
   );
 }
 
-function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories }) {
+function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom }) {
   const [sortDir, setSortDir] = useState('desc');
   const groups = useMemo(() => {
     const g = {};
@@ -3233,6 +3309,7 @@ function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, select
       <header className="page-head rise">
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap: 10}}>
           <div className="crumb">ประวัติรายรับรายจ่าย</div>
+          <ZoomBtn level={zoomLevel} onCycle={onZoom}/>
           <KebabMenu
             onOpenAccounts={onManageAccounts}
             onOpenProjects={onManageProjects}
@@ -3284,7 +3361,7 @@ function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, select
   );
 }
 
-function ChartView({ viewMonth, setViewMonth, monthTx, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories }) {
+function ChartView({ viewMonth, setViewMonth, monthTx, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom }) {
   const byCat = useMemo(() => {
     const m = {};
     monthTx.filter(t => t.type === 'expense').forEach(t => { m[t.category] = (m[t.category]||0) + t.amount; });
@@ -3298,6 +3375,7 @@ function ChartView({ viewMonth, setViewMonth, monthTx, accountList, selectedAcco
       <header className="page-head rise">
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap: 10}}>
           <div className="crumb">สรุปค่าใช้จ่ายตามหมวด</div>
+          <ZoomBtn level={zoomLevel} onCycle={onZoom}/>
           <KebabMenu
             onOpenAccounts={onManageAccounts}
             onOpenProjects={onManageProjects}
@@ -3714,7 +3792,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
-      <div className="vstrip">my money · v2.7 · ปัด ← → ดูรายการอื่น</div>
+      <div className="vstrip">my money · v2.8 · ปุ่มขยายตัวอักษร</div>
     </div>
   );
 }
