@@ -1445,6 +1445,25 @@ nav.tabbar {
   margin-right: 4px; font-size: 14px;
 }
 
+/* v2.9: Lessons editor */
+.lessons-editor {
+  width: 100%;
+  min-height: 320px;
+  max-height: 50vh;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: 'IBM Plex Sans Thai', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color .2s;
+}
+.lessons-editor:focus { border-color: var(--gold); }
+
 /* v2.8: text zoom toggle button */
 .zoom-btn {
   position: relative;
@@ -2013,8 +2032,8 @@ async function deletePhoto(photoId) {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v2.9';
-const APP_VERSION_TAG = 'บัญชี layout + version archive';
+const APP_VERSION = 'v3.0';
+const APP_VERSION_TAG = 'สมุดบันทึกบทเรียน + Lessons editor';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -3562,6 +3581,32 @@ function DonutChart({ data, palette, total }) {
 function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setState, pushToast, onSignIn, onSignOut, onSyncNow, onEnableSync, authLoading }) {
   const fileRef = useRef(null);
   const [confirm, setConfirm] = useState(false);
+  // v2.9: Lessons editor state
+  const [showLessonsEditor, setShowLessonsEditor] = useState(false);
+
+  // v2.9: download lessons.md
+  const downloadLessonsMd = async () => {
+    try {
+      const text = await odriveGetText('lessons.md');
+      const md = text || `# my money — สมุดบันทึกบทเรียน\n\n_(ยังว่างอยู่ — กดปุ่ม "เปิด/แก้ไขสมุดบันทึก" เพื่อเริ่มเขียน)_\n`;
+      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().slice(0, 10);
+      a.href = url; a.download = `my-money-lessons-${ts}.md`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      pushToast('ดาวน์โหลดแล้ว');
+    } catch (e) {
+      pushToast('ดาวน์โหลดไม่สำเร็จ');
+    }
+  };
+  // v2.9: open OneDrive web folder for lessons.md
+  const openLessonsInOneDrive = () => {
+    // OneDrive web URL — opens to the user's drive root; user navigates manually
+    window.open('https://onedrive.live.com/?id=root&path=Apps/my%20money', '_blank');
+    pushToast('เปิด OneDrive · ไปที่ Apps/my money/lessons.md');
+  };
 
   // ---- Install/share state (v1.2) ----
   const appUrl = window.location.origin + window.location.pathname;
@@ -3876,6 +3921,42 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
+      {/* v2.9: Lessons / Journal */}
+      <div className="panel rise">
+        <div className="hd">
+          <div className="ico-wrap"><Ic.Book size={16}/></div>
+          <div>
+            <div className="tt">บันทึกบทเรียน</div>
+            <div className="sb">เก็บความรู้ไว้ศึกษาภายหลัง · บน OneDrive</div>
+          </div>
+        </div>
+
+        <p style={{fontSize: 12, color: 'var(--text-dim)', margin: '12px 0', lineHeight: 1.55}}>
+          เปิด/แก้ไขสมุดบันทึก คัดลอกคำอธิบายดีๆ จาก Claude มาเก็บไว้
+          ทุกอย่างเซฟเป็น Markdown บน OneDrive โหลดดูจากเครื่องไหนก็ได้
+        </p>
+
+        <button className="btn-ghost" style={{width: '100%', marginBottom: 8}}
+                onClick={() => setShowLessonsEditor(true)} disabled={!account}>
+          <Ic.Pencil size={14}/> เปิด/แก้ไขสมุดบันทึก
+        </button>
+
+        <div className="two-col">
+          <button className="btn-ghost" onClick={downloadLessonsMd} disabled={!account}>
+            <Ic.Download size={14}/> ดาวน์โหลด .md
+          </button>
+          <button className="btn-ghost" onClick={openLessonsInOneDrive} disabled={!account}>
+            <Ic.Cloud size={14}/> เปิดบน OneDrive
+          </button>
+        </div>
+
+        {!account && (
+          <div style={{marginTop: 10, fontSize: 11, color: 'var(--text-faint)', textAlign: 'center'}}>
+            ต้อง Sign in กับ Microsoft ก่อนใช้งานสมุดบันทึก
+          </div>
+        )}
+      </div>
+
       {/* Stats */}
       <div className="panel rise">
         <div className="hd">
@@ -3913,7 +3994,14 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
-      <div className="vstrip">my money · v2.9 · บัญชี layout + Version archive</div>
+      <div className="vstrip">my money · v3.0 · สมุดบันทึกบทเรียน</div>
+
+      {showLessonsEditor && (
+        <LessonsEditor
+          onClose={() => setShowLessonsEditor(false)}
+          pushToast={pushToast}
+        />
+      )}
     </div>
   );
 }
@@ -5824,6 +5912,152 @@ function CategoriesManager({ categories, transactions, onClose, onAdd, onUpdate,
     </div>
   );
 }
+
+// ============ Lessons / Journal Editor ============
+// Markdown text editor for the user's personal study notes.
+// Stored as /Apps/my money/lessons.md on OneDrive.
+function LessonsEditor({ onClose, pushToast }) {
+  const [content, setContent] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [originalContent, setOriginalContent] = useState('');
+  const [savedAt, setSavedAt] = useState(null);
+
+  // Load existing lessons.md once on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const text = await odriveGetText('lessons.md');
+      if (cancelled) return;
+      const initial = text != null ? text : LESSONS_TEMPLATE;
+      setContent(initial);
+      setOriginalContent(initial);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const dirty = content !== originalContent;
+
+  const save = async () => {
+    if (saving || !dirty) return;
+    setSaving(true);
+    try {
+      await odrivePutText('lessons.md', content, 'text/markdown; charset=utf-8');
+      setOriginalContent(content);
+      setSavedAt(new Date());
+      pushToast('บันทึกแล้ว');
+    } catch (e) {
+      pushToast('บันทึกไม่สำเร็จ');
+      console.error('save lessons.md failed:', e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const insertTimestamp = () => {
+    const now = new Date();
+    const stamp = now.toLocaleString('th-TH', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+    const heading = `\n\n## ${stamp}\n\n`;
+    setContent(c => c + heading);
+  };
+
+  const tryClose = () => {
+    if (dirty && !confirm('ยังไม่ได้บันทึก ออกเลยหรือไม่?')) return;
+    onClose();
+  };
+
+  return (
+    <div className="sheet-backdrop fade" onClick={tryClose} style={{zIndex: 90}}>
+      <div className="sheet-wrap sheet-in" onClick={e => e.stopPropagation()}>
+        <div className="sheet">
+          <div className="sheet-handle"></div>
+          <div className="sheet-head">
+            <h2>📔 สมุดบันทึก</h2>
+            <button className="icon-btn-round" onClick={tryClose}><Ic.X size={16}/></button>
+          </div>
+
+          <div style={{fontSize: 11, color: 'var(--text-faint)', marginTop: 6, marginBottom: 12}}>
+            เก็บที่ <span style={{color: 'var(--gold)', fontFamily: 'IBM Plex Mono, monospace'}}>/Apps/my money/lessons.md</span>
+          </div>
+
+          {loading ? (
+            <div style={{textAlign: 'center', padding: 40, color: 'var(--text-dim)'}}>
+              <Ic.Refresh size={20} className="spin"/>
+              <div style={{marginTop: 8, fontSize: 13}}>กำลังโหลด...</div>
+            </div>
+          ) : (
+            <>
+              <textarea
+                className="lessons-editor"
+                value={content}
+                onChange={e => setContent(e.target.value)}
+                placeholder="เขียนบทเรียน / คำอธิบายของ Claude / โน้ตสำคัญที่นี่..."
+                spellCheck={false}
+              />
+
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, fontSize: 11, color: 'var(--text-faint)'}}>
+                <span>{content.length.toLocaleString()} ตัวอักษร</span>
+                {savedAt && !dirty && (
+                  <span style={{color: 'var(--income-soft)'}}>
+                    ✓ บันทึกแล้ว {savedAt.toLocaleTimeString('th-TH', {hour: '2-digit', minute: '2-digit'})}
+                  </span>
+                )}
+                {dirty && <span style={{color: 'var(--sync-warn)'}}>● มีการแก้ไข</span>}
+              </div>
+
+              <div style={{marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10}}>
+                <button className="btn-ghost" onClick={insertTimestamp} type="button">
+                  <Ic.Plus size={14}/> เพิ่มหัวข้อใหม่
+                </button>
+                <button className="btn-primary" onClick={save} disabled={!dirty || saving} type="button">
+                  {saving ? <><Ic.Refresh size={14} className="spin"/> กำลังบันทึก</> : <><Ic.Cloud size={14}/> บันทึก</>}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const LESSONS_TEMPLATE = `# my money — สมุดบันทึกบทเรียน
+
+_เริ่มเขียนเมื่อ ${new Date().toLocaleDateString('th-TH', {day:'numeric',month:'long',year:'numeric'})}_
+
+นี่คือสมุดบันทึกส่วนตัวสำหรับเก็บความรู้ คำอธิบายของ Claude
+และโน้ตสำคัญที่อยากศึกษาในอนาคต
+
+ไฟล์เซฟอยู่ที่ \`/Apps/my money/lessons.md\` บน OneDrive
+
+---
+
+## วิธีใช้
+
+1. คัดลอกข้อความที่อยากเก็บจาก Claude (chat)
+2. แตะปุ่ม **"เพิ่มหัวข้อใหม่"** เพื่อใส่วันที่อัตโนมัติ
+3. แปะข้อความที่คัดลอกมา
+4. กด **"บันทึก"** → save ขึ้น OneDrive ทันที
+
+## ตัวอย่างหัวข้อ
+
+### Markdown ที่ใช้บ่อย
+
+- \`# หัวข้อใหญ่\`
+- \`## หัวข้อรอง\`
+- \`**ตัวหนา**\`  → **ตัวหนา**
+- \`_ตัวเอียง_\`  → _ตัวเอียง_
+- \`- รายการ\` → bullet point
+
+---
+
+## เริ่มเขียนของคุณที่นี่
+
+`;
 
 // ============ Mount ============
 const root = ReactDOM.createRoot(document.getElementById('root'));
