@@ -2060,8 +2060,8 @@ async function deletePhoto(photoId) {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v3.3';
-const APP_VERSION_TAG = 'Photo delete button works in edit mode';
+const APP_VERSION = 'v3.4';
+const APP_VERSION_TAG = 'Master delete sticks (no auto-readd)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -2369,10 +2369,14 @@ function App() {
 
   // Migration: backfill master lists (accounts/projects/items) from existing transactions.
   // This handles legacy data from before the master list feature existed.
-  // Runs silently (no toast) and is idempotent — does nothing if nothing is missing.
+  // Runs ONCE per session after data is loaded — not on every state change, otherwise
+  // deleting a master entry would re-add it from existing transactions.
+  const didMigrateRef = useRef(false);
   useEffect(() => {
     if (booting) return;
+    if (didMigrateRef.current) return;
     if (!state.transactions || state.transactions.length === 0) return;
+    didMigrateRef.current = true;
 
     const LEGACY_ACCT = { cash: 'เงินสด', bank: 'ธนาคาร', credit: 'บัตรเครดิต', ewallet: 'e-Wallet' };
     const txAccounts = new Set();
@@ -2404,7 +2408,7 @@ function App() {
       projects: [...(prev.projects || []), ...newP.map(name => ({ id: uid(), name, createdAt: now }))],
       items:    [...(prev.items    || []), ...newI.map(name => ({ id: uid(), name, createdAt: now }))],
     }));
-  }, [booting, state.transactions, state.accounts, state.projects, state.items]);
+  }, [booting, state.transactions]);
 
   // Actions
   const mutate = (mutator) => {
@@ -4022,7 +4026,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
-      <div className="vstrip">my money · v3.3 · ปุ่มลบรูปใช้งานได้</div>
+      <div className="vstrip">my money · v3.4 · ลบ master ไม่กลับมา</div>
 
       {showLessonsEditor && (
         <LessonsEditor
