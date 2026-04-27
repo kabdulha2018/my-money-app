@@ -1462,6 +1462,47 @@ body:has(.sheet-backdrop) nav.tabbar {
   margin-right: 4px; font-size: 14px;
 }
 
+/* v3.5: Offline storage panel */
+.cache-stats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  margin-top: 12px;
+}
+.cache-stats .cell {
+  background: var(--surface2); border: 1px solid var(--line);
+  border-radius: 12px; padding: 10px 6px;
+  text-align: center;
+}
+.cache-stats .num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 18px; font-weight: 600;
+  color: var(--gold);
+}
+.cache-stats .lbl {
+  font-size: 10px; color: var(--text-faint);
+  margin-top: 2px; letter-spacing: 0.04em;
+}
+.cache-progress {
+  height: 8px; border-radius: 4px;
+  background: var(--surface2);
+  overflow: hidden;
+}
+.cache-progress .bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--income));
+  transition: width .3s ease-out;
+}
+.cache-notice {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px; line-height: 1.5;
+}
+.cache-notice.warn {
+  background: rgba(201,154,74,0.1);
+  border: 1px solid rgba(201,154,74,0.3);
+  color: var(--sync-warn);
+}
+
 /* v2.9: Lessons editor */
 .lessons-editor {
   width: 100%;
@@ -1954,17 +1995,22 @@ async function remoteSave(data) {
 }
 
 // ========== Local photo store (IndexedDB) ==========
+// v3.5: bumped to v2 — added 'pending' store for offline uploads queue
 const IDB_NAME = 'mymoney-photos';
-const IDB_STORE = 'photos';
+const IDB_STORE = 'photos';        // cached photos: key = OneDrive ID, value = Blob
+const IDB_PENDING = 'pending';     // queued uploads: key = local-temp-id, value = { blob, txId, name, createdAt }
 let _idbPromise = null;
 function openDB() {
   if (_idbPromise) return _idbPromise;
   _idbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(IDB_NAME, 1);
-    req.onupgradeneeded = () => {
+    const req = indexedDB.open(IDB_NAME, 2);
+    req.onupgradeneeded = (e) => {
       const db = req.result;
       if (!db.objectStoreNames.contains(IDB_STORE)) {
         db.createObjectStore(IDB_STORE); // key = photoId (OneDrive ID)
+      }
+      if (!db.objectStoreNames.contains(IDB_PENDING)) {
+        db.createObjectStore(IDB_PENDING); // key = local-temp-id, value = { blob, txId, name }
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -2001,35 +2047,130 @@ async function idbDeleteBlob(key) {
     });
   } catch { /* ignore */ }
 }
-
-// Upload photo: saves to BOTH OneDrive (/photos/) AND local IndexedDB
-// Returns { id, name, size }
-async function uploadPhoto(file, txId) {
-  // Resize first
-  const blob = await resizeImage(file, 1600, 0.82);
-  const token = await getToken();
-  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z]/g, '') || 'jpg';
-  const filename = `${txId}-${Date.now()}.${ext}`;
-  const path = `/me/drive/special/approot:/photos/${filename}:/content`;
-  const res = await fetch(GRAPH_URL(path), {
-    method: 'PUT',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': blob.type || 'image/jpeg' },
-    body: blob,
-  });
-  if (!res.ok) { const t = await res.text(); throw new Error(`Photo upload ${res.status}: ${t.slice(0,120)}`); }
-  const meta = await res.json();
-  // Cache locally — keyed by OneDrive ID for later fast retrieval
-  try { await idbPutBlob(meta.id, blob); } catch (e) { console.warn('local cache save failed', e); }
-  return { id: meta.id, name: meta.name, size: meta.size };
+// v3.5: list all photo IDs currently cached locally
+async function idbListPhotoIds() {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).getAllKeys();
+      req.onsuccess = () => resolve(Array.isArray(req.result) ? req.result : []);
+      req.onerror = () => resolve([]);
+    });
+  } catch { return []; }
+}
+// v3.5: estimate total cached size (sum of blob sizes)
+async function idbCacheSize() {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).getAll();
+      req.onsuccess = () => {
+        const blobs = req.result || [];
+        const total = blobs.reduce((sum, b) => sum + (b.size || 0), 0);
+        resolve({ count: blobs.length, bytes: total });
+      };
+      req.onerror = () => resolve({ count: 0, bytes: 0 });
+    });
+  } catch { return { count: 0, bytes: 0 }; }
 }
 
-// Fetch photo URL: tries local IndexedDB first, falls back to OneDrive
+// v3.5: pending uploads queue (offline mode)
+async function idbAddPending(localId, payload) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_PENDING, 'readwrite');
+    tx.objectStore(IDB_PENDING).put(payload, localId);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbGetPending(localId) {
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction(IDB_PENDING, 'readonly');
+    const req = tx.objectStore(IDB_PENDING).get(localId);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => resolve(null);
+  });
+}
+async function idbDeletePending(localId) {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_PENDING, 'readwrite');
+      tx.objectStore(IDB_PENDING).delete(localId);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch {}
+}
+async function idbListPending() {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_PENDING, 'readonly');
+      const req = tx.objectStore(IDB_PENDING).getAll();
+      const reqKeys = tx.objectStore(IDB_PENDING).getAllKeys();
+      const out = [];
+      tx.oncomplete = () => {
+        const values = req.result || [];
+        const keys = reqKeys.result || [];
+        for (let i = 0; i < keys.length; i++) out.push({ localId: keys[i], ...values[i] });
+        resolve(out);
+      };
+      tx.onerror = () => resolve([]);
+    });
+  } catch { return []; }
+}
+
+// Upload photo: saves to BOTH OneDrive (/photos/) AND local IndexedDB.
+// v3.5: if offline OR upload fails → queue for later (returns local-id-prefixed result)
+async function uploadPhoto(file, txId) {
+  // If offline, queue immediately
+  if (!navigator.onLine) {
+    return await queuePhotoForUpload(file, txId);
+  }
+  // Resize first
+  const blob = await resizeImage(file, 1600, 0.82);
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z]/g, '') || 'jpg';
+  const filename = `${txId}-${Date.now()}.${ext}`;
+  try {
+    const token = await getToken();
+    const path = `/me/drive/special/approot:/photos/${filename}:/content`;
+    const res = await fetch(GRAPH_URL(path), {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': blob.type || 'image/jpeg' },
+      body: blob,
+    });
+    if (!res.ok) {
+      // Network/auth error — fall back to queue rather than losing the photo
+      console.warn(`Upload failed (${res.status}), queueing offline`);
+      return await queuePhotoForUpload(file, txId);
+    }
+    const meta = await res.json();
+    // Cache locally — keyed by OneDrive ID for later fast retrieval
+    try { await idbPutBlob(meta.id, blob); } catch (e) { console.warn('local cache save failed', e); }
+    return { id: meta.id, name: meta.name, size: meta.size };
+  } catch (e) {
+    console.warn('Upload error, queueing offline:', e);
+    return await queuePhotoForUpload(file, txId);
+  }
+}
+
+// Fetch photo URL: tries local IndexedDB first, falls back to OneDrive.
+// v3.5: local-* IDs are pending uploads — never reach out to OneDrive for them.
 async function fetchPhotoUrl(photoId) {
   // Try local first
   try {
     const blob = await idbGetBlob(photoId);
     if (blob) return URL.createObjectURL(blob);
   } catch {}
+  // If this is a local-only ID and we don't have it, give up — it's not on cloud yet
+  if (String(photoId).startsWith('local-')) {
+    throw new Error('Pending upload not found in local cache');
+  }
   // Fallback to OneDrive
   const token = await getToken();
   const res = await fetch(GRAPH_URL(`/me/drive/items/${photoId}/content`), {
@@ -2042,10 +2183,16 @@ async function fetchPhotoUrl(photoId) {
   return URL.createObjectURL(blob);
 }
 
-// Delete photo from BOTH OneDrive and local cache
+// Delete photo from BOTH OneDrive and local cache.
+// v3.5: handle local-* IDs that haven't been uploaded yet (no OneDrive call needed).
 async function deletePhoto(photoId) {
   // Delete from local cache (always, even offline)
   idbDeleteBlob(photoId);
+  // If pending, also remove from queue
+  if (String(photoId).startsWith('local-')) {
+    idbDeletePending(photoId);
+    return;
+  }
   // Delete from OneDrive
   try {
     const token = await getToken();
@@ -2056,12 +2203,116 @@ async function deletePhoto(photoId) {
   } catch (e) { console.warn('Photo delete failed:', e); }
 }
 
+// ========== v3.5: Offline mode helpers ==========
+
+// Save a photo locally for later upload. Returns a synthetic local ID with
+// "local-" prefix so the rest of the app can recognise it as not-yet-on-cloud.
+async function queuePhotoForUpload(file, txId) {
+  const blob = await resizeImage(file, 1600, 0.82);
+  const localId = 'local-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now();
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z]/g, '') || 'jpg';
+  const name = `${txId}-${Date.now()}.${ext}`;
+  // Store the blob in BOTH stores: photos (so it can be displayed by ID) and pending (queue)
+  await idbPutBlob(localId, blob);
+  await idbAddPending(localId, { txId, name, contentType: blob.type || 'image/jpeg', createdAt: new Date().toISOString() });
+  return { id: localId, name, size: blob.size };
+}
+
+// Push all pending uploads to OneDrive. Updates state to swap local IDs → OneDrive IDs.
+// Returns { uploaded, failed, skipped } counts. Caller should pass a `swapId` callback
+// that will rewrite the photo ID inside transactions.
+async function flushPendingUploads(swapId) {
+  const pending = await idbListPending();
+  let uploaded = 0, failed = 0;
+  for (const item of pending) {
+    try {
+      const blob = await idbGetBlob(item.localId);
+      if (!blob) { await idbDeletePending(item.localId); continue; }
+      const token = await getToken();
+      const path = `/me/drive/special/approot:/photos/${item.name}:/content`;
+      const res = await fetch(GRAPH_URL(path), {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': item.contentType || 'image/jpeg' },
+        body: blob,
+      });
+      if (!res.ok) { failed += 1; continue; }
+      const meta = await res.json();
+      // Re-key the cached blob from local-id → OneDrive id, so future fetches by OneDrive id hit cache
+      try {
+        await idbPutBlob(meta.id, blob);
+        await idbDeleteBlob(item.localId);
+      } catch {}
+      await idbDeletePending(item.localId);
+      // Tell the React layer to swap IDs in transactions
+      try { swapId?.(item.localId, meta.id); } catch (e) { console.warn(e); }
+      uploaded += 1;
+    } catch (e) {
+      console.warn('flush pending: one item failed', e);
+      failed += 1;
+    }
+  }
+  return { uploaded, failed, total: pending.length };
+}
+
+// Pre-cache: download every photo referenced in transactions[] that isn't already in IDB.
+// Called in background after login. Reports progress through an optional callback.
+async function preCacheAllPhotos(transactions, onProgress) {
+  // Collect every OneDrive photo ID from transactions (skip local- ids)
+  const ids = new Set();
+  (transactions || []).forEach(t => {
+    if (Array.isArray(t.photos)) {
+      t.photos.forEach(p => { if (p?.id && !p.id.startsWith('local-')) ids.add(p.id); });
+    } else if (t.photoId && !String(t.photoId).startsWith('local-')) {
+      ids.add(t.photoId);
+    }
+  });
+  if (ids.size === 0) { onProgress?.({ done: 0, total: 0, cached: 0 }); return { done: 0, total: 0 }; }
+
+  const cached = new Set(await idbListPhotoIds());
+  const missing = Array.from(ids).filter(id => !cached.has(id));
+  const total = missing.length;
+  let done = 0;
+  onProgress?.({ done: 0, total, cached: cached.size });
+
+  // Throttle: download one at a time to be gentle on bandwidth and Graph rate limits
+  for (const id of missing) {
+    try {
+      const token = await getToken();
+      const res = await fetch(GRAPH_URL(`/me/drive/items/${id}/content`), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        try { await idbPutBlob(id, blob); } catch {}
+      }
+    } catch (e) {
+      // network blip — keep going; will retry next session
+    }
+    done += 1;
+    onProgress?.({ done, total, cached: cached.size + done });
+  }
+  return { done, total };
+}
+
+// v3.5: clear all cached photos (frees space; OneDrive copies remain)
+async function clearPhotoCache() {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch {}
+}
+
 // ========== v2.9: Version archive system ==========
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v3.4';
-const APP_VERSION_TAG = 'Master delete sticks (no auto-readd)';
+const APP_VERSION = 'v3.5';
+const APP_VERSION_TAG = 'Offline photo mode + pre-cache + queue';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -2358,6 +2609,78 @@ function App() {
     }, 4000);
     return () => clearTimeout(timer);
   }, [account, skipSync, booting]);
+
+  // v3.5: Pre-cache all photos for offline viewing (after login, runs once per session)
+  const [cacheStatus, setCacheStatus] = useState({ done: 0, total: 0, running: false });
+  const didPrecacheRef = useRef(false);
+  useEffect(() => {
+    if (!account || skipSync || booting) return;
+    if (didPrecacheRef.current) return;
+    if (!isOnline) return;
+    if (!state.transactions || state.transactions.length === 0) return;
+    didPrecacheRef.current = true;
+    const timer = setTimeout(async () => {
+      setCacheStatus(s => ({ ...s, running: true }));
+      const result = await preCacheAllPhotos(state.transactions, (p) => {
+        setCacheStatus({ done: p.done, total: p.total, running: p.done < p.total });
+      });
+      setCacheStatus({ done: result.done, total: result.total, running: false });
+      if (result.total > 0) {
+        console.log(`[precache] downloaded ${result.done}/${result.total} photos`);
+      }
+    }, 6000); // wait until after archive task
+    return () => clearTimeout(timer);
+  }, [account, skipSync, booting, isOnline, state.transactions]);
+
+  // v3.5: Flush pending uploads when coming back online
+  const [pendingCount, setPendingCount] = useState(0);
+  // Helper that swaps a local-id → OneDrive-id inside transactions and resaves state
+  const swapPhotoId = useCallback((localId, newId) => {
+    setState(prev => {
+      let changed = false;
+      const newTx = (prev.transactions || []).map(t => {
+        if (Array.isArray(t.photos)) {
+          let mod = false;
+          const next = t.photos.map(p => {
+            if (p.id === localId) { mod = true; changed = true; return { ...p, id: newId }; }
+            return p;
+          });
+          return mod ? { ...t, photos: next } : t;
+        }
+        if (t.photoId === localId) { changed = true; return { ...t, photoId: newId }; }
+        return t;
+      });
+      if (!changed) return prev;
+      return { ...prev, transactions: newTx, lastModified: new Date().toISOString() };
+    });
+  }, []);
+  // Periodically refresh pending count + flush queue when online
+  useEffect(() => {
+    if (!account || skipSync || booting) return;
+    let cancelled = false;
+    const refresh = async () => {
+      const pend = await idbListPending();
+      if (!cancelled) setPendingCount(pend.length);
+    };
+    refresh();
+    const flush = async () => {
+      if (!isOnline) return;
+      const pend = await idbListPending();
+      if (pend.length === 0) return;
+      const r = await flushPendingUploads(swapPhotoId);
+      if (r.uploaded > 0) {
+        pushToast(`อัปโหลดรูปค้าง ${r.uploaded} รูปแล้ว`);
+      }
+      refresh();
+    };
+    flush();
+    // Check periodically (every 30s) in case user goes offline → online without page reload
+    const intv = setInterval(flush, 30000);
+    // Also flush immediately when "online" event fires
+    const onOnline = () => flush();
+    window.addEventListener('online', onOnline);
+    return () => { cancelled = true; clearInterval(intv); window.removeEventListener('online', onOnline); };
+  }, [account, skipSync, booting, isOnline, swapPhotoId]);
 
   // Trigger push on change
   const firstChangeRef = useRef(true);
@@ -2808,6 +3131,9 @@ function App() {
             onSyncNow={pullOnce}
             onEnableSync={() => setSkipSync(false)}
             authLoading={authLoading}
+            cacheStatus={cacheStatus}
+            pendingCount={pendingCount}
+            isOnline={isOnline}
           />
         )}
       </main>
@@ -3610,7 +3936,7 @@ function DonutChart({ data, palette, total }) {
   return <svg viewBox={`0 0 ${size} ${size}`}>{arcs}</svg>;
 }
 
-function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setState, pushToast, onSignIn, onSignOut, onSyncNow, onEnableSync, authLoading }) {
+function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setState, pushToast, onSignIn, onSignOut, onSyncNow, onEnableSync, authLoading, cacheStatus, pendingCount, isOnline }) {
   const fileRef = useRef(null);
   const [confirm, setConfirm] = useState(false);
   // v2.9: Lessons editor state
@@ -3953,6 +4279,15 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
+      {/* v3.5: Offline storage / photo cache */}
+      <OfflineStoragePanel
+        account={account}
+        isOnline={isOnline}
+        cacheStatus={cacheStatus}
+        pendingCount={pendingCount}
+        pushToast={pushToast}
+      />
+
       {/* v2.9: Lessons / Journal */}
       <div className="panel rise">
         <div className="hd">
@@ -4026,7 +4361,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
-      <div className="vstrip">my money · v3.4 · ลบ master ไม่กลับมา</div>
+      <div className="vstrip">my money · v3.5 · Offline mode + auto sync</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -5953,6 +6288,105 @@ function CategoriesManager({ categories, transactions, onClose, onAdd, onUpdate,
 // ============ Lessons / Journal Editor ============
 // Markdown text editor for the user's personal study notes.
 // Stored as /Apps/my money/lessons.md on OneDrive.
+// ============ v3.5: Offline storage panel ============
+// Shows pre-cache progress, pending uploads, and lets the user clear cache.
+function OfflineStoragePanel({ account, isOnline, cacheStatus, pendingCount, pushToast }) {
+  const [stats, setStats] = useState({ count: 0, bytes: 0 });
+  const [busy, setBusy] = useState(false);
+
+  // Refresh storage stats periodically + when key inputs change
+  const refreshStats = async () => {
+    const s = await idbCacheSize();
+    setStats(s);
+  };
+  useEffect(() => {
+    refreshStats();
+    const intv = setInterval(refreshStats, 5000);
+    return () => clearInterval(intv);
+  }, [cacheStatus.done, pendingCount]);
+
+  const formatBytes = (b) => {
+    if (b < 1024) return `${b} B`;
+    if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+    return `${(b / 1024 / 1024).toFixed(1)} MB`;
+  };
+
+  const onClearCache = async () => {
+    if (!confirm('ลบรูปที่ cache ในเครื่อง? (รูปบน OneDrive ยังอยู่ — ดาวน์โหลดใหม่เมื่อเปิดดูครั้งหน้า)')) return;
+    setBusy(true);
+    await clearPhotoCache();
+    await refreshStats();
+    setBusy(false);
+    pushToast('ล้าง cache แล้ว');
+  };
+
+  const cachingProgress = cacheStatus.running && cacheStatus.total > 0
+    ? Math.round((cacheStatus.done / cacheStatus.total) * 100)
+    : null;
+
+  return (
+    <div className="panel rise">
+      <div className="hd">
+        <div className="ico-wrap"><Ic.Download size={16}/></div>
+        <div>
+          <div className="tt">รูปออฟไลน์</div>
+          <div className="sb">
+            {isOnline ? 'ออนไลน์ · sync อัตโนมัติ' : '🔌 ออฟไลน์ · ดูรูปจากเครื่องได้'}
+          </div>
+        </div>
+      </div>
+
+      {/* Stats grid */}
+      <div className="cache-stats">
+        <div className="cell">
+          <div className="num">{stats.count.toLocaleString()}</div>
+          <div className="lbl">รูปใน cache</div>
+        </div>
+        <div className="cell">
+          <div className="num">{formatBytes(stats.bytes)}</div>
+          <div className="lbl">ขนาด</div>
+        </div>
+        <div className="cell">
+          <div className="num" style={{color: pendingCount > 0 ? 'var(--sync-warn)' : 'var(--income-soft)'}}>
+            {pendingCount}
+          </div>
+          <div className="lbl">รออัปโหลด</div>
+        </div>
+      </div>
+
+      {/* Pre-cache progress bar */}
+      {cachingProgress !== null && (
+        <div style={{marginTop: 12}}>
+          <div style={{display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-dim)', marginBottom: 4}}>
+            <span>กำลังดาวน์โหลดรูป...</span>
+            <span>{cacheStatus.done} / {cacheStatus.total}</span>
+          </div>
+          <div className="cache-progress">
+            <div className="bar" style={{width: `${cachingProgress}%`}}></div>
+          </div>
+        </div>
+      )}
+
+      {/* Pending uploads notice */}
+      {pendingCount > 0 && (
+        <div className="cache-notice warn">
+          ⏳ มีรูป {pendingCount} รูปรออัปโหลด — จะ upload อัตโนมัติเมื่อออนไลน์
+        </div>
+      )}
+
+      <p style={{fontSize: 11, color: 'var(--text-dim)', margin: '12px 0 8px', lineHeight: 1.55}}>
+        💡 รูปทั้งหมดจะถูกดาวน์โหลดเก็บไว้ในเครื่อง (Chrome) เปิดดูได้แม้ไม่มีเน็ต
+        เก็บใน Chrome's IndexedDB ไม่ใช่ Gallery มือถือ — ลบ Chrome data จะหาย แต่ OneDrive ยังมีอยู่
+      </p>
+
+      <button className="btn-ghost" style={{width: '100%'}}
+              onClick={onClearCache} disabled={busy || stats.count === 0}>
+        {busy ? <><Ic.Refresh size={14} className="spin"/> กำลังล้าง</> : <><Ic.Trash size={14}/> ล้าง cache ในเครื่อง</>}
+      </button>
+    </div>
+  );
+}
+
 function LessonsEditor({ onClose, pushToast }) {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
