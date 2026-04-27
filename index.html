@@ -210,11 +210,11 @@ h1.page-title {
 }
 
 .accounts-list {
-  display: flex; flex-direction: column; gap: 8px; margin-top: 12px;
+  display: flex; flex-direction: column; gap: 4px; margin-top: 10px;
 }
 .account-row {
-  display: flex; align-items: center; gap: 12px;
-  padding: 14px 16px; border-radius: 16px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-radius: 12px;
   background: var(--surface2); border: 1px solid var(--line);
   text-align: left; width: 100%;
   font-family: inherit;
@@ -225,31 +225,30 @@ h1.page-title {
   background: var(--surface);
   border-color: var(--line-strong);
 }
-.acct-icon-wrap {
-  width: 38px; height: 38px; border-radius: 50%;
-  background: rgba(106,134,108,0.1); color: var(--gold);
-  border: 1px solid var(--line-strong);
-  display: inline-flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.acct-info { flex: 1; min-width: 0; }
+.acct-main { flex: 1; min-width: 0; }
 .acct-name {
-  font-size: 14px; color: var(--text);
+  font-size: 14px; color: var(--text); font-weight: 500;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.acct-meta {
-  font-size: 11px; color: var(--text-faint); margin-top: 2px;
-  display: flex; align-items: center; gap: 4px;
-}
-.acct-dec-badge {
-  padding: 1px 6px; border-radius: 4px;
-  background: rgba(106,134,108,0.08); color: var(--gold);
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
+.acct-line2 {
+  margin-top: 3px;
+  display: flex; align-items: baseline; gap: 10px;
 }
 .acct-balance {
-  font-size: 14px; flex-shrink: 0;
+  font-size: 13px;
   font-weight: 500;
+  flex-shrink: 0;
+}
+.acct-meta {
+  font-size: 10.5px; color: var(--text-faint);
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.acct-dec-badge {
+  padding: 1px 5px; border-radius: 4px; margin-left: 4px;
+  background: rgba(106,134,108,0.08); color: var(--gold);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9.5px;
 }
 .acct-chev { color: var(--text-faint); flex-shrink: 0; }
 
@@ -2010,6 +2009,108 @@ async function deletePhoto(photoId) {
   } catch (e) { console.warn('Photo delete failed:', e); }
 }
 
+// ========== v2.9: Version archive system ==========
+// Stores each new version of index.html in OneDrive /Apps/my money/versions/
+// and maintains a CHANGELOG.md so user can audit & downgrade later.
+
+const APP_VERSION = 'v2.9';
+const APP_VERSION_TAG = 'บัญชี layout + version archive';
+
+// Check whether a file exists in the app folder
+async function odriveFileExists(path) {
+  try {
+    const token = await getToken();
+    const res = await fetch(GRAPH_URL(`/me/drive/special/approot:/${path}`), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
+// PUT a text/binary blob to a path inside approot
+async function odrivePutText(path, text, contentType = 'text/plain; charset=utf-8') {
+  const token = await getToken();
+  const res = await fetch(GRAPH_URL(`/me/drive/special/approot:/${path}:/content`), {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType },
+    body: text,
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`PUT ${path} → ${res.status}: ${t.slice(0,120)}`);
+  }
+  return res.json();
+}
+
+async function odriveGetText(path) {
+  try {
+    const token = await getToken();
+    const res = await fetch(GRAPH_URL(`/me/drive/special/approot:/${path}:/content`), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    return await res.text();
+  } catch { return null; }
+}
+
+// Archive THIS version of index.html into OneDrive (idempotent: skips if already there)
+async function archiveVersionIfNeeded() {
+  const archivePath = `versions/index-${APP_VERSION}.html`;
+  const exists = await odriveFileExists(archivePath);
+  if (exists) return { archived: false, reason: 'already-exists' };
+
+  // Fetch current HTML from the running URL
+  let html;
+  try {
+    const r = await fetch(window.location.href, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`fetch failed ${r.status}`);
+    html = await r.text();
+  } catch (e) {
+    console.warn('archive: cannot fetch own HTML:', e);
+    return { archived: false, reason: 'fetch-failed' };
+  }
+
+  // Save the snapshot
+  await odrivePutText(archivePath, html, 'text/html; charset=utf-8');
+
+  // Append to CHANGELOG.md (or create it)
+  const now = new Date();
+  const stamp = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+  const sizeKB = Math.round(html.length / 1024);
+  const entryLines = [
+    `## ${APP_VERSION} — ${APP_VERSION_TAG}`,
+    `- Archived: ${stamp}`,
+    `- Size: ${sizeKB} KB`,
+    `- File: \`versions/index-${APP_VERSION}.html\``,
+    ``,
+  ];
+  let existing = await odriveGetText('CHANGELOG.md');
+  if (!existing) {
+    existing = [
+      '# my money — Version History',
+      '',
+      'This file is auto-generated by the app. Each new version of `index.html`',
+      'is also archived under `versions/` so you can downgrade or audit changes.',
+      '',
+      'Most recent versions are listed at the top.',
+      '',
+    ].join('\n');
+  }
+  // Insert this version's entry at the top of the version log section.
+  // Find the first "## " heading; insert before it. If none, append at end.
+  const newEntry = entryLines.join('\n');
+  const firstHeadingIdx = existing.search(/\n## /);
+  let updated;
+  if (firstHeadingIdx >= 0) {
+    updated = existing.slice(0, firstHeadingIdx + 1) + newEntry + existing.slice(firstHeadingIdx + 1);
+  } else {
+    updated = existing + '\n' + newEntry;
+  }
+  await odrivePutText('CHANGELOG.md', updated, 'text/markdown; charset=utf-8');
+  return { archived: true, sizeKB, stamp };
+}
+
+
 // Resize image using canvas (keeps aspect ratio, outputs JPEG)
 function resizeImage(file, maxDim, quality) {
   return new Promise((resolve, reject) => {
@@ -2189,6 +2290,27 @@ function App() {
       pullOnce();
     }
   }, [account, booting, pullOnce]);
+
+  // v2.9: Archive this index.html into OneDrive once per version, after login
+  const didArchiveRef = useRef(false);
+  useEffect(() => {
+    if (!account || skipSync || booting) return;
+    if (didArchiveRef.current) return;
+    didArchiveRef.current = true;
+    // Delay slightly so the initial pull/sync is not delayed by this background work
+    const timer = setTimeout(() => {
+      archiveVersionIfNeeded()
+        .then(r => {
+          if (r.archived) {
+            console.log(`[archive] saved ${APP_VERSION} (${r.sizeKB} KB) to OneDrive`);
+          } else {
+            console.log(`[archive] ${APP_VERSION} skipped: ${r.reason}`);
+          }
+        })
+        .catch(e => console.warn('[archive] failed:', e));
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [account, skipSync, booting]);
 
   // Trigger push on change
   const firstChangeRef = useRef(true);
@@ -3168,19 +3290,18 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
             <button key={a.name} className="account-row rise"
                     style={{animationDelay: `${i * 50}ms`}}
                     onClick={() => onSelectAccount(a.name)}>
-              <div className="acct-icon-wrap">
-                <Ic.Wallet size={18}/>
-              </div>
-              <div className="acct-info">
+              <div className="acct-main">
                 <div className="acct-name">{a.name}</div>
-                <div className="acct-meta">
-                  {a.count > 0 ? `${a.count} รายการ` : 'ยังไม่มีรายการ'}
-                  {a.decimals !== 2 && <span className="acct-dec-badge">·{a.decimals}d</span>}
+                <div className="acct-line2">
+                  <div className="acct-balance font-mono-n"
+                       style={{color: a.balance < 0 ? 'var(--expense-soft)' : a.balance > 0 ? 'var(--income-soft)' : 'var(--text-faint)'}}>
+                    ฿{fmtMoney(a.balance, a.decimals)}
+                  </div>
+                  <div className="acct-meta">
+                    {a.count > 0 ? `${a.count} รายการ` : 'ยังไม่มีรายการ'}
+                    {a.decimals !== 2 && <span className="acct-dec-badge">·{a.decimals}d</span>}
+                  </div>
                 </div>
-              </div>
-              <div className="acct-balance font-mono-n"
-                   style={{color: a.balance < 0 ? 'var(--expense-soft)' : a.balance > 0 ? 'var(--income-soft)' : 'var(--text-faint)'}}>
-                ฿{fmtMoney(a.balance, a.decimals)}
               </div>
               <Ic.ChevR size={14} className="acct-chev"/>
             </button>
@@ -3792,7 +3913,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
-      <div className="vstrip">my money · v2.8 · ปุ่มขยายตัวอักษร</div>
+      <div className="vstrip">my money · v2.9 · บัญชี layout + Version archive</div>
     </div>
   );
 }
