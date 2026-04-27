@@ -1462,6 +1462,47 @@ body:has(.sheet-backdrop) nav.tabbar {
   margin-right: 4px; font-size: 14px;
 }
 
+/* v3.6: Shared role banner */
+.shared-banner {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+  padding: 8px 14px;
+  margin: 0 -16px 14px;
+  background: linear-gradient(90deg, rgba(106,134,108,0.18), rgba(47,107,61,0.18));
+  border-bottom: 1px solid var(--line-strong);
+  font-size: 12px; color: var(--income-soft);
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(8px);
+}
+.shared-lock-icon {
+  font-size: 14px;
+  opacity: 0.85;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.1));
+}
+/* Share toggle button in account manager */
+.share-btn {
+  width: 30px; height: 30px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface); color: var(--text-faint);
+  border: 1px solid var(--line);
+  transition: transform .15s, background .2s, color .2s, border-color .2s;
+}
+.share-btn:active { transform: scale(0.9); }
+.share-btn.on {
+  background: rgba(47,107,61,0.14);
+  border-color: var(--income-soft);
+  color: var(--income-soft);
+}
+.shared-badge {
+  display: inline-block;
+  margin-right: 4px;
+  font-size: 12px;
+  vertical-align: -1px;
+}
+
 /* v3.5: Offline storage panel */
 .cache-stats {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
@@ -2311,8 +2352,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v3.5';
-const APP_VERSION_TAG = 'Offline photo mode + pre-cache + queue';
+const APP_VERSION = 'v3.7';
+const APP_VERSION_TAG = 'Hard lock for shared role + secret unlock';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -2535,6 +2576,75 @@ function App() {
   const [state, setState] = useState({ transactions: [], items: [], accounts: [], projects: [], categories: [], lastModified: null });
   const isOnline = !!account && HAS_CONFIG && !skipSync;
   const { status, lastSync, errMsg, pullOnce, schedulePush } = useSync(state, setState, isOnline);
+
+  // v3.6/v3.7: Role detection with HARD LOCK
+  //
+  // Behaviour:
+  // 1. First time `?as=wife` is visited → sets BOTH role + LOCK flag in localStorage.
+  //    LOCK means: future visits ALWAYS run as shared, regardless of URL parameters.
+  // 2. To unlock requires secret URL: `?unlock=<UNLOCK_SECRET>` — only the owner knows it.
+  //    Without the secret, even removing ?as=wife or visiting ?as=owner has no effect.
+  // 3. The owner can change UNLOCK_SECRET below before sharing the wife URL with someone
+  //    who might be tech-savvy enough to read this source code.
+  const UNLOCK_SECRET = 'kabovergreen2026'; // ⚠️ change before sharing the URL
+  const [role, setRole] = useState(() => {
+    try {
+      const url = new URL(window.location.href);
+      const qRole = url.searchParams.get('as');
+      const qUnlock = url.searchParams.get('unlock');
+
+      // First check for owner unlocking via secret
+      if (qUnlock === UNLOCK_SECRET) {
+        localStorage.removeItem('mymoney:role');
+        localStorage.removeItem('mymoney:locked');
+        return 'owner';
+      }
+
+      // If device is locked into shared mode → cannot escape via URL
+      const lockedAs = localStorage.getItem('mymoney:locked');
+      if (lockedAs === 'shared') return 'shared';
+
+      // Normal role detection
+      if (qRole === 'wife' || qRole === 'shared') {
+        localStorage.setItem('mymoney:role', 'shared');
+        // Engage hard lock as soon as the wife URL is visited the first time
+        localStorage.setItem('mymoney:locked', 'shared');
+        return 'shared';
+      }
+      if (qRole === 'owner' || qRole === 'me') {
+        // ?as=owner alone is NOT enough to escape lock — must include unlock secret too
+        localStorage.removeItem('mymoney:role');
+        return 'owner';
+      }
+      const stored = localStorage.getItem('mymoney:role');
+      return stored === 'shared' ? 'shared' : 'owner';
+    } catch { return 'owner'; }
+  });
+  const isSharedView = role === 'shared';
+  const isLocked = (() => {
+    try { return localStorage.getItem('mymoney:locked') === 'shared'; }
+    catch { return false; }
+  })();
+  // Owner-only unlock (used by Settings panel after typing secret)
+  const unlockSharedDevice = (typedSecret) => {
+    if (typedSecret !== UNLOCK_SECRET) return false;
+    try {
+      localStorage.removeItem('mymoney:role');
+      localStorage.removeItem('mymoney:locked');
+    } catch {}
+    setRole('owner');
+    return true;
+  };
+  // Strip ?as= and ?unlock= from URL after first visit so they don't show in history
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      let changed = false;
+      if (url.searchParams.has('as')) { url.searchParams.delete('as'); changed = true; }
+      if (url.searchParams.has('unlock')) { url.searchParams.delete('unlock'); changed = true; }
+      if (changed) window.history.replaceState({}, '', url.toString());
+    } catch {}
+  }, []);
 
   const [tab, setTab] = useState('home');
   const [homeView, setHomeView] = useState('overview'); // 'overview' | 'summary'
@@ -2904,6 +3014,13 @@ function App() {
   const removeMasterAccount = (id) => {
     mutate(prev => ({ ...prev, accounts: (prev.accounts || []).filter(a => a.id !== id) }));
   };
+  // v3.6: toggle "shared" flag — used by role-based filter for sharing specific accounts
+  const toggleAccountShared = (id) => {
+    mutate(prev => ({
+      ...prev,
+      accounts: (prev.accounts || []).map(a => a.id === id ? { ...a, shared: !a.shared } : a),
+    }));
+  };
 
   // ============ Projects Master List Handlers ============
   const addMasterProject = (name) => {
@@ -3008,14 +3125,61 @@ function App() {
   };
 
   // Derive unique account list from all transactions (hooks MUST be before early returns)
+  // v3.6: When role=shared, filter to accounts marked as shared
+  const sharedAccountNames = useMemo(() => {
+    const set = new Set();
+    (state.accounts || []).forEach(a => {
+      if (a.shared && a.name) set.add(a.name.trim());
+    });
+    return set;
+  }, [state.accounts]);
+
   const accountList = useMemo(() => {
     const set = new Set();
     state.transactions.forEach(t => {
       const k = (t.accountName || '').trim();
-      if (k) set.add(k);
+      if (!k) return;
+      if (isSharedView && !sharedAccountNames.has(k)) return; // filter out non-shared in wife mode
+      set.add(k);
     });
+    // Also include shared master accounts even if they have no transactions yet
+    if (isSharedView) {
+      sharedAccountNames.forEach(n => set.add(n));
+    }
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'th'));
-  }, [state.transactions]);
+  }, [state.transactions, isSharedView, sharedAccountNames]);
+
+  // v3.6: in shared view, the rest of the app sees a filtered state.accounts so
+  // managers, autocomplete, and pickers only show shared accounts.
+  // v3.7: visibleState — filter accounts AND transactions/projects/items shown to wife
+  // so the rest of the app sees a clean read of "wife's data only".
+  const visibleState = useMemo(() => {
+    if (!isSharedView) return state;
+    const sharedNames = new Set(
+      (state.accounts || []).filter(a => a.shared).map(a => (a.name || '').trim())
+    );
+    // Filter transactions to those on shared accounts only
+    const filteredTx = (state.transactions || []).filter(t => sharedNames.has((t.accountName || '').trim()));
+    // Derive which projects/items are actually used in those filtered transactions
+    const usedProjects = new Set();
+    const usedItems = new Set();
+    filteredTx.forEach(t => {
+      const p = (t.project || '').trim();
+      if (p) usedProjects.add(p);
+      const i = (t.item || t.payee || '').trim();
+      if (i) usedItems.add(i);
+    });
+    // Keep all master items/projects (so wife can add new ones), but downstream
+    // autocomplete will only suggest items that appear in shared transactions.
+    // For now we keep the master lists intact — UI managers see filtered counts only.
+    return {
+      ...state,
+      accounts: (state.accounts || []).filter(a => a.shared),
+      transactions: filteredTx,
+      // Keep master projects/items unchanged so wife can pick from them when adding
+      // (but she won't see other-account transactions anyway).
+    };
+  }, [state, isSharedView]);
 
   // ============ Render boot / setup / signin / app ============
   if (booting) {
@@ -3035,10 +3199,15 @@ function App() {
     );
   }
 
-  // Filter by month + account
+  // Filter by month + account (and role)
   const monthTx = state.transactions.filter(t => {
     const d = new Date(t.date);
     if (d.getFullYear() !== viewMonth.y || d.getMonth() !== viewMonth.m) return false;
+    // v3.6: in shared view, only include transactions on shared accounts
+    if (isSharedView) {
+      const accName = (t.accountName || '').trim();
+      if (!sharedAccountNames.has(accName)) return false;
+    }
     if (selectedAccount === 'all') return true;
     return (t.accountName || '').trim() === selectedAccount;
   });
@@ -3051,9 +3220,16 @@ function App() {
   return (
     <>
       <main>
+        {/* v3.6/v3.7: shared-mode banner (no exit button — locked) */}
+        {isSharedView && (
+          <div className="shared-banner">
+            <span>👁️ โหมดดูร่วม · เห็นเฉพาะบัญชีที่แชร์</span>
+            <span className="shared-lock-icon" title="โหมดล็อก · ปลดได้เฉพาะเจ้าของ">🔒</span>
+          </div>
+        )}
         {tab === 'home' && homeView === 'overview' && (
           <AccountsOverviewView
-            state={state}
+            state={visibleState}
             onSelectAccount={(name) => { setSelectedAccount(name); setHomeView('summary'); }}
             onSelectAll={() => { setSelectedAccount('all'); setHomeView('summary'); }}
             onManageAccounts={() => setShowAccountsManager(true)}
@@ -3235,6 +3411,11 @@ function App() {
           onRemove={(id) => {
             removeMasterAccount(id);
             pushToast('ลบบัญชีแล้ว');
+          }}
+          onToggleShared={(id) => {
+            const a = (state.accounts || []).find(x => x.id === id);
+            toggleAccountShared(id);
+            pushToast(a?.shared ? 'เลิกแชร์แล้ว' : 'แชร์บัญชีแล้ว · ภรรยาเห็นในโหมดดูร่วม');
           }}
           pushToast={pushToast}
         />
@@ -4361,7 +4542,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
-      <div className="vstrip">my money · v3.5 · Offline mode + auto sync</div>
+      <div className="vstrip">my money · v3.7 · Hard lock โหมดดูร่วม</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -5695,7 +5876,7 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
 }
 
 // ============ Accounts Manager Modal ============
-function AccountsManager({ accounts, transactions, onClose, onAdd, onUpdate, onRemove, pushToast }) {
+function AccountsManager({ accounts, transactions, onClose, onAdd, onUpdate, onRemove, onToggleShared, pushToast }) {
   const [newName, setNewName] = useState('');
   const [newDecimals, setNewDecimals] = useState(2);
   const [editingId, setEditingId] = useState(null);
@@ -5863,6 +6044,7 @@ function AccountsManager({ accounts, transactions, onClose, onAdd, onUpdate, onR
                         <>
                           <div className="name-wrap">
                             <div className="name">
+                              {a.shared && <span className="shared-badge" title="แชร์ในโหมดดูร่วม">👁️</span>}
                               {a.name}
                               <span className="dec-badge">·{dec}d</span>
                             </div>
@@ -5870,9 +6052,16 @@ function AccountsManager({ accounts, transactions, onClose, onAdd, onUpdate, onR
                               {usage > 0 ? `ใช้ ${usage} ครั้ง` : 'ยังไม่ถูกใช้'}
                               {' · '}
                               ทศนิยม {dec} ตำแหน่ง
+                              {a.shared && <span style={{color:'var(--income-soft)', marginLeft:6}}>· แชร์</span>}
                             </div>
                           </div>
                           <div className="actions">
+                            <button
+                              className={`share-btn ${a.shared ? 'on' : ''}`}
+                              onClick={() => onToggleShared(a.id)}
+                              title={a.shared ? 'เลิกแชร์' : 'แชร์ให้โหมดดูร่วม'}>
+                              <Ic.Share size={14}/>
+                            </button>
                             <button className="edit-btn" onClick={() => startEdit(a)}
                                     title="แก้ไข">
                               <Ic.Pencil size={14}/>
