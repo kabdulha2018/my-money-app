@@ -1193,11 +1193,20 @@ body:has(.sheet-backdrop) nav.tabbar {
 }
 .photo-tile .rm-corner {
   position: absolute; top: 4px; right: 4px;
-  width: 26px; height: 26px; border-radius: 50%;
-  background: rgba(24,21,18,0.85); color: var(--expense-soft);
-  border: 1px solid var(--expense);
+  width: 34px; height: 34px; border-radius: 50%;
+  background: rgba(184,88,66,0.95); color: #FBFAF6;
+  border: 2px solid #FBFAF6;
   display: inline-flex; align-items: center; justify-content: center;
-  backdrop-filter: blur(6px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+  z-index: 5; /* above the image so taps register on the button */
+  transition: transform .15s, background .2s;
+  /* ensure native button doesn't get any default constraints that block taps */
+  -webkit-tap-highlight-color: rgba(184,88,66,0.4);
+  cursor: pointer;
+}
+.photo-tile .rm-corner:active {
+  transform: scale(0.85);
+  background: rgba(148,70,50,0.95);
 }
 .photo-tile .loading-mini {
   position: absolute; inset: 0;
@@ -2051,8 +2060,8 @@ async function deletePhoto(photoId) {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v3.1';
-const APP_VERSION_TAG = 'Sticky save bar in lessons editor';
+const APP_VERSION = 'v3.3';
+const APP_VERSION_TAG = 'Photo delete button works in edit mode';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -4013,7 +4022,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
-      <div className="vstrip">my money · v3.1 · ปุ่มบันทึก sticky</div>
+      <div className="vstrip">my money · v3.3 · ปุ่มลบรูปใช้งานได้</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -4823,8 +4832,13 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
                     <Ic.Refresh size={16} className="spin"/>
                   </div>
                 )}
-                <button className="rm-corner" type="button" onClick={() => removePhotoAt(i)}>
-                  <Ic.Trash size={12}/>
+                <button className="rm-corner" type="button"
+                        aria-label="ลบรูปนี้"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm('ลบรูปนี้?')) removePhotoAt(i);
+                        }}>
+                  <Ic.Trash size={14}/>
                 </button>
               </div>
             ))}
