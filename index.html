@@ -688,6 +688,13 @@ body:has(.sheet-backdrop) nav.tabbar {
   color: var(--expense-soft); font-size: 12px; max-width: 340px;
   text-align: left; line-height: 1.5;
 }
+.signin .inapp-warn {
+  margin: 18px 0 -10px; padding: 12px 14px; border-radius: 12px;
+  background: rgba(201,154,74,0.12); border: 1px solid rgba(201,154,74,0.45);
+  color: var(--gold); font-size: 12px; max-width: 340px;
+  text-align: left; line-height: 1.55;
+}
+.signin .inapp-warn strong { color: var(--text); }
 
 /* Setup needed */
 .setup-needed {
@@ -2266,22 +2273,44 @@ async function getAccount() {
   return accs[0] || null;
 }
 
+// v5.2: Detect in-app browsers (Messenger, LINE, Facebook, Instagram, etc.)
+// These browsers run pages inside a popup which prevents MSAL popup-based login.
+// When detected we skip popup entirely and use redirect from the start.
+function isInAppBrowser() {
+  try {
+    const ua = navigator.userAgent || '';
+    // Common in-app browser markers — covers Messenger, FB, Instagram, LINE,
+    // KakaoTalk, WeChat, TikTok, etc.
+    if (/FBAN|FBAV|Messenger|Instagram|Line\/|KAKAOTALK|MicroMessenger|Twitter|TikTok|Snapchat/i.test(ua)) {
+      return true;
+    }
+    // Detect "is this window itself a popup" — works for any in-app browser even if
+    // the user-agent doesn't list itself. window.opener !== null means another window
+    // opened us (which is what in-app browsers do).
+    if (window.opener && window.opener !== window) return true;
+  } catch {}
+  return false;
+}
+
 async function signIn() {
   const inst = await initMsal();
+  // v5.2: If we're already inside an in-app browser, skip popup and go straight to
+  // redirect — popup will only fail with block_nested_popups.
+  if (isInAppBrowser()) {
+    await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
+    return null; // navigation happens; nothing more to do
+  }
   // Try popup first (works in regular Chrome).
-  // If we're inside a nested-popup environment (Messenger / LINE in-app browser),
-  // MSAL throws `block_nested_popups` — fall back to redirect-based login which
-  // navigates the whole tab away to login.live.com and back.
+  // If MSAL throws ANY popup-related error, fall back to redirect.
   try {
     const res = await inst.loginPopup({ scopes: CFG.scopes, prompt: 'select_account' });
     return res.account;
   } catch (e) {
     const code = String(e?.errorCode || e?.errorMessage || e?.message || '');
-    const isNested = /block_nested_popups|popup_window_error|user_cancelled/i.test(code);
-    if (isNested) {
-      // Will navigate the page; this function effectively never returns here.
+    const isPopupBlocked = /block_nested_popups|popup_window_error|empty_window_error|popup_blocked/i.test(code)
+      || (e?.name === 'BrowserAuthError' && /popup/i.test(code));
+    if (isPopupBlocked) {
       await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
-      // Just in case redirect doesn't fire immediately:
       return null;
     }
     throw e;
@@ -2312,13 +2341,19 @@ async function getToken() {
     return r.accessToken;
   } catch (e) {
     if (e.name === 'InteractionRequiredAuthError' || /interaction_required|consent_required|login_required/i.test(String(e?.errorCode || e?.message))) {
+      // v5.2: in in-app browser go straight to redirect
+      if (isInAppBrowser()) {
+        await inst.acquireTokenRedirect({ scopes: CFG.scopes, account });
+        throw new Error('Redirecting for token...');
+      }
       try {
         const r = await inst.acquireTokenPopup({ scopes: CFG.scopes, account });
         return r.accessToken;
       } catch (popupErr) {
         const code = String(popupErr?.errorCode || popupErr?.errorMessage || popupErr?.message || '');
-        if (/block_nested_popups|popup_window_error/i.test(code)) {
-          // Fallback for in-app browsers — navigates entire tab.
+        const isPopupBlocked = /block_nested_popups|popup_window_error|empty_window_error|popup_blocked/i.test(code)
+          || (popupErr?.name === 'BrowserAuthError' && /popup/i.test(code));
+        if (isPopupBlocked) {
           await inst.acquireTokenRedirect({ scopes: CFG.scopes, account });
           throw new Error('Redirecting for token...');
         }
@@ -2667,8 +2702,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.1';
-const APP_VERSION_TAG = 'MSAL fallback for in-app browsers (Messenger, LINE)';
+const APP_VERSION = 'v5.2';
+const APP_VERSION_TAG = 'In-app browser detection + redirect-only login';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -4058,6 +4093,9 @@ function SetupNeeded() {
 
 // ============ Sign In ============
 function SignIn({ loading, error, onSignIn, onSkip }) {
+  // v5.2: warn users opening from Messenger/LINE in-app browsers — login still works
+  // (we use redirect fallback) but it's smoother in real Chrome.
+  const inApp = isInAppBrowser();
   return (
     <div className="signin">
       <div className="logo">฿</div>
@@ -4066,6 +4104,12 @@ function SignIn({ loading, error, onSignIn, onSkip }) {
         สมุดเงินส่วนตัวของคุณ ซิงค์อัตโนมัติกับ OneDrive<br/>
         เข้าถึงได้ทุกอุปกรณ์
       </div>
+      {inApp && (
+        <div className="inapp-warn">
+          ⚠️ คุณกำลังเปิดผ่านแอปอื่น (เช่น Messenger / LINE)<br/>
+          แนะนำ: แตะ <strong>⋮</strong> มุมขวาบน → <strong>"เปิดใน Chrome"</strong> เพื่อใช้งานสะดวกที่สุด
+        </div>
+      )}
       <button className="ms-btn" onClick={onSignIn} disabled={loading}>
         {loading ? <Ic.Refresh size={18} className="spin"/> : <Ic.Cloud size={18}/>}
         {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบด้วย Microsoft'}
@@ -5100,7 +5144,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.1 · MSAL fallback for in-app browsers</div>
+      <div className="vstrip">my money · v5.2 · Detect in-app browser + redirect-only</div>
 
       {showLessonsEditor && (
         <LessonsEditor
