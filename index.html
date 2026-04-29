@@ -3838,6 +3838,17 @@ function App() {
   }, { inc: 0, exp: 0 });
   totals.bal = totals.inc - totals.exp;
 
+
+
+- ส่วนที่แทรกใหม่ ---
+  const grandTotals = visibleState.transactions.reduce((a, t) => {
+    if (t.type === 'income') a.inc += t.amount; else a.exp += t.amount;
+    return a;
+  }, { inc: 0, exp: 0 });
+  const grandBal = grandTotals.inc - grandTotals.exp;
+  // ----------------------
+
+
   return (
     <>
       <main>
@@ -3872,6 +3883,8 @@ function App() {
             status={status} lastSync={lastSync}
             viewMonth={viewMonth} setViewMonth={setViewMonth}
             totals={totals} monthTx={monthTx}
+            grandBal={grandBal}
+            
             onTap={setActionTx}
             accountList={accountList}
             selectedAccount={selectedAccount}
