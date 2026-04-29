@@ -1462,7 +1462,7 @@ body:has(.sheet-backdrop) nav.tabbar {
   margin-right: 4px; font-size: 14px;
 }
 
-/* v3.6: Shared role banner */
+/* v4.0: Profile banner — shows current profile + switch button */
 .shared-banner {
   position: sticky;
   top: 0;
@@ -1473,35 +1473,258 @@ body:has(.sheet-backdrop) nav.tabbar {
   margin: 0 -16px 14px;
   background: linear-gradient(90deg, rgba(106,134,108,0.18), rgba(47,107,61,0.18));
   border-bottom: 1px solid var(--line-strong);
-  font-size: 12px; color: var(--income-soft);
+  font-size: 13px; color: var(--income-soft);
   letter-spacing: 0.02em;
   backdrop-filter: blur(8px);
 }
-.shared-lock-icon {
-  font-size: 14px;
-  opacity: 0.85;
-  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.1));
+.exit-shared-btn {
+  font-size: 11px;
+  color: var(--gold);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--line);
+  font-family: inherit;
+  text-decoration: none;
 }
-/* Share toggle button in account manager */
-.share-btn {
+.exit-shared-btn:active { transform: scale(0.94); }
+
+/* v5.0: Per-user permission panel + admin badges */
+.vis-select {
+  font-size: 11px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--line);
+  font-family: inherit;
+}
+.shared-badge {
+  display: inline-block;
+  margin-right: 5px;
+  font-size: 13px;
+  vertical-align: -1px;
+}
+.admin-tag {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  background: rgba(201,154,74,0.15);
+  border: 1px solid rgba(201,154,74,0.4);
+  border-radius: 999px;
+  font-size: 9px;
+  font-family: 'IBM Plex Mono', monospace;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  text-transform: uppercase;
+}
+.admin-tag-inline {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  background: var(--gold);
+  color: var(--bg);
+  border-radius: 999px;
+  font-size: 9px;
+  font-family: 'IBM Plex Mono', monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.perm-btn {
   width: 30px; height: 30px; border-radius: 8px;
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--surface); color: var(--text-faint);
   border: 1px solid var(--line);
-  transition: transform .15s, background .2s, color .2s, border-color .2s;
+  transition: transform .15s, background .2s, color .2s;
 }
-.share-btn:active { transform: scale(0.9); }
-.share-btn.on {
-  background: rgba(47,107,61,0.14);
-  border-color: var(--income-soft);
-  color: var(--income-soft);
+.perm-btn:active { transform: scale(0.9); background: rgba(106,134,108,0.18); color: var(--gold); }
+.perm-panel {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: flex; flex-direction: column; gap: 8px;
 }
-.shared-badge {
+.perm-panel-hd {
+  font-size: 11px; color: var(--text-faint);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.perm-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+  padding: 6px 4px;
+}
+.perm-user {
+  font-size: 13px; color: var(--text);
+  display: inline-flex; align-items: center; gap: 8px;
+  flex: 1; min-width: 0;
+}
+.perm-user-icon { font-size: 18px; }
+.perm-empty {
+  font-size: 12px; color: var(--text-faint);
+  text-align: center; padding: 8px;
+}
+
+/* v5.0: Users manager UI */
+.user-add-card {
+  background: var(--surface2);
+  border: 1px solid var(--gold);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.user-add-row {
+  display: flex; gap: 8px; align-items: center;
+}
+.user-icon-select {
+  font-size: 22px;
+  padding: 6px 4px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: inherit;
+  width: 56px; text-align: center;
+}
+.user-name-input {
+  flex: 1; min-width: 0;
+  font-size: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: inherit;
+}
+.user-row-icon {
+  font-size: 22px;
+  margin-right: 8px;
+  vertical-align: -2px;
+}
+.me-tag {
   display: inline-block;
-  margin-right: 4px;
-  font-size: 12px;
-  vertical-align: -1px;
+  margin-left: 8px;
+  font-size: 10px;
+  color: var(--gold);
+  font-style: italic;
 }
+.mgr-row.me {
+  background: rgba(106,134,108,0.06);
+  border-color: rgba(106,134,108,0.3);
+}
+.del-btn-confirm {
+  width: 30px; height: 30px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--expense); color: #fff;
+  border: 1px solid var(--expense);
+}
+.del-btn-confirm:active { transform: scale(0.9); }
+
+/* v4.0: Profile picker (post-login screen) */
+.profile-picker {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center;
+  min-height: 100dvh; padding: 20px; text-align: center;
+}
+.profile-picker .logo-mini {
+  font-family: Georgia, serif;
+  font-size: 56px;
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--gold); color: var(--bg);
+  margin-bottom: 18px;
+  box-shadow: 0 8px 30px rgba(106,134,108,0.35);
+}
+.profile-picker-title {
+  font-size: 26px;
+  margin-bottom: 28px;
+  color: var(--text);
+}
+.profile-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  width: 100%; max-width: 320px;
+}
+.profile-grid.three-col {
+  grid-template-columns: repeat(2, 1fr);
+  max-width: 360px;
+}
+@media (min-width: 380px) {
+  .profile-grid.three-col { grid-template-columns: repeat(3, 1fr); }
+}
+.profile-btn {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 22px 12px; border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--line);
+  color: var(--text); font-family: inherit;
+  transition: transform .15s, background .2s, border-color .2s;
+}
+.profile-btn:active {
+  transform: scale(0.96);
+  background: var(--surface2);
+  border-color: var(--gold);
+}
+.profile-btn .icon { font-size: 40px; margin-bottom: 8px; }
+.profile-btn .name { font-size: 13px; line-height: 1.3; }
+.profile-hint {
+  margin-top: 22px; font-size: 12px; color: var(--text-faint);
+}
+
+/* v4.0: PIN pad screen */
+.pin-pad {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: flex-start;
+  min-height: 100dvh; padding: 60px 20px 32px;
+  text-align: center;
+  position: relative;
+}
+.pin-back {
+  position: absolute; top: 16px; left: 16px;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--surface); border: 1px solid var(--line);
+  color: var(--text); display: inline-flex; align-items: center; justify-content: center;
+}
+.pin-back:active { transform: scale(0.92); }
+.pin-icon { font-size: 56px; margin-bottom: 8px; }
+.pin-name { font-family: 'Noto Serif Thai', serif; font-size: 22px; color: var(--text); margin: 0; }
+.pin-prompt { font-size: 13px; color: var(--text-dim); margin-top: 10px; }
+.pin-prompt.err { color: var(--expense-soft); }
+
+.pin-dots { display: flex; gap: 14px; margin: 26px 0 28px; }
+.pin-dot {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--gold);
+  background: transparent;
+  transition: background .15s, border-color .15s;
+}
+.pin-dot.filled { background: var(--gold); }
+.pin-dot.err { border-color: var(--expense-soft); background: var(--expense-soft); }
+.pin-dots.shake { animation: pin-shake 0.4s; }
+@keyframes pin-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
+
+.pin-keys {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 18px; max-width: 280px; margin: 0 auto;
+}
+.pin-key {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: var(--surface); border: 1px solid var(--line);
+  font-size: 24px; font-family: 'IBM Plex Mono', monospace;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text);
+  transition: transform .1s, background .15s;
+}
+.pin-key:active { transform: scale(0.9); background: rgba(106,134,108,0.18); }
+.pin-key.empty { background: transparent; border: none; pointer-events: none; }
+.pin-key.del { font-size: 20px; }
 
 /* v3.5: Offline storage panel */
 .cache-stats {
@@ -1840,6 +2063,8 @@ const Ic = {
   Image:     (p) => <Icon {...p} d={["M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z","M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z","m21 15-5-5L5 21"]} />,
   Eye:       (p) => <Icon {...p} d={["M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z","M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"]} />,
   Pencil:    (p) => <Icon {...p} d={["M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"]} />,
+  Users:     (p) => <Icon {...p} d={["M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2","M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z","M23 21v-2a4 4 0 0 0-3-3.87","M16 3.13a4 4 0 0 1 0 7.75"]} />,
+  Lock:      (p) => <Icon {...p} d={["M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z","M7 11V7a5 5 0 0 1 10 0v4"]} />,
 };
 
 // ========== Categories ==========
@@ -1943,6 +2168,68 @@ function loadLocal() {
 }
 function saveLocal(state) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e) { console.error(e); }
+}
+
+// ============ ⚠️ v5.0: User & Permission System ============
+// User registry is stored INSIDE state.users (synced via OneDrive).
+// PINs are stored as SHA-256 hashes — even someone with raw OneDrive access can't
+// read the PIN.
+//
+// On first run after upgrading from v4.x (or fresh install), DEFAULT_USERS is
+// seeded into state. Admin can then add/remove/rename/change-PIN from inside the app.
+
+const DEFAULT_USERS = [
+  { id: 'abi',     label: 'อาบี',       icon: '👑', role: 'admin'  },
+  { id: 'amimoh',  label: 'อามีเมาะห์', icon: '👩', role: 'member' },
+  { id: 'ummirin', label: 'อุมมีรีน',   icon: '👩', role: 'member' },
+  { id: 'hakam',   label: 'ฮากัม',      icon: '👦', role: 'member' },
+];
+const DEFAULT_PIN = '1234'; // ทุก user เริ่มต้นด้วย PIN 1234 — admin ควรเปลี่ยนทันทีหลัง deploy
+
+// Per-account permission levels (for non-admin users; admins always have full access)
+const PERM_OPTS = [
+  { id: 'none',     label: '🚫 ไม่เห็น'                    },
+  { id: 'view',     label: '👁️ ดูอย่างเดียว'                },
+  { id: 'edit-own', label: '✏️ ดู+แก้เฉพาะของตัวเอง'        },
+];
+const PERM_LABEL = (id) => (PERM_OPTS.find(p => p.id === id) || PERM_OPTS[0]).label;
+
+// Hash a PIN using SHA-256 + a fixed app salt. Pure function, no side effects.
+// Returns hex string. Used both when creating a user and when verifying a PIN entry.
+async function hashPin(pin) {
+  const text = `mymoney:v5:${pin}`;
+  const buf = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+// Resolve effective permission for a user on a given account.
+// Admin → always 'edit-own' (treated as full edit; combined with admin role checks
+// elsewhere they can edit any tx, not just their own).
+// Member → looks up account.permissions[userId], defaults to 'none'.
+function getAccountPerm(user, account) {
+  if (!user || !account) return 'none';
+  if (user.role === 'admin') return 'admin';
+  return (account.permissions && account.permissions[user.id]) || 'none';
+}
+// True if user can see this account at all
+function canViewAccount(user, account) {
+  const p = getAccountPerm(user, account);
+  return p !== 'none';
+}
+// True if user can edit/delete this specific transaction
+function canEditTx(user, account, tx) {
+  const p = getAccountPerm(user, account);
+  if (p === 'admin') return true;       // admin can edit anything
+  if (p === 'edit-own') return tx.createdBy === user.id;
+  return false;                         // 'view' or 'none'
+}
+// True if user can ADD new transactions to this account
+function canAddToAccount(user, account) {
+  const p = getAccountPerm(user, account);
+  return p === 'admin' || p === 'edit-own';
 }
 
 // ========== MSAL + Graph ==========
@@ -2352,8 +2639,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v3.7';
-const APP_VERSION_TAG = 'Hard lock for shared role + secret unlock';
+const APP_VERSION = 'v5.0';
+const APP_VERSION_TAG = 'Multi-user + per-account permissions + admin';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -2567,6 +2854,91 @@ function useSync(state, setState, isOnline) {
 }
 
 // ========== App ==========
+// ============ v5.0: PIN-based profile gate (uses runtime user list) ============
+// User picks profile after Microsoft login → enters 4-digit PIN → enters app.
+// Profile stored in sessionStorage so closing the tab/Chrome auto-locks.
+function ProfilePicker({ users, onPick }) {
+  // Filter out users without a PIN set (shouldn't happen, but safe)
+  const visible = users || [];
+  return (
+    <div className="profile-picker rise">
+      <div className="logo-mini">฿</div>
+      <h1 className="font-display profile-picker-title">ใครกำลังใช้งาน?</h1>
+      <div className={`profile-grid ${visible.length > 4 ? 'three-col' : ''}`}>
+        {visible.map(p => (
+          <button key={p.id} className="profile-btn" onClick={() => onPick(p)}>
+            <span className="icon">{p.icon || '👤'}</span>
+            <span className="name">{p.label}</span>
+            {p.role === 'admin' && <span className="admin-tag">admin</span>}
+          </button>
+        ))}
+      </div>
+      <div className="profile-hint">แตะโปรไฟล์เพื่อใส่รหัส PIN</div>
+    </div>
+  );
+}
+
+function PinScreen({ profile, onBack, onSuccess }) {
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+
+  const tryPin = async (entered) => {
+    setVerifying(true);
+    try {
+      const expected = profile.pinHash;
+      const got = await hashPin(entered);
+      if (got === expected) {
+        setTimeout(onSuccess, 100);
+      } else {
+        setError(true);
+        setTimeout(() => { setPin(''); setError(false); }, 600);
+      }
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleKey = (n) => {
+    if (verifying) return;
+    if (pin.length >= 4) return;
+    const next = pin + n;
+    setPin(next);
+    if (next.length === 4) {
+      tryPin(next);
+    }
+  };
+  const del = () => { if (!verifying) setPin(prev => prev.slice(0, -1)); };
+
+  return (
+    <div className="pin-pad rise">
+      <button className="pin-back" onClick={onBack} aria-label="ย้อนกลับ">
+        <Ic.ChevL size={20}/>
+      </button>
+      <div className="pin-icon">{profile.icon || '👤'}</div>
+      <h2 className="pin-name">{profile.label}</h2>
+      <div className={`pin-prompt ${error ? 'err' : ''}`}>
+        {error ? 'รหัสผ่านไม่ถูกต้อง' : 'กรุณาใส่รหัส PIN 4 หลัก'}
+      </div>
+      <div className={`pin-dots ${error ? 'shake' : ''}`}>
+        {[0,1,2,3].map(i => (
+          <div key={i}
+               className={`pin-dot ${pin.length > i ? 'filled' : ''} ${error ? 'err' : ''}`}>
+          </div>
+        ))}
+      </div>
+      <div className="pin-keys">
+        {[1,2,3,4,5,6,7,8,9].map(n => (
+          <button key={n} className="pin-key" onClick={() => handleKey(String(n))}>{n}</button>
+        ))}
+        <button className="pin-key empty" tabIndex={-1}></button>
+        <button className="pin-key" onClick={() => handleKey('0')}>0</button>
+        <button className="pin-key del" onClick={del} aria-label="ลบ">⌫</button>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [booting, setBooting] = useState(true);
   const [account, setAccount] = useState(null);
@@ -2577,72 +2949,53 @@ function App() {
   const isOnline = !!account && HAS_CONFIG && !skipSync;
   const { status, lastSync, errMsg, pullOnce, schedulePush } = useSync(state, setState, isOnline);
 
-  // v3.6/v3.7: Role detection with HARD LOCK
+  // v5.0: PIN-based profile gate (replaces v3.7 role+lock and v4.0 hardcoded profiles)
   //
-  // Behaviour:
-  // 1. First time `?as=wife` is visited → sets BOTH role + LOCK flag in localStorage.
-  //    LOCK means: future visits ALWAYS run as shared, regardless of URL parameters.
-  // 2. To unlock requires secret URL: `?unlock=<UNLOCK_SECRET>` — only the owner knows it.
-  //    Without the secret, even removing ?as=wife or visiting ?as=owner has no effect.
-  // 3. The owner can change UNLOCK_SECRET below before sharing the wife URL with someone
-  //    who might be tech-savvy enough to read this source code.
-  const UNLOCK_SECRET = 'kabovergreen2026'; // ⚠️ change before sharing the URL
-  const [role, setRole] = useState(() => {
-    try {
-      const url = new URL(window.location.href);
-      const qRole = url.searchParams.get('as');
-      const qUnlock = url.searchParams.get('unlock');
-
-      // First check for owner unlocking via secret
-      if (qUnlock === UNLOCK_SECRET) {
-        localStorage.removeItem('mymoney:role');
-        localStorage.removeItem('mymoney:locked');
-        return 'owner';
-      }
-
-      // If device is locked into shared mode → cannot escape via URL
-      const lockedAs = localStorage.getItem('mymoney:locked');
-      if (lockedAs === 'shared') return 'shared';
-
-      // Normal role detection
-      if (qRole === 'wife' || qRole === 'shared') {
-        localStorage.setItem('mymoney:role', 'shared');
-        // Engage hard lock as soon as the wife URL is visited the first time
-        localStorage.setItem('mymoney:locked', 'shared');
-        return 'shared';
-      }
-      if (qRole === 'owner' || qRole === 'me') {
-        // ?as=owner alone is NOT enough to escape lock — must include unlock secret too
-        localStorage.removeItem('mymoney:role');
-        return 'owner';
-      }
-      const stored = localStorage.getItem('mymoney:role');
-      return stored === 'shared' ? 'shared' : 'owner';
-    } catch { return 'owner'; }
+  // Flow:
+  //   Microsoft login → Profile Picker → PIN entry → app
+  //
+  // - Profile is stored in sessionStorage so closing the tab/Chrome auto-locks.
+  //   Next time the user opens the URL they must re-enter PIN.
+  // - User list lives in state.users (synced via OneDrive). Admin manages from UsersManager.
+  // - PINs are stored as SHA-256 hashes — viewing the JSON file does not reveal them.
+  // - There is NO URL bypass — even ?as=wife or ?unlock= do nothing now.
+  const [appProfileId, setAppProfileId] = useState(() => {
+    try { return sessionStorage.getItem('mymoney:profile') || null; }
+    catch { return null; }
   });
-  const isSharedView = role === 'shared';
-  const isLocked = (() => {
-    try { return localStorage.getItem('mymoney:locked') === 'shared'; }
-    catch { return false; }
-  })();
-  // Owner-only unlock (used by Settings panel after typing secret)
-  const unlockSharedDevice = (typedSecret) => {
-    if (typedSecret !== UNLOCK_SECRET) return false;
-    try {
-      localStorage.removeItem('mymoney:role');
-      localStorage.removeItem('mymoney:locked');
-    } catch {}
-    setRole('owner');
-    return true;
+  const [unlockTarget, setUnlockTarget] = useState(null); // profile being unlocked
+  const switchProfile = (p) => {
+    try { sessionStorage.setItem('mymoney:profile', p.id); } catch {}
+    setAppProfileId(p.id);
+    setUnlockTarget(null);
   };
-  // Strip ?as= and ?unlock= from URL after first visit so they don't show in history
+  const lockProfile = () => {
+    try { sessionStorage.removeItem('mymoney:profile'); } catch {}
+    setAppProfileId(null);
+    setUnlockTarget(null);
+  };
+  // v5.0: derive current user object from state.users + appProfileId
+  const currentUser = useMemo(
+    () => (state.users || []).find(u => u.id === appProfileId) || null,
+    [state.users, appProfileId]
+  );
+  const isAdmin = currentUser?.role === 'admin';
+  // Strip any legacy URL parameters from previous versions (?as=, ?unlock=, ?role=)
   useEffect(() => {
     try {
       const url = new URL(window.location.href);
       let changed = false;
-      if (url.searchParams.has('as')) { url.searchParams.delete('as'); changed = true; }
-      if (url.searchParams.has('unlock')) { url.searchParams.delete('unlock'); changed = true; }
+      ['as', 'unlock', 'role'].forEach(k => {
+        if (url.searchParams.has(k)) { url.searchParams.delete(k); changed = true; }
+      });
       if (changed) window.history.replaceState({}, '', url.toString());
+    } catch {}
+  }, []);
+  // One-time cleanup of v3.x localStorage flags now that we use sessionStorage profile
+  useEffect(() => {
+    try {
+      localStorage.removeItem('mymoney:role');
+      localStorage.removeItem('mymoney:locked');
     } catch {}
   }, []);
 
@@ -2658,6 +3011,7 @@ function App() {
   const [showAccountsManager, setShowAccountsManager] = useState(false);
   const [showProjectsManager, setShowProjectsManager] = useState(false);
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
+  const [showUsersManager, setShowUsersManager] = useState(false); // v5.0: admin-only
   // v2.8: text zoom level — 0=normal, 1=large (115%), 2=larger (130%), 3=largest (145%)
   const [zoomLevel, setZoomLevel] = useState(() => {
     try {
@@ -2843,6 +3197,34 @@ function App() {
     }));
   }, [booting, state.transactions]);
 
+  // v5.0 Migration: seed users + assign legacy transactions to admin
+  // Runs once per session. Idempotent — does nothing if users[] already exists.
+  const didMigrateV5Ref = useRef(false);
+  useEffect(() => {
+    if (booting) return;
+    if (didMigrateV5Ref.current) return;
+    didMigrateV5Ref.current = true;
+    (async () => {
+      const hasUsers = Array.isArray(state.users) && state.users.length > 0;
+      const needsTxOwner = (state.transactions || []).some(t => !t.createdBy);
+      if (hasUsers && !needsTxOwner) return;
+      // Seed users with default PIN '1234' hashed
+      const defaultHash = await hashPin(DEFAULT_PIN);
+      const seededUsers = hasUsers
+        ? state.users
+        : DEFAULT_USERS.map(u => ({ ...u, pinHash: defaultHash }));
+      mutate(prev => {
+        const nextUsers = hasUsers ? prev.users : seededUsers;
+        // Tag every legacy transaction without createdBy as belonging to admin (abi)
+        const adminId = (nextUsers.find(u => u.role === 'admin') || nextUsers[0])?.id || 'abi';
+        const nextTx = (prev.transactions || []).map(t =>
+          t.createdBy ? t : { ...t, createdBy: adminId }
+        );
+        return { ...prev, users: nextUsers, transactions: nextTx };
+      });
+    })();
+  }, [booting]);
+
   // Actions
   const mutate = (mutator) => {
     setState(prev => {
@@ -2855,10 +3237,15 @@ function App() {
     mutate(prev => {
       const idx = prev.transactions.findIndex(t => t.id === entry.id);
       if (idx >= 0) {
-        const copy = [...prev.transactions]; copy[idx] = entry;
+        // Preserve original createdBy on edit — never reassign ownership
+        const existing = prev.transactions[idx];
+        const merged = { ...entry, createdBy: existing.createdBy || entry.createdBy || appProfileId };
+        const copy = [...prev.transactions]; copy[idx] = merged;
         return { ...prev, transactions: copy };
       }
-      return { ...prev, transactions: [entry, ...prev.transactions] };
+      // New transaction → tag with current user as creator
+      const tagged = { ...entry, createdBy: appProfileId };
+      return { ...prev, transactions: [tagged, ...prev.transactions] };
     });
     pushToast(entry.type === 'income' ? 'บันทึกรายรับแล้ว' : 'บันทึกรายจ่ายแล้ว');
   };
@@ -2987,7 +3374,7 @@ function App() {
     const d = Math.max(0, Math.min(10, Number.isFinite(+decimals) ? +decimals : 2));
     mutate(prev => ({
       ...prev,
-      accounts: [...(prev.accounts || []), { id: uid(), name: n, decimals: d, createdAt: new Date().toISOString() }],
+      accounts: [...(prev.accounts || []), { id: uid(), name: n, decimals: d, permissions: {}, createdAt: new Date().toISOString() }],
     }));
     return true;
   };
@@ -3014,12 +3401,72 @@ function App() {
   const removeMasterAccount = (id) => {
     mutate(prev => ({ ...prev, accounts: (prev.accounts || []).filter(a => a.id !== id) }));
   };
-  // v3.6: toggle "shared" flag — used by role-based filter for sharing specific accounts
-  const toggleAccountShared = (id) => {
+  // v5.0: set per-user permission on an account (admin only).
+  // perm ∈ { 'none', 'view', 'edit-own' }
+  const setAccountPerm = (accountId, userId, perm) => {
+    if (!PERM_OPTS.some(p => p.id === perm)) return;
     mutate(prev => ({
       ...prev,
-      accounts: (prev.accounts || []).map(a => a.id === id ? { ...a, shared: !a.shared } : a),
+      accounts: (prev.accounts || []).map(a => {
+        if (a.id !== accountId) return a;
+        const nextPerms = { ...(a.permissions || {}) };
+        if (perm === 'none') delete nextPerms[userId];
+        else nextPerms[userId] = perm;
+        return { ...a, permissions: nextPerms };
+      }),
     }));
+  };
+
+  // v5.0: user management (admin-only). All ops mutate state.users which syncs to OneDrive.
+  const addUser = async (label, role = 'member', icon = '👤', pin = DEFAULT_PIN) => {
+    const trimmed = (label || '').trim();
+    if (!trimmed) return { ok: false, reason: 'empty' };
+    const users = state.users || [];
+    // Generate id from label (transliterated to ASCII isn't trivial in the browser without
+    // libs; we just slugify whitespace + fallback to random suffix to avoid collisions).
+    const baseId = trimmed.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'user';
+    let id = baseId;
+    let n = 2;
+    while (users.some(u => u.id === id)) { id = `${baseId}-${n++}`; }
+    const pinHash = await hashPin(pin);
+    mutate(prev => ({
+      ...prev,
+      users: [...(prev.users || []), { id, label: trimmed, icon, role: role === 'admin' ? 'admin' : 'member', pinHash }],
+    }));
+    return { ok: true, id };
+  };
+  const updateUser = (id, patch) => {
+    mutate(prev => ({
+      ...prev,
+      users: (prev.users || []).map(u => u.id === id ? { ...u, ...patch, id: u.id } : u),
+    }));
+  };
+  const changeUserPin = async (id, newPin) => {
+    if (!/^\d{4}$/.test(newPin)) return { ok: false, reason: 'format' };
+    const pinHash = await hashPin(newPin);
+    updateUser(id, { pinHash });
+    return { ok: true };
+  };
+  const removeUser = (id) => {
+    // Cannot remove the only admin
+    const users = state.users || [];
+    const admins = users.filter(u => u.role === 'admin');
+    const target = users.find(u => u.id === id);
+    if (target?.role === 'admin' && admins.length <= 1) {
+      return { ok: false, reason: 'last-admin' };
+    }
+    mutate(prev => ({
+      ...prev,
+      users: (prev.users || []).filter(u => u.id !== id),
+      // Strip removed user from every account's permissions map
+      accounts: (prev.accounts || []).map(a => {
+        if (!a.permissions || !a.permissions[id]) return a;
+        const next = { ...a.permissions };
+        delete next[id];
+        return { ...a, permissions: next };
+      }),
+    }));
+    return { ok: true };
   };
 
   // ============ Projects Master List Handlers ============
@@ -3121,65 +3568,64 @@ function App() {
     try { await signOut(); } catch (e) { console.error(e); }
     setAccount(null);
     didPullRef.current = false;
+    lockProfile(); // v4.0: also clear active profile so PIN is needed again next login
     pushToast('ออกจากระบบแล้ว');
   };
 
-  // Derive unique account list from all transactions (hooks MUST be before early returns)
-  // v3.6: When role=shared, filter to accounts marked as shared
-  const sharedAccountNames = useMemo(() => {
-    const set = new Set();
-    (state.accounts || []).forEach(a => {
-      if (a.shared && a.name) set.add(a.name.trim());
+  // v4.0: Profile-based visibility filtering (replaces v3.7 shared flag).
+  // v5.0: Filter accounts visible to the current user.
+  // - Admin sees every account.
+  // - Members see accounts where account.permissions[user.id] is 'view' or 'edit-own'.
+  // Legacy schema migration is best-effort: 'shared:true' (v3.x) or visibility:'all'
+  // (v4.x) → all members get 'view' access. visibility:'<userId>' (v4.x) →
+  // that single user gets 'edit-own'. visibility:'owner' (v4.x default) → no member access.
+  const visibleAccounts = useMemo(() => {
+    if (!currentUser) return [];
+    return (state.accounts || []).filter(a => {
+      if (currentUser.role === 'admin') return true;
+      // Backfill legacy schema on-the-fly for read; persisted by AccountsManager when edited.
+      let perms = a.permissions;
+      if (!perms) {
+        perms = {};
+        const allMembers = (state.users || []).filter(u => u.role !== 'admin').map(u => u.id);
+        if (a.shared === true || a.visibility === 'all') {
+          allMembers.forEach(id => { perms[id] = 'view'; });
+        } else if (a.visibility && a.visibility !== 'owner') {
+          // legacy v4 single-user visibility → that user gets edit-own
+          perms[a.visibility] = 'edit-own';
+        }
+      }
+      return (perms[currentUser.id] || 'none') !== 'none';
     });
-    return set;
-  }, [state.accounts]);
+  }, [state.accounts, state.users, currentUser]);
+
+  const visibleAccountNames = useMemo(
+    () => new Set(visibleAccounts.map(a => (a.name || '').trim())),
+    [visibleAccounts]
+  );
 
   const accountList = useMemo(() => {
     const set = new Set();
     state.transactions.forEach(t => {
       const k = (t.accountName || '').trim();
       if (!k) return;
-      if (isSharedView && !sharedAccountNames.has(k)) return; // filter out non-shared in wife mode
+      if (!isAdmin && !visibleAccountNames.has(k)) return;
       set.add(k);
     });
-    // Also include shared master accounts even if they have no transactions yet
-    if (isSharedView) {
-      sharedAccountNames.forEach(n => set.add(n));
-    }
+    visibleAccounts.forEach(a => { if (a.name) set.add(a.name); });
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'th'));
-  }, [state.transactions, isSharedView, sharedAccountNames]);
+  }, [state.transactions, isAdmin, visibleAccountNames, visibleAccounts]);
 
-  // v3.6: in shared view, the rest of the app sees a filtered state.accounts so
-  // managers, autocomplete, and pickers only show shared accounts.
-  // v3.7: visibleState — filter accounts AND transactions/projects/items shown to wife
-  // so the rest of the app sees a clean read of "wife's data only".
+  // visibleState: filtered view that downstream components consume.
+  // Admin sees everything; members see only their permitted accounts + transactions.
+  // Master items/projects/users stay intact (admin-only managers gate write access).
   const visibleState = useMemo(() => {
-    if (!isSharedView) return state;
-    const sharedNames = new Set(
-      (state.accounts || []).filter(a => a.shared).map(a => (a.name || '').trim())
+    if (isAdmin) return state;
+    const filteredTx = (state.transactions || []).filter(
+      t => visibleAccountNames.has((t.accountName || '').trim())
     );
-    // Filter transactions to those on shared accounts only
-    const filteredTx = (state.transactions || []).filter(t => sharedNames.has((t.accountName || '').trim()));
-    // Derive which projects/items are actually used in those filtered transactions
-    const usedProjects = new Set();
-    const usedItems = new Set();
-    filteredTx.forEach(t => {
-      const p = (t.project || '').trim();
-      if (p) usedProjects.add(p);
-      const i = (t.item || t.payee || '').trim();
-      if (i) usedItems.add(i);
-    });
-    // Keep all master items/projects (so wife can add new ones), but downstream
-    // autocomplete will only suggest items that appear in shared transactions.
-    // For now we keep the master lists intact — UI managers see filtered counts only.
-    return {
-      ...state,
-      accounts: (state.accounts || []).filter(a => a.shared),
-      transactions: filteredTx,
-      // Keep master projects/items unchanged so wife can pick from them when adding
-      // (but she won't see other-account transactions anyway).
-    };
-  }, [state, isSharedView]);
+    return { ...state, accounts: visibleAccounts, transactions: filteredTx };
+  }, [state, isAdmin, visibleAccounts, visibleAccountNames]);
 
   // ============ Render boot / setup / signin / app ============
   if (booting) {
@@ -3198,16 +3644,31 @@ function App() {
       />
     );
   }
+  // v5.0: After Microsoft login, show profile picker → PIN screen.
+  // Use the live user list from state so admin can add/remove and changes show immediately.
+  if (account && !skipSync && !appProfileId) {
+    if (unlockTarget) {
+      return (
+        <PinScreen
+          profile={unlockTarget}
+          onBack={() => setUnlockTarget(null)}
+          onSuccess={() => switchProfile(unlockTarget)}
+        />
+      );
+    }
+    // If users haven't been seeded yet (very first run, before migration completes),
+    // show a brief loading state instead of an empty picker.
+    if (!state.users || state.users.length === 0) {
+      return <div className="boot"><div className="dot-ring"></div><div>กำลังเตรียมโปรไฟล์...</div></div>;
+    }
+    return <ProfilePicker users={state.users} onPick={(p) => setUnlockTarget(p)} />;
+  }
 
-  // Filter by month + account (and role)
-  const monthTx = state.transactions.filter(t => {
+  // Filter by month + account
+  const txSource = isAdmin ? state.transactions : visibleState.transactions;
+  const monthTx = txSource.filter(t => {
     const d = new Date(t.date);
     if (d.getFullYear() !== viewMonth.y || d.getMonth() !== viewMonth.m) return false;
-    // v3.6: in shared view, only include transactions on shared accounts
-    if (isSharedView) {
-      const accName = (t.accountName || '').trim();
-      if (!sharedAccountNames.has(accName)) return false;
-    }
     if (selectedAccount === 'all') return true;
     return (t.accountName || '').trim() === selectedAccount;
   });
@@ -3220,11 +3681,16 @@ function App() {
   return (
     <>
       <main>
-        {/* v3.6/v3.7: shared-mode banner (no exit button — locked) */}
-        {isSharedView && (
+        {/* v5.0: profile banner — shows current user with admin badge if applicable */}
+        {appProfileId && currentUser && (
           <div className="shared-banner">
-            <span>👁️ โหมดดูร่วม · เห็นเฉพาะบัญชีที่แชร์</span>
-            <span className="shared-lock-icon" title="โหมดล็อก · ปลดได้เฉพาะเจ้าของ">🔒</span>
+            <span>
+              {currentUser.icon || '👤'} {currentUser.label}
+              {isAdmin && <span className="admin-tag-inline">admin</span>}
+            </span>
+            <button onClick={lockProfile} className="exit-shared-btn" title="สลับผู้ใช้ / ล็อก">
+              สลับผู้ใช้ 🔒
+            </button>
           </div>
         )}
         {tab === 'home' && homeView === 'overview' && (
@@ -3310,6 +3776,9 @@ function App() {
             cacheStatus={cacheStatus}
             pendingCount={pendingCount}
             isOnline={isOnline}
+            isAdmin={isAdmin}
+            currentUser={currentUser}
+            onOpenUsersManager={() => setShowUsersManager(true)}
           />
         )}
       </main>
@@ -3412,11 +3881,13 @@ function App() {
             removeMasterAccount(id);
             pushToast('ลบบัญชีแล้ว');
           }}
-          onToggleShared={(id) => {
-            const a = (state.accounts || []).find(x => x.id === id);
-            toggleAccountShared(id);
-            pushToast(a?.shared ? 'เลิกแชร์แล้ว' : 'แชร์บัญชีแล้ว · ภรรยาเห็นในโหมดดูร่วม');
+          onSetPerm={(accId, userId, perm) => {
+            setAccountPerm(accId, userId, perm);
+            const u = (state.users || []).find(x => x.id === userId);
+            pushToast(`${u?.label || userId}: ${PERM_LABEL(perm)}`);
           }}
+          users={state.users || []}
+          isAdmin={isAdmin}
           pushToast={pushToast}
         />
       )}
@@ -3476,6 +3947,20 @@ function App() {
         />
       )}
 
+      {/* v5.0: Users manager — admin only */}
+      {showUsersManager && isAdmin && (
+        <UsersManager
+          users={state.users || []}
+          currentUserId={appProfileId}
+          onClose={() => setShowUsersManager(false)}
+          onAdd={addUser}
+          onUpdate={updateUser}
+          onChangePin={changeUserPin}
+          onRemove={removeUser}
+          pushToast={pushToast}
+        />
+      )}
+
       {/* Row action menu (tap row → show menu) */}
       {actionTx && (
         <TxActionMenu
@@ -3488,6 +3973,19 @@ function App() {
           onEdit={() => { setEditing(actionTx); setActionTx(null); }}
           onDuplicate={() => { duplicateTx(actionTx); setActionTx(null); }}
           onDelete={() => { setConfirmDeleteTx(actionTx); setActionTx(null); }}
+          canEdit={(() => {
+            // v5.0: per-user permission check on this transaction's account
+            const acc = (state.accounts || []).find(a =>
+              (a.name || '').trim() === (actionTx.accountName || '').trim()
+            );
+            return canEditTx(currentUser, acc, actionTx);
+          })()}
+          canDuplicate={(() => {
+            const acc = (state.accounts || []).find(a =>
+              (a.name || '').trim() === (actionTx.accountName || '').trim()
+            );
+            return canAddToAccount(currentUser, acc);
+          })()}
         />
       )}
 
@@ -4117,7 +4615,7 @@ function DonutChart({ data, palette, total }) {
   return <svg viewBox={`0 0 ${size} ${size}`}>{arcs}</svg>;
 }
 
-function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setState, pushToast, onSignIn, onSignOut, onSyncNow, onEnableSync, authLoading, cacheStatus, pendingCount, isOnline }) {
+function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setState, pushToast, onSignIn, onSignOut, onSyncNow, onEnableSync, authLoading, cacheStatus, pendingCount, isOnline, isAdmin, currentUser, onOpenUsersManager }) {
   const fileRef = useRef(null);
   const [confirm, setConfirm] = useState(false);
   // v2.9: Lessons editor state
@@ -4460,6 +4958,25 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
+      {/* v5.0: Users management panel — admin only */}
+      {isAdmin && (
+        <div className="panel rise">
+          <div className="hd">
+            <div className="ico-wrap"><Ic.Users size={16}/></div>
+            <div>
+              <div className="tt">จัดการผู้ใช้</div>
+              <div className="sb">เพิ่ม/แก้ไข/ลบผู้ใช้ · เปลี่ยน PIN</div>
+            </div>
+          </div>
+          <p style={{fontSize: 12, color: 'var(--text-dim)', margin: '12px 0', lineHeight: 1.55}}>
+            ผู้ใช้ทั้งหมด {(state.users || []).length} คน · คุณเป็น <span className="admin-tag-inline">admin</span>
+          </p>
+          <button className="btn-ghost" style={{width: '100%'}} onClick={onOpenUsersManager}>
+            <Ic.Users size={14}/> เปิดหน้าจัดการ
+          </button>
+        </div>
+      )}
+
       {/* v3.5: Offline storage / photo cache */}
       <OfflineStoragePanel
         account={account}
@@ -4542,7 +5059,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
-      <div className="vstrip">my money · v3.7 · Hard lock โหมดดูร่วม</div>
+      <div className="vstrip">my money · v5.0 · Multi-user + permissions</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -5408,7 +5925,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
 }
 
 // ============ Row Action Menu (Edit/Duplicate/Delete) ============
-function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, customCats, txList, onNavigate }) {
+function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, customCats, txList, onNavigate, canEdit = true, canDuplicate = true }) {
   const cat = getCat(tx.type, tx.category, customCats);
   const timeStr = timeFromIso(tx.createdAt);
   const title = (tx.item || tx.payee || '').trim() || tx.note?.trim() || (tx.category ? cat.label : 'รายการ');
@@ -5630,15 +6147,21 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
             </div>{/* /swipe-area */}
 
             <div className="action-btn-list">
-              <button className="action-btn-row primary" onClick={onEdit} aria-label="แก้ไข">
-                <div className="ico"><Ic.Pencil size={20}/></div>
-                <div className="lbl">แก้ไข</div>
+              <button className="action-btn-row primary" onClick={onEdit} aria-label="แก้ไข"
+                      disabled={!canEdit}
+                      title={!canEdit ? 'ไม่มีสิทธิ์แก้ไขรายการนี้' : 'แก้ไข'}>
+                <div className="ico">{canEdit ? <Ic.Pencil size={20}/> : <Ic.Lock size={20}/>}</div>
+                <div className="lbl">{canEdit ? 'แก้ไข' : 'ดูอย่างเดียว'}</div>
               </button>
-              <button className="action-btn-row neutral" onClick={onDuplicate} aria-label="คัดลอก">
+              <button className="action-btn-row neutral" onClick={onDuplicate} aria-label="คัดลอก"
+                      disabled={!canDuplicate}
+                      title={!canDuplicate ? 'ไม่มีสิทธิ์เพิ่มในบัญชีนี้' : 'คัดลอก'}>
                 <div className="ico"><Ic.Copy size={20}/></div>
                 <div className="lbl">คัดลอก</div>
               </button>
-              <button className="action-btn-row danger" onClick={onDelete} aria-label="ลบ">
+              <button className="action-btn-row danger" onClick={onDelete} aria-label="ลบ"
+                      disabled={!canEdit}
+                      title={!canEdit ? 'ไม่มีสิทธิ์ลบรายการนี้' : 'ลบ'}>
                 <div className="ico"><Ic.Trash size={20}/></div>
                 <div className="lbl">ลบ</div>
               </button>
@@ -5695,6 +6218,265 @@ function ConfirmDeleteTx({ tx, onCancel, onConfirm, accounts }) {
 }
 
 // ============ Items Manager Modal ============
+// ============ v5.0: Users Manager (admin only) ============
+// Lets the admin add/rename/remove users, change PINs, and toggle admin role.
+// Each user has: id (immutable, generated from label), label, icon, role, pinHash.
+// PIN changes are immediately hashed before storing.
+function UsersManager({ users, currentUserId, onClose, onAdd, onUpdate, onChangePin, onRemove, pushToast }) {
+  const [editingId, setEditingId] = useState(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [editIcon, setEditIcon] = useState('👤');
+  const [editRole, setEditRole] = useState('member');
+  const [pinTarget, setPinTarget] = useState(null); // user being PIN-reset
+  const [pinValue, setPinValue] = useState('');
+  const [confirmDelId, setConfirmDelId] = useState(null);
+  // Add form state
+  const [adding, setAdding] = useState(false);
+  const [newLabel, setNewLabel] = useState('');
+  const [newIcon, setNewIcon] = useState('👤');
+  const [newRole, setNewRole] = useState('member');
+
+  const startEdit = (u) => {
+    setEditingId(u.id);
+    setEditLabel(u.label);
+    setEditIcon(u.icon || '👤');
+    setEditRole(u.role || 'member');
+  };
+  const cancelEdit = () => { setEditingId(null); };
+  const saveEdit = () => {
+    const n = editLabel.trim();
+    if (!n) { pushToast('ชื่อต้องไม่ว่าง'); return; }
+    onUpdate(editingId, { label: n, icon: editIcon, role: editRole });
+    pushToast('แก้ไขแล้ว');
+    setEditingId(null);
+  };
+
+  const startAdd = () => { setAdding(true); setNewLabel(''); setNewIcon('👤'); setNewRole('member'); };
+  const cancelAdd = () => setAdding(false);
+  const saveAdd = async () => {
+    const r = await onAdd(newLabel, newRole, newIcon);
+    if (r.ok) {
+      pushToast(`เพิ่ม ${newLabel} แล้ว · PIN เริ่มต้น 1234`);
+      setAdding(false);
+    } else if (r.reason === 'empty') {
+      pushToast('ชื่อต้องไม่ว่าง');
+    }
+  };
+
+  const startPinReset = (u) => { setPinTarget(u); setPinValue(''); };
+  const cancelPinReset = () => { setPinTarget(null); setPinValue(''); };
+  const savePinReset = async () => {
+    if (!/^\d{4}$/.test(pinValue)) { pushToast('PIN ต้องเป็นตัวเลข 4 หลัก'); return; }
+    const r = await onChangePin(pinTarget.id, pinValue);
+    if (r.ok) {
+      pushToast(`เปลี่ยน PIN ของ ${pinTarget.label} แล้ว`);
+      setPinTarget(null);
+      setPinValue('');
+    }
+  };
+
+  const ICONS = ['👤','👨','👩','👴','👵','👦','👧','👶','👑','🧑','👨‍🦱','👩‍🦱','🧔','👨‍🦳','👩‍🦳'];
+
+  // PIN reset overlay
+  if (pinTarget) {
+    return (
+      <div className="sheet-backdrop fade" onClick={cancelPinReset} style={{zIndex: 95}}>
+        <div className="sheet-wrap sheet-in" onClick={e => e.stopPropagation()}>
+          <div className="sheet">
+            <div className="sheet-handle"></div>
+            <div className="sheet-head">
+              <h2>🔑 ตั้ง PIN ใหม่</h2>
+              <button className="icon-btn-round" onClick={cancelPinReset}><Ic.X size={16}/></button>
+            </div>
+            <div style={{textAlign: 'center', padding: '14px 8px'}}>
+              <div style={{fontSize: 40, marginBottom: 8}}>{pinTarget.icon || '👤'}</div>
+              <div style={{fontSize: 16, color: 'var(--text)'}}>{pinTarget.label}</div>
+              <div style={{fontSize: 11, color: 'var(--text-faint)', marginTop: 4}}>
+                ใส่ PIN ใหม่ 4 หลัก
+              </div>
+            </div>
+            <input
+              type="tel"
+              maxLength={4}
+              pattern="\d{4}"
+              inputMode="numeric"
+              value={pinValue}
+              onChange={(e) => setPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              autoFocus
+              style={{
+                width: '100%',
+                fontSize: 28, textAlign: 'center', letterSpacing: '0.5em',
+                fontFamily: 'IBM Plex Mono, monospace',
+                padding: '14px 12px', borderRadius: 12,
+                background: 'var(--surface)', border: '1px solid var(--line)',
+                color: 'var(--text)',
+              }}
+            />
+            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16}}>
+              <button className="btn-ghost" onClick={cancelPinReset}>ยกเลิก</button>
+              <button className="btn-primary" onClick={savePinReset} disabled={pinValue.length !== 4}>
+                <Ic.Check size={14}/> บันทึก
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="sheet-backdrop fade" onClick={onClose}>
+      <div className="sheet-wrap sheet-in" onClick={e => e.stopPropagation()}>
+        <div className="sheet">
+          <div className="sheet-handle"></div>
+          <div className="sheet-head">
+            <h2>👥 จัดการผู้ใช้</h2>
+            <button className="icon-btn-round" onClick={onClose}><Ic.X size={16}/></button>
+          </div>
+          <div style={{fontSize: 11, color: 'var(--text-faint)', marginTop: 6, marginBottom: 12}}>
+            ผู้ใช้ทุกคนเริ่มต้นด้วย PIN <code style={{color: 'var(--gold)'}}>1234</code> · เปลี่ยนได้ที่ปุ่ม 🔑
+          </div>
+
+          {/* Add user form */}
+          {adding ? (
+            <div className="user-add-card">
+              <div className="user-add-row">
+                <select
+                  value={newIcon}
+                  onChange={(e) => setNewIcon(e.target.value)}
+                  className="user-icon-select">
+                  {ICONS.map(i => <option key={i} value={i}>{i}</option>)}
+                </select>
+                <input
+                  type="text"
+                  placeholder="ชื่อผู้ใช้ เช่น ลูกสาว"
+                  value={newLabel}
+                  onChange={(e) => setNewLabel(e.target.value)}
+                  className="user-name-input"
+                  autoFocus
+                />
+              </div>
+              <select
+                value={newRole}
+                onChange={(e) => setNewRole(e.target.value)}
+                className="vis-select"
+                style={{width: '100%', marginTop: 8}}>
+                <option value="member">👤 ผู้ใช้ทั่วไป</option>
+                <option value="admin">👑 ผู้ดูแลระบบ (admin)</option>
+              </select>
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10}}>
+                <button className="btn-ghost" onClick={cancelAdd}>ยกเลิก</button>
+                <button className="btn-primary" onClick={saveAdd} disabled={!newLabel.trim()}>
+                  <Ic.Plus size={14}/> เพิ่ม
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button className="btn-ghost" style={{width: '100%', marginBottom: 14}} onClick={startAdd}>
+              <Ic.Plus size={14}/> เพิ่มผู้ใช้ใหม่
+            </button>
+          )}
+
+          {/* Users list */}
+          <div className="items-mgr-list">
+            {(users || []).map(u => {
+              const isMe = u.id === currentUserId;
+              return (
+                <div key={u.id} className={`mgr-row ${isMe ? 'me' : ''}`}>
+                  {editingId === u.id ? (
+                    <>
+                      <select
+                        value={editIcon}
+                        onChange={(e) => setEditIcon(e.target.value)}
+                        className="user-icon-select">
+                        {ICONS.map(i => <option key={i} value={i}>{i}</option>)}
+                      </select>
+                      <input
+                        className="user-name-input"
+                        value={editLabel}
+                        onChange={(e) => setEditLabel(e.target.value)}
+                      />
+                      <select
+                        value={editRole}
+                        onChange={(e) => setEditRole(e.target.value)}
+                        className="vis-select">
+                        <option value="member">👤 ทั่วไป</option>
+                        <option value="admin">👑 admin</option>
+                      </select>
+                      <div className="actions">
+                        <button className="edit-btn" onClick={saveEdit} title="บันทึก">
+                          <Ic.Check size={14}/>
+                        </button>
+                        <button className="del-btn" onClick={cancelEdit} title="ยกเลิก">
+                          <Ic.X size={14}/>
+                        </button>
+                      </div>
+                    </>
+                  ) : confirmDelId === u.id ? (
+                    <>
+                      <div className="name-wrap">
+                        <div className="name" style={{color: 'var(--expense-soft)'}}>
+                          ลบ "{u.label}" ?
+                        </div>
+                        <div className="meta">บัญชีเก่าจะคงอยู่ แต่ user หาย</div>
+                      </div>
+                      <div className="actions">
+                        <button className="del-btn-confirm" onClick={() => {
+                          const r = onRemove(u.id);
+                          if (r.ok) { pushToast(`ลบ ${u.label} แล้ว`); setConfirmDelId(null); }
+                          else if (r.reason === 'last-admin') pushToast('ลบไม่ได้ — เหลือ admin คนสุดท้าย');
+                        }}>
+                          <Ic.Check size={14}/>
+                        </button>
+                        <button className="del-btn" onClick={() => setConfirmDelId(null)}>
+                          <Ic.X size={14}/>
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="name-wrap">
+                        <div className="name">
+                          <span className="user-row-icon">{u.icon || '👤'}</span>
+                          {u.label}
+                          {isMe && <span className="me-tag">(คุณ)</span>}
+                          {u.role === 'admin' && <span className="admin-tag-inline">admin</span>}
+                        </div>
+                        <div className="meta">
+                          ID: <code style={{color: 'var(--gold)'}}>{u.id}</code>
+                        </div>
+                      </div>
+                      <div className="actions">
+                        <button className="perm-btn" onClick={() => startPinReset(u)} title="ตั้ง PIN ใหม่">
+                          🔑
+                        </button>
+                        <button className="edit-btn" onClick={() => startEdit(u)} title="แก้ไข">
+                          <Ic.Pencil size={14}/>
+                        </button>
+                        {!isMe && (
+                          <button className="del-btn" onClick={() => setConfirmDelId(u.id)} title="ลบ">
+                            <Ic.Trash size={14}/>
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{marginTop: 20}}>
+            <button className="btn-primary" onClick={onClose} style={{width: '100%'}}>
+              เสร็จสิ้น
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove, pushToast }) {
   const [newName, setNewName] = useState('');
   const [editingId, setEditingId] = useState(null);
@@ -5876,13 +6658,14 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
 }
 
 // ============ Accounts Manager Modal ============
-function AccountsManager({ accounts, transactions, onClose, onAdd, onUpdate, onRemove, onToggleShared, pushToast }) {
+function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpdate, onRemove, onSetPerm, isAdmin, pushToast }) {
   const [newName, setNewName] = useState('');
   const [newDecimals, setNewDecimals] = useState(2);
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState('');
   const [editDecimals, setEditDecimals] = useState(2);
   const [confirmDelId, setConfirmDelId] = useState(null);
+  const [permPanelId, setPermPanelId] = useState(null); // v5.0: which account's perm panel is open
 
   // Count usage of each account across transactions
   const usageMap = useMemo(() => {
@@ -6044,7 +6827,18 @@ function AccountsManager({ accounts, transactions, onClose, onAdd, onUpdate, onR
                         <>
                           <div className="name-wrap">
                             <div className="name">
-                              {a.shared && <span className="shared-badge" title="แชร์ในโหมดดูร่วม">👁️</span>}
+                              {(() => {
+                                // Show small badges for each member that has any access
+                                const perms = a.permissions || {};
+                                const members = (users || []).filter(u => u.role !== 'admin');
+                                const granted = members.filter(u => (perms[u.id] || 'none') !== 'none');
+                                if (granted.length === 0) return null;
+                                return (
+                                  <span className="shared-badge" title={granted.map(u => u.label).join(', ')}>
+                                    {granted.map(u => u.icon || '👤').join('')}
+                                  </span>
+                                );
+                              })()}
                               {a.name}
                               <span className="dec-badge">·{dec}d</span>
                             </div>
@@ -6052,16 +6846,17 @@ function AccountsManager({ accounts, transactions, onClose, onAdd, onUpdate, onR
                               {usage > 0 ? `ใช้ ${usage} ครั้ง` : 'ยังไม่ถูกใช้'}
                               {' · '}
                               ทศนิยม {dec} ตำแหน่ง
-                              {a.shared && <span style={{color:'var(--income-soft)', marginLeft:6}}>· แชร์</span>}
                             </div>
                           </div>
                           <div className="actions">
-                            <button
-                              className={`share-btn ${a.shared ? 'on' : ''}`}
-                              onClick={() => onToggleShared(a.id)}
-                              title={a.shared ? 'เลิกแชร์' : 'แชร์ให้โหมดดูร่วม'}>
-                              <Ic.Share size={14}/>
-                            </button>
+                            {isAdmin && (
+                              <button
+                                className="perm-btn"
+                                onClick={() => setPermPanelId(permPanelId === a.id ? null : a.id)}
+                                title="ตั้งสิทธิ์ผู้ใช้">
+                                <Ic.Users size={14}/>
+                              </button>
+                            )}
                             <button className="edit-btn" onClick={() => startEdit(a)}
                                     title="แก้ไข">
                               <Ic.Pencil size={14}/>
@@ -6072,6 +6867,34 @@ function AccountsManager({ accounts, transactions, onClose, onAdd, onUpdate, onR
                             </button>
                           </div>
                         </>
+                      )}
+                      {/* v5.0: per-user permission panel — admin-only, expands inline */}
+                      {permPanelId === a.id && isAdmin && (
+                        <div className="perm-panel">
+                          <div className="perm-panel-hd">สิทธิ์ของแต่ละผู้ใช้</div>
+                          {(users || []).filter(u => u.role !== 'admin').map(u => {
+                            const cur = (a.permissions || {})[u.id] || 'none';
+                            return (
+                              <div key={u.id} className="perm-row">
+                                <span className="perm-user">
+                                  <span className="perm-user-icon">{u.icon || '👤'}</span>
+                                  {u.label}
+                                </span>
+                                <select
+                                  className="vis-select"
+                                  value={cur}
+                                  onChange={(e) => onSetPerm(a.id, u.id, e.target.value)}>
+                                  {PERM_OPTS.map(p => (
+                                    <option key={p.id} value={p.id}>{p.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            );
+                          })}
+                          {(users || []).filter(u => u.role !== 'admin').length === 0 && (
+                            <div className="perm-empty">ยังไม่มีผู้ใช้คนอื่น — เพิ่มได้ในตั้งค่า</div>
+                          )}
+                        </div>
                       )}
                     </div>
                   );
