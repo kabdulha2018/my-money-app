@@ -3838,17 +3838,6 @@ function App() {
   }, { inc: 0, exp: 0 });
   totals.bal = totals.inc - totals.exp;
 
-
-
-- ส่วนที่แทรกใหม่ ---
-  const grandTotals = visibleState.transactions.reduce((a, t) => {
-    if (t.type === 'income') a.inc += t.amount; else a.exp += t.amount;
-    return a;
-  }, { inc: 0, exp: 0 });
-  const grandBal = grandTotals.inc - grandTotals.exp;
-  // ----------------------
-
-
   return (
     <>
       <main>
@@ -3883,8 +3872,6 @@ function App() {
             status={status} lastSync={lastSync}
             viewMonth={viewMonth} setViewMonth={setViewMonth}
             totals={totals} monthTx={monthTx}
-            grandBal={grandBal}
-            
             onTap={setActionTx}
             accountList={accountList}
             selectedAccount={selectedAccount}
@@ -4562,7 +4549,7 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
   );
 }
 
-function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth, totals, monthTx,grandBal, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, onBack, zoomLevel, onZoom }) {
+function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth, totals, monthTx, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, onBack, zoomLevel, onZoom }) {
   const [sortDir, setSortDir] = useState('desc'); // 'desc' = newest first (Z→A), 'asc' = oldest first (A→Z)
   const sortedTx = useMemo(() => {
     const list = [...monthTx];
@@ -4611,36 +4598,23 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
       </header>
 
       <MonthSelector value={viewMonth} onChange={setViewMonth}/>
-//เริ่มต้น
-{/* --- บัตรสรุปยอดใหม่ (A และ B) --- */}
+
       <div className="card hero rise" style={{marginTop: 20}}>
-        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px'}}>
-          <div>
-            <div className="label">รวมทั้งหมด (B)</div>
-            <div className="amount" style={{marginTop: 8}}>
-              <span className="value font-mono-n" style={{fontSize: '24px', color: grandBal >= 0 ? 'var(--gold)' : 'var(--expense-soft)'}}>
-                {fmtMoney(grandBal)}
-              </span>
-            </div>
-          </div>
-          <div style={{borderLeft: '1px solid var(--line)', paddingLeft: '16px'}}>
-            <div className="label">เดือนนี้ (A)</div>
-            <div className="amount" style={{marginTop: 8}}>
-              <span className="value font-mono-n" style={{fontSize: '24px', color: totals.bal >= 0 ? 'var(--text)' : 'var(--expense-soft)'}}>
-                {fmtMoney(totals.bal)}
-              </span>
-            </div>
-          </div>
+        <div className="label">คงเหลือเดือนนี้</div>
+        <div className="amount">
+          <span className="currency">฿</span>
+          <span className="value font-mono-n" style={{color: totals.bal >= 0 ? 'var(--text)' : 'var(--expense-soft)'}}>
+            {fmtMoney(totals.bal)}
+          </span>
         </div>
-        
-        <div className="stat-grid" style={{marginTop: 20, borderTop: '1px solid var(--line)', paddingTop: '16px'}}>
+        <div className="stat-grid">
           <div className="stat-mini">
-            <div className="lbl"><Ic.ArrowIn size={12} color="var(--income-soft)"/> รายรับเดือนนี้</div>
-            <div className="val" style={{color: 'var(--income-soft)', fontSize: '16px'}}>฿{fmtMoney(totals.inc)}</div>
+            <div className="lbl"><Ic.ArrowIn size={12} color="var(--income-soft)"/>รายรับ</div>
+            <div className="val" style={{color: 'var(--income-soft)'}}>฿{fmtMoney(totals.inc)}</div>
           </div>
           <div className="stat-mini">
-            <div className="lbl"><Ic.ArrowOut size={12} color="var(--expense-soft)"/> รายจ่ายเดือนนี้</div>
-            <div className="val" style={{color: 'var(--expense-soft)', fontSize: '16px'}}>฿{fmtMoney(totals.exp)}</div>
+            <div className="lbl"><Ic.ArrowOut size={12} color="var(--expense-soft)"/>รายจ่าย</div>
+            <div className="val" style={{color: 'var(--expense-soft)'}}>฿{fmtMoney(totals.exp)}</div>
           </div>
         </div>
       </div>
