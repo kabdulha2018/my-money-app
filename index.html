@@ -4856,107 +4856,111 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
-      {/* Manual Backup */}
-      <div className="panel rise">
-        <div className="hd">
-          <div className="ico-wrap"><Ic.FileJson size={16}/></div>
-          <div>
-            <div className="tt">สำรอง/กู้คืนด้วยตนเอง</div>
-            <div className="sb">Export / Import ไฟล์ JSON</div>
+      {/* Manual Backup — admin only (v5.0) */}
+      {isAdmin && (
+        <div className="panel rise">
+          <div className="hd">
+            <div className="ico-wrap"><Ic.FileJson size={16}/></div>
+            <div>
+              <div className="tt">สำรอง/กู้คืนด้วยตนเอง</div>
+              <div className="sb">Export / Import ไฟล์ JSON</div>
+            </div>
+          </div>
+          <div className="two-col">
+            <button className="btn-primary" onClick={exportJSON}><Ic.Download size={14}/> Export</button>
+            <button className="btn-ghost" onClick={() => fileRef.current?.click()}><Ic.Upload size={14}/> Import</button>
+            <input ref={fileRef} type="file" accept="application/json,.json" onChange={onImport} style={{display:'none'}}/>
           </div>
         </div>
-        <div className="two-col">
-          <button className="btn-primary" onClick={exportJSON}><Ic.Download size={14}/> Export</button>
-          <button className="btn-ghost" onClick={() => fileRef.current?.click()}><Ic.Upload size={14}/> Import</button>
-          <input ref={fileRef} type="file" accept="application/json,.json" onChange={onImport} style={{display:'none'}}/>
-        </div>
-      </div>
+      )}
 
-      {/* Install on other devices (v1.2) */}
-      <div className="panel rise">
-        <div className="hd">
-          <div className="ico-wrap"><Ic.Phone size={16}/></div>
-          <div>
-            <div className="tt">การเปลี่ยน/เพิ่มมือถือ</div>
-            <div className="sb">ติดตั้งบนเครื่องอื่น · เครื่องหาย · แชร์ให้ครอบครัว</div>
+      {/* Install on other devices (v1.2) — admin only (v5.0) */}
+      {isAdmin && (
+        <div className="panel rise">
+          <div className="hd">
+            <div className="ico-wrap"><Ic.Phone size={16}/></div>
+            <div>
+              <div className="tt">การเปลี่ยน/เพิ่มมือถือ</div>
+              <div className="sb">ติดตั้งบนเครื่องอื่น · เครื่องหาย · แชร์ให้ครอบครัว</div>
+            </div>
           </div>
-        </div>
 
-        <div className="qr-box">
-          <img
-            className="qr-img"
-            src={qrFailed ? qrFallbackUrl : qrApiUrl}
-            alt="QR Code"
-            onError={() => { if (!qrFailed) setQrFailed(true); }}
-          />
-          <div className="qr-url">{appUrl}</div>
-        </div>
-
-        <div className="two-col" style={{marginTop: 12}}>
-          <button className="btn-primary" onClick={shareUrl}>
-            <Ic.Share size={14}/> แชร์ลิงก์
-          </button>
-          <button className="btn-ghost" onClick={copyUrl}>
-            <Ic.Copy size={14}/> คัดลอก URL
-          </button>
-        </div>
-
-        <details className="readme-box">
-          <summary>
-            <Ic.Book size={14}/>
-            <span>วิธีติดตั้งบนเครื่องใหม่</span>
-            <Ic.ChevDown size={16} className="chev"/>
-          </summary>
-          <div className="readme-content">
-            <h4>📱 วิธีที่ 1: สแกน QR (ง่ายที่สุด)</h4>
-            <ol>
-              <li>เปิดกล้องบนมือถือเครื่องใหม่ (หรือ Chrome/Samsung Internet)</li>
-              <li>สแกน QR code ด้านบน หรือพิมพ์ URL</li>
-              <li>กด "เข้าสู่ระบบด้วย Microsoft"</li>
-              <li>Sign in ด้วยบัญชี Microsoft เดียวกัน</li>
-              <li>ข้อมูลจะซิงค์จาก OneDrive อัตโนมัติ!</li>
-            </ol>
-
-            <h4>📲 ติดตั้งเป็นไอคอนบนหน้าจอ</h4>
-            <p><strong>Chrome:</strong> เมนู ⋮ → "Install app" หรือ "Add to Home screen"</p>
-            <p><strong>Samsung Internet:</strong> เมนูด้านล่าง → "เพิ่มหน้าในหน้าจอโฮม"</p>
-
-            <h4>👨‍👩‍👧 ใช้ร่วมกับคนในครอบครัว</h4>
-            <p><strong>แบบที่ 1 — แยกข้อมูล:</strong> ให้แต่ละคน Sign in ด้วยบัญชี Microsoft ของตัวเอง แต่ละคนจะได้กระเป๋าเงินของตัวเอง ไม่เห็นกัน</p>
-            <p><strong>แบบที่ 2 — ใช้ร่วมกัน (สามี-ภรรยา):</strong> ทุกเครื่อง Sign in ด้วยบัญชีเดียวกัน จะเห็นและแก้ไขข้อมูลชุดเดียวกันแบบ real-time</p>
-
-            <h4>🔒 กรณีเครื่องหาย / เปลี่ยนเครื่อง</h4>
-            <p>ข้อมูลทั้งหมดอยู่บน <strong>OneDrive</strong> ไม่หายไปกับเครื่อง แค่เปิด URL บนเครื่องใหม่แล้ว Sign in = ได้ข้อมูลกลับคืนครบถ้วน</p>
-
-            <h4>💾 วิธีที่ 2: ใช้ไฟล์ติดตั้งเอง (สำหรับคนเทคนิค)</h4>
-            <p>ดาวน์โหลดไฟล์ HTML → อัปโหลดขึ้น hosting ของตัวเอง (Netlify, GitHub Pages) → เพิ่ม Redirect URI ใหม่ใน Azure</p>
+          <div className="qr-box">
+            <img
+              className="qr-img"
+              src={qrFailed ? qrFallbackUrl : qrApiUrl}
+              alt="QR Code"
+              onError={() => { if (!qrFailed) setQrFailed(true); }}
+            />
+            <div className="qr-url">{appUrl}</div>
           </div>
-        </details>
 
-        <div className="two-col" style={{marginTop: 12}}>
-          <button className="btn-ghost" onClick={downloadHtml}>
-            <Ic.Download size={14}/> ดาวน์โหลดไฟล์
-          </button>
-          <button className="btn-ghost" onClick={uploadInstaller} disabled={installerUploading || !account}>
-            {installerUploading
-              ? <><Ic.Refresh size={14} className="spin"/> กำลังอัปโหลด...</>
-              : <><Ic.Cloud size={14}/> เก็บบน OneDrive</>}
-          </button>
-        </div>
+          <div className="two-col" style={{marginTop: 12}}>
+            <button className="btn-primary" onClick={shareUrl}>
+              <Ic.Share size={14}/> แชร์ลิงก์
+            </button>
+            <button className="btn-ghost" onClick={copyUrl}>
+              <Ic.Copy size={14}/> คัดลอก URL
+            </button>
+          </div>
 
-        {lastInstallerUpload && (
-          <div className="installer-status ok">
-            <Ic.Check size={12}/>
-            <span>
-              เก็บไฟล์ติดตั้งบน OneDrive แล้ว · โฟลเดอร์ <strong style={{color: 'var(--gold)'}}>Apps/my money/installer/</strong>
-              <br/>
-              <span style={{fontSize: 10.5, color: 'var(--text-faint)'}}>
-                ล่าสุด: {new Date(lastInstallerUpload).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+          <details className="readme-box">
+            <summary>
+              <Ic.Book size={14}/>
+              <span>วิธีติดตั้งบนเครื่องใหม่</span>
+              <Ic.ChevDown size={16} className="chev"/>
+            </summary>
+            <div className="readme-content">
+              <h4>📱 วิธีที่ 1: สแกน QR (ง่ายที่สุด)</h4>
+              <ol>
+                <li>เปิดกล้องบนมือถือเครื่องใหม่ (หรือ Chrome/Samsung Internet)</li>
+                <li>สแกน QR code ด้านบน หรือพิมพ์ URL</li>
+                <li>กด "เข้าสู่ระบบด้วย Microsoft"</li>
+                <li>Sign in ด้วยบัญชี Microsoft เดียวกัน</li>
+                <li>ข้อมูลจะซิงค์จาก OneDrive อัตโนมัติ!</li>
+              </ol>
+
+              <h4>📲 ติดตั้งเป็นไอคอนบนหน้าจอ</h4>
+              <p><strong>Chrome:</strong> เมนู ⋮ → "Install app" หรือ "Add to Home screen"</p>
+              <p><strong>Samsung Internet:</strong> เมนูด้านล่าง → "เพิ่มหน้าในหน้าจอโฮม"</p>
+
+              <h4>👨‍👩‍👧 ใช้ร่วมกับคนในครอบครัว</h4>
+              <p><strong>แบบที่ 1 — แยกข้อมูล:</strong> ให้แต่ละคน Sign in ด้วยบัญชี Microsoft ของตัวเอง แต่ละคนจะได้กระเป๋าเงินของตัวเอง ไม่เห็นกัน</p>
+              <p><strong>แบบที่ 2 — ใช้ร่วมกัน (สามี-ภรรยา):</strong> ทุกเครื่อง Sign in ด้วยบัญชีเดียวกัน จะเห็นและแก้ไขข้อมูลชุดเดียวกันแบบ real-time</p>
+
+              <h4>🔒 กรณีเครื่องหาย / เปลี่ยนเครื่อง</h4>
+              <p>ข้อมูลทั้งหมดอยู่บน <strong>OneDrive</strong> ไม่หายไปกับเครื่อง แค่เปิด URL บนเครื่องใหม่แล้ว Sign in = ได้ข้อมูลกลับคืนครบถ้วน</p>
+
+              <h4>💾 วิธีที่ 2: ใช้ไฟล์ติดตั้งเอง (สำหรับคนเทคนิค)</h4>
+              <p>ดาวน์โหลดไฟล์ HTML → อัปโหลดขึ้น hosting ของตัวเอง (Netlify, GitHub Pages) → เพิ่ม Redirect URI ใหม่ใน Azure</p>
+            </div>
+          </details>
+
+          <div className="two-col" style={{marginTop: 12}}>
+            <button className="btn-ghost" onClick={downloadHtml}>
+              <Ic.Download size={14}/> ดาวน์โหลดไฟล์
+            </button>
+            <button className="btn-ghost" onClick={uploadInstaller} disabled={installerUploading || !account}>
+              {installerUploading
+                ? <><Ic.Refresh size={14} className="spin"/> กำลังอัปโหลด...</>
+                : <><Ic.Cloud size={14}/> เก็บบน OneDrive</>}
+            </button>
+          </div>
+
+          {lastInstallerUpload && (
+            <div className="installer-status ok">
+              <Ic.Check size={12}/>
+              <span>
+                เก็บไฟล์ติดตั้งบน OneDrive แล้ว · โฟลเดอร์ <strong style={{color: 'var(--gold)'}}>Apps/my money/installer/</strong>
+                <br/>
+                <span style={{fontSize: 10.5, color: 'var(--text-faint)'}}>
+                  ล่าสุด: {new Date(lastInstallerUpload).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </span>
               </span>
-            </span>
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* v5.0: Users management panel — admin only */}
       {isAdmin && (
@@ -4977,89 +4981,100 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         </div>
       )}
 
-      {/* v3.5: Offline storage / photo cache */}
-      <OfflineStoragePanel
-        account={account}
-        isOnline={isOnline}
-        cacheStatus={cacheStatus}
-        pendingCount={pendingCount}
-        pushToast={pushToast}
-      />
+      {/* v3.5: Offline storage / photo cache — admin only (v5.0) */}
+      {isAdmin && (
+        <OfflineStoragePanel
+          account={account}
+          isOnline={isOnline}
+          cacheStatus={cacheStatus}
+          pendingCount={pendingCount}
+          pushToast={pushToast}
+        />
+      )}
 
-      {/* v2.9: Lessons / Journal */}
-      <div className="panel rise">
-        <div className="hd">
-          <div className="ico-wrap"><Ic.Book size={16}/></div>
-          <div>
-            <div className="tt">บันทึกบทเรียน</div>
-            <div className="sb">เก็บความรู้ไว้ศึกษาภายหลัง · บน OneDrive</div>
+      {/* v2.9: Lessons / Journal — admin only (v5.0) */}
+      {isAdmin && (
+        <div className="panel rise">
+          <div className="hd">
+            <div className="ico-wrap"><Ic.Book size={16}/></div>
+            <div>
+              <div className="tt">บันทึกบทเรียน</div>
+              <div className="sb">เก็บความรู้ไว้ศึกษาภายหลัง · บน OneDrive</div>
+            </div>
           </div>
-        </div>
 
-        <p style={{fontSize: 12, color: 'var(--text-dim)', margin: '12px 0', lineHeight: 1.55}}>
-          เปิด/แก้ไขสมุดบันทึก คัดลอกคำอธิบายดีๆ จาก Claude มาเก็บไว้
-          ทุกอย่างเซฟเป็น Markdown บน OneDrive โหลดดูจากเครื่องไหนก็ได้
-        </p>
+          <p style={{fontSize: 12, color: 'var(--text-dim)', margin: '12px 0', lineHeight: 1.55}}>
+            เปิด/แก้ไขสมุดบันทึก คัดลอกคำอธิบายดีๆ จาก Claude มาเก็บไว้
+            ทุกอย่างเซฟเป็น Markdown บน OneDrive โหลดดูจากเครื่องไหนก็ได้
+          </p>
 
-        <button className="btn-ghost" style={{width: '100%', marginBottom: 8}}
-                onClick={() => setShowLessonsEditor(true)} disabled={!account}>
-          <Ic.Pencil size={14}/> เปิด/แก้ไขสมุดบันทึก
-        </button>
-
-        <div className="two-col">
-          <button className="btn-ghost" onClick={downloadLessonsMd} disabled={!account}>
-            <Ic.Download size={14}/> ดาวน์โหลด .md
+          <button className="btn-ghost" style={{width: '100%', marginBottom: 8}}
+                  onClick={() => setShowLessonsEditor(true)} disabled={!account}>
+            <Ic.Pencil size={14}/> เปิด/แก้ไขสมุดบันทึก
           </button>
-          <button className="btn-ghost" onClick={openLessonsInOneDrive} disabled={!account}>
-            <Ic.Cloud size={14}/> เปิดบน OneDrive
-          </button>
-        </div>
 
-        {!account && (
-          <div style={{marginTop: 10, fontSize: 11, color: 'var(--text-faint)', textAlign: 'center'}}>
-            ต้อง Sign in กับ Microsoft ก่อนใช้งานสมุดบันทึก
-          </div>
-        )}
-      </div>
-
-      {/* Stats */}
-      <div className="panel rise">
-        <div className="hd">
-          <div className="ico-wrap"><Ic.Chart size={16}/></div>
-          <div>
-            <div className="tt">ข้อมูลของคุณ</div>
-            <div className="sb">สรุปภาพรวม</div>
-          </div>
-        </div>
-        <div className="info-grid">
-          <div className="info-cell"><div className="k">ทั้งหมด</div><div className="v">{state.transactions.length}</div></div>
-          <div className="info-cell"><div className="k">รายรับ</div><div className="v">{state.transactions.filter(t=>t.type==='income').length}</div></div>
-          <div className="info-cell"><div className="k">รายจ่าย</div><div className="v">{state.transactions.filter(t=>t.type==='expense').length}</div></div>
-        </div>
-      </div>
-
-      {/* Danger */}
-      <div className="panel rise">
-        <div className="hd">
-          <div className="ico-wrap" style={{background: 'rgba(184,88,66,0.12)', color: 'var(--expense-soft)'}}><Ic.Trash size={16}/></div>
-          <div>
-            <div className="tt">เขตอันตราย</div>
-            <div className="sb">ลบข้อมูลทั้งหมดในเครื่อง</div>
-          </div>
-        </div>
-        {!confirm ? (
-          <button className="btn-danger" style={{width: '100%', marginTop: 14}} onClick={() => setConfirm(true)}>
-            ลบข้อมูลทั้งหมด
-          </button>
-        ) : (
           <div className="two-col">
-            <button className="btn-ghost" onClick={() => setConfirm(false)}>ยกเลิก</button>
-            <button className="btn-danger solid" onClick={clearAll}>ยืนยันลบ</button>
+            <button className="btn-ghost" onClick={downloadLessonsMd} disabled={!account}>
+              <Ic.Download size={14}/> ดาวน์โหลด .md
+            </button>
+            <button className="btn-ghost" onClick={openLessonsInOneDrive} disabled={!account}>
+              <Ic.Cloud size={14}/> เปิดบน OneDrive
+            </button>
           </div>
-        )}
-      </div>
 
-      <div className="vstrip">my money · v5.0 · Multi-user + permissions</div>
+          {!account && (
+            <div style={{marginTop: 10, fontSize: 11, color: 'var(--text-faint)', textAlign: 'center'}}>
+              ต้อง Sign in กับ Microsoft ก่อนใช้งานสมุดบันทึก
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Stats — admin only (v5.0) */}
+      {isAdmin && (
+        <div className="panel rise">
+          <div className="hd">
+            <div className="ico-wrap"><Ic.Chart size={16}/></div>
+            <div>
+              <div className="tt">ข้อมูลของคุณ</div>
+              <div className="sb">สรุปภาพรวม</div>
+            </div>
+          </div>
+          <div className="info-grid">
+            <div className="info-cell"><div className="k">ทั้งหมด</div><div className="v">{state.transactions.length}</div></div>
+            <div className="info-cell"><div className="k">รายรับ</div><div className="v">{state.transactions.filter(t=>t.type==='income').length}</div></div>
+            <div className="info-cell"><div className="k">รายจ่าย</div><div className="v">{state.transactions.filter(t=>t.type==='expense').length}</div></div>
+          </div>
+        </div>
+      )}
+
+      {/* Danger — admin only (v5.0) */}
+      {isAdmin && (
+        <div className="panel rise">
+          <div className="hd">
+            <div className="ico-wrap" style={{background: 'rgba(184,88,66,0.12)', color: 'var(--expense-soft)'}}><Ic.Trash size={16}/></div>
+            <div>
+              <div className="tt">เขตอันตราย</div>
+              <div className="sb">ลบข้อมูลทั้งหมดในเครื่อง</div>
+            </div>
+          </div>
+          {!confirm ? (
+            <button className="btn-danger" style={{width: '100%', marginTop: 14}} onClick={() => setConfirm(true)}>
+              ลบข้อมูลทั้งหมด
+            </button>
+          ) : (
+            <div className="two-col">
+              <button className="btn-ghost" onClick={() => setConfirm(false)}>ยกเลิก</button>
+              <button className="btn-danger solid" onClick={clearAll}>ยืนยันลบ</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Version pill — admin only (v5.0) */}
+      {isAdmin && (
+        <div className="vstrip">my money · v5.0 · Multi-user + permissions</div>
+      )}
 
       {showLessonsEditor && (
         <LessonsEditor
