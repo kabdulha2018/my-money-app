@@ -2268,8 +2268,24 @@ async function getAccount() {
 
 async function signIn() {
   const inst = await initMsal();
-  const res = await inst.loginPopup({ scopes: CFG.scopes, prompt: 'select_account' });
-  return res.account;
+  // Try popup first (works in regular Chrome).
+  // If we're inside a nested-popup environment (Messenger / LINE in-app browser),
+  // MSAL throws `block_nested_popups` — fall back to redirect-based login which
+  // navigates the whole tab away to login.live.com and back.
+  try {
+    const res = await inst.loginPopup({ scopes: CFG.scopes, prompt: 'select_account' });
+    return res.account;
+  } catch (e) {
+    const code = String(e?.errorCode || e?.errorMessage || e?.message || '');
+    const isNested = /block_nested_popups|popup_window_error|user_cancelled/i.test(code);
+    if (isNested) {
+      // Will navigate the page; this function effectively never returns here.
+      await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
+      // Just in case redirect doesn't fire immediately:
+      return null;
+    }
+    throw e;
+  }
 }
 
 async function signOut() {
@@ -2279,8 +2295,10 @@ async function signOut() {
     try {
       await inst.logoutPopup({ account, mainWindowRedirectUri: window.location.origin + window.location.pathname });
     } catch (e) {
-      // logout popup may be blocked; just clear local
-      await inst.clearCache();
+      // Popup blocked (in-app browser) or other error — clear local cache as last resort.
+      // We deliberately don't try logoutRedirect here because users normally want to
+      // stay on this page after sign-out, not navigate to Microsoft's logout page.
+      try { await inst.clearCache(); } catch {}
     }
   }
 }
@@ -2294,8 +2312,18 @@ async function getToken() {
     return r.accessToken;
   } catch (e) {
     if (e.name === 'InteractionRequiredAuthError' || /interaction_required|consent_required|login_required/i.test(String(e?.errorCode || e?.message))) {
-      const r = await inst.acquireTokenPopup({ scopes: CFG.scopes, account });
-      return r.accessToken;
+      try {
+        const r = await inst.acquireTokenPopup({ scopes: CFG.scopes, account });
+        return r.accessToken;
+      } catch (popupErr) {
+        const code = String(popupErr?.errorCode || popupErr?.errorMessage || popupErr?.message || '');
+        if (/block_nested_popups|popup_window_error/i.test(code)) {
+          // Fallback for in-app browsers — navigates entire tab.
+          await inst.acquireTokenRedirect({ scopes: CFG.scopes, account });
+          throw new Error('Redirecting for token...');
+        }
+        throw popupErr;
+      }
     }
     throw e;
   }
@@ -2639,8 +2667,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.0';
-const APP_VERSION_TAG = 'Multi-user + per-account permissions + admin';
+const APP_VERSION = 'v5.1';
+const APP_VERSION_TAG = 'MSAL fallback for in-app browsers (Messenger, LINE)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -5071,10 +5099,8 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         </div>
       )}
 
-      {/* Version pill — admin only (v5.0) */}
-      {isAdmin && (
-        <div className="vstrip">my money · v5.0 · Multi-user + permissions</div>
-      )}
+      {/* Version pill — visible to everyone for support/debugging */}
+      <div className="vstrip">my money · v5.1 · MSAL fallback for in-app browsers</div>
 
       {showLessonsEditor && (
         <LessonsEditor
