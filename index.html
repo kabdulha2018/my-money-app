@@ -3840,13 +3840,18 @@ function App() {
   }, { inc: 0, exp: 0 });
   totals.bal = totals.inc - totals.exp;
 
-  const grandTotals = visibleState.transactions.reduce((a, t) => {
+//begin
+// คำนวณยอดรวมทั้งหมด (B) โดยให้กรองตามบัญชีที่เลือกด้วย
+  const grandTotals = txSource.reduce((a, t) => {
+    // ถ้าไม่ได้เลือก 'ทั้งหมด' และชื่อบัญชีของรายการนี้ไม่ตรงกับบัญชีที่กำลังเลือก ให้ข้ามไป
+    if (selectedAccount !== 'all' && (t.accountName || '').trim() !== selectedAccount) {
+      return a;
+    }
     const amt = Number(t.amount) || 0; // ป้องกัน Error จากค่าว่าง
     if (t.type === 'income') a.inc += amt; else a.exp += amt;
     return a;
   }, { inc: 0, exp: 0 });
-  const grandBal = grandTotals.inc - grandTotals.exp; 
-
+  const grandBal = grandTotals.inc - grandTotals.exp;
   // end
 
   return (
