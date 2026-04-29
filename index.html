@@ -6160,14 +6160,89 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
         </div>
       </div>
 
-      {viewerIdx >= 0 && photos[viewerIdx] && photoUrls[photos[viewerIdx].id] && (
-        <div className="photo-viewer fade" onClick={() => setViewerIdx(-1)}>
-          <button className="close-btn" onClick={() => setViewerIdx(-1)}>
-            <Ic.X size={18}/>
-          </button>
-          <img src={photoUrls[photos[viewerIdx].id]} alt="receipt"/>
-        </div>
+//begin
+
+{viewerIdx >= 0 && photos[viewerIdx] && photoUrls[photos[viewerIdx].id] && (
+        <ZoomableImage src={photoUrls[photos[viewerIdx].id]} onClose={() => setViewerIdx(-1)} />
       )}
+      //end 
+    </div>
+  );
+}
+
+// ============ Photo Viewer with Zoom/Pan ============
+function ZoomableImage({ src, onClose }) {
+  const [scale, setScale] = useState(1);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef({ startX: 0, startY: 0, lastX: 0, lastY: 0, startDist: 0, startScale: 1 });
+  const lastTapRef = useRef(0);
+
+  const getDist = (t1, t2) => Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+
+  const onTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      setIsDragging(true);
+      dragRef.current.startDist = getDist(e.touches[0], e.touches[1]);
+      dragRef.current.startScale = scale;
+    } else if (e.touches.length === 1) {
+      setIsDragging(true);
+      dragRef.current.startX = e.touches[0].clientX;
+      dragRef.current.startY = e.touches[0].clientY;
+      dragRef.current.lastX = pos.x;
+      dragRef.current.lastY = pos.y;
+    }
+  };
+
+  const onTouchMove = (e) => {
+    if (!isDragging) return;
+    if (e.touches.length === 2) {
+      const dist = getDist(e.touches[0], e.touches[1]);
+      let s = dragRef.current.startScale * (dist / dragRef.current.startDist);
+      if (s < 0.5) s = 0.5;
+      if (s > 15) s = 15; // ขยายได้สูงสุด 15 เท่า
+      setScale(s);
+    } else if (e.touches.length === 1 && scale > 1) {
+      const dx = e.touches[0].clientX - dragRef.current.startX;
+      const dy = e.touches[0].clientY - dragRef.current.startY;
+      setPos({ x: dragRef.current.lastX + dx, y: dragRef.current.lastY + dy });
+    }
+  };
+
+  const onTouchEnd = (e) => {
+    if (e.touches.length === 0) setIsDragging(false);
+    if (scale < 1) { setScale(1); setPos({ x: 0, y: 0 }); }
+  };
+
+  const handleTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      if (scale > 1) { setScale(1); setPos({ x: 0, y: 0 }); }
+      else { setScale(3); setPos({ x: 0, y: 0 }); } // เคาะ 2 ทีซูม 3 เท่า
+      lastTapRef.current = 0;
+    } else {
+      lastTapRef.current = now;
+    }
+  };
+
+  return (
+    <div className="photo-viewer fade"
+         onClick={(e) => { if (e.target === e.currentTarget && scale === 1) onClose(); }}>
+      <button className="close-btn" onClick={onClose} style={{ zIndex: 100 }}>
+        <Ic.X size={18}/>
+      </button>
+      <img
+        src={src} alt="receipt zoom"
+        onDragStart={(e) => e.preventDefault()}
+        onTouchStart={onTouchStart} onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd} onClick={handleTap}
+        style={{
+          transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale})`,
+          transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
+          touchAction: 'none', transformOrigin: 'center center',
+          userSelect: 'none', WebkitUserSelect: 'none'
+        }}
+      />
     </div>
   );
 }
@@ -6422,15 +6497,13 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
         </div>
       </div>
 
-      {/* Full-screen photo viewer */}
+//begin
+{/* Full-screen photo viewer */}
       {viewerIdx >= 0 && photoList[viewerIdx] && photoUrls[photoList[viewerIdx].id] && (
-        <div className="photo-viewer fade" onClick={() => setViewerIdx(-1)}>
-          <button className="close-btn" onClick={() => setViewerIdx(-1)}>
-            <Ic.X size={18}/>
-          </button>
-          <img src={photoUrls[photoList[viewerIdx].id]} alt="receipt"/>
-        </div>
+        <ZoomableImage src={photoUrls[photoList[viewerIdx].id]} onClose={() => setViewerIdx(-1)} />
       )}
+      
+      //end 
     </div>
   );
 }
