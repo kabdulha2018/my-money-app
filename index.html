@@ -3838,6 +3838,14 @@ function App() {
   }, { inc: 0, exp: 0 });
   totals.bal = totals.inc - totals.exp;
 
+// --- เพิ่มโค้ดคำนวณยอดรวมทั้งหมด (B) ตรงนี้ ---
+  const grandTotals = visibleState.transactions.reduce((a, t) => {
+    if (t.type === 'income') a.inc += t.amount; else a.exp += t.amount;
+    return a;
+  }, { inc: 0, exp: 0 });
+  const grandBal = grandTotals.inc - grandTotals.exp;
+  // ----------
+
   return (
     <>
       <main>
@@ -3891,6 +3899,9 @@ function App() {
           <ListView
             viewMonth={viewMonth} setViewMonth={setViewMonth}
             monthTx={monthTx}
+            
+            grandBal={grandBal}
+            
             onTap={setActionTx}
             accountList={accountList}
             selectedAccount={selectedAccount}
@@ -4549,8 +4560,9 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
   );
 }
 
-function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth, totals, monthTx, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, onBack, zoomLevel, onZoom }) {
-  const [sortDir, setSortDir] = useState('desc'); // 'desc' = newest first (Z→A), 'asc' = oldest first (A→Z)
+
+function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth, totals, monthTx, grandBal, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, onBack, zoomLevel, onZoom }) {
+  const [sortDir, setSortDir] = useState('desc');
   const sortedTx = useMemo(() => {
     const list = [...monthTx];
     list.sort((a, b) => {
@@ -4561,60 +4573,60 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
     return list;
   }, [monthTx, sortDir]);
   const recent = sortedTx.slice(0, 5);
+  
   return (
     <div>
       <header className="page-head rise">
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap: 10}}>
           <div style={{display:'flex', alignItems:'center', gap: 8, flex: 1, minWidth: 0}}>
-            {onBack && (
-              <button className="back-btn" onClick={onBack} aria-label="กลับ">
-                <Ic.ChevL size={16}/>
-              </button>
-            )}
+            {onBack && <button className="back-btn" onClick={onBack}><Ic.ChevL size={16}/></button>}
             <div className="crumb" style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
-              {onBack ? `${selectedAccount === 'all' ? 'ทุกบัญชี' : selectedAccount}` : 'สมุดเงินส่วนตัว'}
+              {selectedAccount === 'all' ? 'ทุกบัญชี' : selectedAccount}
             </div>
           </div>
           <div style={{display:'flex', alignItems:'center', gap: 8}}>
             <SyncPill status={status} account={account} skipSync={skipSync}/>
             <ZoomBtn level={zoomLevel} onCycle={onZoom}/>
-            <KebabMenu
-              onOpenAccounts={onManageAccounts}
-              onOpenProjects={onManageProjects}
-              onOpenItems={onManageItems}
-            onOpenCategories={onManageCategories}
-            />
+            <KebabMenu onOpenAccounts={onManageAccounts} onOpenProjects={onManageProjects} onOpenItems={onManageItems} onOpenCategories={onManageCategories} />
           </div>
         </div>
         <div className="title-row">
-          <h1 className="page-title">my money</h1>
-          <AccountFilter
-            accountList={accountList}
-            selected={selectedAccount}
-            onSelect={onSelectAccount}
-            onManage={onManageAccounts}
-          />
+          <h1 className="page-title">สรุปยอด</h1>
+          <AccountFilter accountList={accountList} selected={selectedAccount} onSelect={onSelectAccount} onManage={onManageAccounts} />
         </div>
       </header>
 
       <MonthSelector value={viewMonth} onChange={setViewMonth}/>
 
+      {/* --- ส่วนแสดงผล A และ B แบบใหม่ --- */}
       <div className="card hero rise" style={{marginTop: 20}}>
-        <div className="label">คงเหลือเดือนนี้</div>
-        <div className="amount">
-          <span className="currency">฿</span>
-          <span className="value font-mono-n" style={{color: totals.bal >= 0 ? 'var(--text)' : 'var(--expense-soft)'}}>
-            {fmtMoney(totals.bal)}
-          </span>
+        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px'}}>
+          <div>
+            <div className="label">รวมทั้งหมด (B)</div>
+            <div className="amount" style={{marginTop: 8}}>
+              <span className="value font-mono-n" style={{fontSize: '24px', color: grandBal >= 0 ? 'var(--gold)' : 'var(--expense-soft)'}}>
+                {fmtMoney(grandBal)}
+              </span>
+            </div>
+          </div>
+          <div style={{borderLeft: '1px solid var(--line)', paddingLeft: '16px'}}>
+            <div className="label">เดือนนี้ (A)</div>
+            <div className="amount" style={{marginTop: 8}}>
+              <span className="value font-mono-n" style={{fontSize: '24px', color: totals.bal >= 0 ? 'var(--text)' : 'var(--expense-soft)'}}>
+                {fmtMoney(totals.bal)}
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="stat-grid">
+        
+        <div className="stat-grid" style={{marginTop: 20, borderTop: '1px solid var(--line)', paddingTop: '16px'}}>
           <div className="stat-mini">
-            <div className="lbl"><Ic.ArrowIn size={12} color="var(--income-soft)"/>รายรับ</div>
-            <div className="val" style={{color: 'var(--income-soft)'}}>฿{fmtMoney(totals.inc)}</div>
+            <div className="lbl"><Ic.ArrowIn size={12} color="var(--income-soft)"/> รายรับเดือนนี้</div>
+            <div className="val" style={{color: 'var(--income-soft)', fontSize: '16px'}}>฿{fmtMoney(totals.inc)}</div>
           </div>
           <div className="stat-mini">
-            <div className="lbl"><Ic.ArrowOut size={12} color="var(--expense-soft)"/>รายจ่าย</div>
-            <div className="val" style={{color: 'var(--expense-soft)'}}>฿{fmtMoney(totals.exp)}</div>
+            <div className="lbl"><Ic.ArrowOut size={12} color="var(--expense-soft)"/> รายจ่ายเดือนนี้</div>
+            <div className="val" style={{color: 'var(--expense-soft)', fontSize: '16px'}}>฿{fmtMoney(totals.exp)}</div>
           </div>
         </div>
       </div>
@@ -4622,9 +4634,7 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
       <div className="section-head">
         <h2>รายการล่าสุด</h2>
         <div style={{display:'flex', alignItems:'center', gap: 10}}>
-          <button className={`sort-btn ${sortDir === 'asc' ? 'asc' : ''}`}
-                  onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
-                  aria-label="สลับการเรียง">
+          <button className={`sort-btn ${sortDir === 'asc' ? 'asc' : ''}`} onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}>
             <span className="ico">{sortDir === 'asc' ? 'A→Z' : 'Z→A'}</span>
           </button>
           <span className="count">{monthTx.length} รายการ</span>
@@ -4635,11 +4645,6 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
         {recent.length === 0 && <EmptyState/>}
         {recent.map((t, i) => <TxRow key={t.id} t={t} onClick={() => onTap(t)} delay={i * 40} accounts={masterAccounts} customCats={masterCategories}/>)}
       </div>
-      {monthTx.length > 5 && (
-        <div style={{marginTop: 12, textAlign: 'center', fontSize: 11, color: 'var(--text-faint)'}}>
-          ดูทั้งหมดในแท็บ "รายการ"
-        </div>
-      )}
     </div>
   );
 }
