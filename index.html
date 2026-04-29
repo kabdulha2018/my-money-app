@@ -3832,19 +3832,22 @@ function App() {
     if (selectedAccount === 'all') return true;
     return (t.accountName || '').trim() === selectedAccount;
   });
-  const totals = monthTx.reduce((a, t) => {
-    if (t.type === 'income') a.inc += t.amount; else a.exp += t.amount;
+  //begin
+ const totals = monthTx.reduce((a, t) => {
+    const amt = Number(t.amount) || 0; // ป้องกัน Error จากค่าว่าง
+    if (t.type === 'income') a.inc += amt; else a.exp += amt;
     return a;
   }, { inc: 0, exp: 0 });
   totals.bal = totals.inc - totals.exp;
 
-// --- เพิ่มโค้ดคำนวณยอดรวมทั้งหมด (B) ตรงนี้ ---
   const grandTotals = visibleState.transactions.reduce((a, t) => {
-    if (t.type === 'income') a.inc += t.amount; else a.exp += t.amount;
+    const amt = Number(t.amount) || 0; // ป้องกัน Error จากค่าว่าง
+    if (t.type === 'income') a.inc += amt; else a.exp += amt;
     return a;
   }, { inc: 0, exp: 0 });
-  const grandBal = grandTotals.inc - grandTotals.exp;
-  // ----------
+  const grandBal = grandTotals.inc - grandTotals.exp; 
+
+  // end
 
   return (
     <>
