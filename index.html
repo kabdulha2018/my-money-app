@@ -2161,17 +2161,18 @@ const LS_KEY = 'mymoney:v1';
 function loadLocal() {
   try {
     const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return { transactions: [], items: [], accounts: [], projects: [], categories: [], lastModified: null };
+    if (!raw) return { transactions: [], items: [], accounts: [], projects: [], categories: [], users: [], lastModified: null };
     const d = JSON.parse(raw);
     return {
       transactions: d.transactions || [],
-      items: d.items || [],
-      accounts: d.accounts || [],
-      projects: d.projects || [],
-      categories: d.categories || [],
+      items:        d.items || [],
+      accounts:     d.accounts || [],
+      projects:     d.projects || [],
+      categories:   d.categories || [],
+      users:        d.users || [], // v5.0
       lastModified: d.lastModified || null,
     };
-  } catch { return { transactions: [], items: [], accounts: [], projects: [], categories: [], lastModified: null }; }
+  } catch { return { transactions: [], items: [], accounts: [], projects: [], categories: [], users: [], lastModified: null }; }
 }
 function saveLocal(state) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e) { console.error(e); }
@@ -2702,8 +2703,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.2';
-const APP_VERSION_TAG = 'In-app browser detection + redirect-only login';
+const APP_VERSION = 'v5.4';
+const APP_VERSION_TAG = 'Full-schema export/import + recovery flow';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -2836,6 +2837,20 @@ function useSync(state, setState, isOnline) {
   const timerRef = useRef(null);
   const syncingRef = useRef(false);
 
+  // Build the full payload sent to OneDrive. Centralised so we don't forget any
+  // top-level field (e.g. v5.0 added `users`).
+  const buildPayload = (s) => ({
+    app: 'my-money',
+    version: 2, // bumped for v5.0 users schema (still readable by older versions which ignore unknown fields)
+    lastModified: s.lastModified || new Date().toISOString(),
+    transactions: s.transactions || [],
+    items:        s.items || [],
+    accounts:     s.accounts || [],
+    projects:     s.projects || [],
+    categories:   s.categories || [],
+    users:        s.users || [],   // v5.0
+  });
+
   // Initial pull
   const pullOnce = useCallback(async () => {
     if (!isOnline) { setStatus('offline'); return; }
@@ -2848,28 +2863,20 @@ function useSync(state, setState, isOnline) {
         if (!localTime || remoteTime > localTime) {
           setState({
             transactions: remote.transactions,
-            items: remote.items || [],
-            accounts: remote.accounts || [],
-            projects: remote.projects || [],
+            items:      remote.items || [],
+            accounts:   remote.accounts || [],
+            projects:   remote.projects || [],
             categories: remote.categories || [],
+            users:      remote.users || [],  // v5.0
             lastModified: remoteTime,
           });
         } else if (localTime > remoteTime) {
           // push local up
-          const out = { app: 'my-money', version: 1, lastModified: localTime,
-                        transactions: state.transactions, items: state.items || [],
-                        accounts: state.accounts || [], projects: state.projects || [],
-                        categories: state.categories || [] };
-          await remoteSave(out);
+          await remoteSave(buildPayload(state));
         }
-      } else if (state.transactions.length > 0 || (state.items || []).length > 0 || (state.accounts || []).length > 0 || (state.projects || []).length > 0 || (state.categories || []).length > 0) {
+      } else if (state.transactions.length > 0 || (state.items || []).length > 0 || (state.accounts || []).length > 0 || (state.projects || []).length > 0 || (state.categories || []).length > 0 || (state.users || []).length > 0) {
         // remote is empty but we have local data → push it
-        const out = { app: 'my-money', version: 1,
-                      lastModified: state.lastModified || new Date().toISOString(),
-                      transactions: state.transactions, items: state.items || [],
-                      accounts: state.accounts || [], projects: state.projects || [],
-                      categories: state.categories || [] };
-        await remoteSave(out);
+        await remoteSave(buildPayload(state));
       }
       setStatus('ok');
       setLastSync(new Date());
@@ -2890,16 +2897,7 @@ function useSync(state, setState, isOnline) {
       syncingRef.current = true;
       setStatus('syncing');
       try {
-        const out = {
-          app: 'my-money', version: 1,
-          lastModified: state.lastModified || new Date().toISOString(),
-          transactions: state.transactions,
-          items: state.items || [],
-          accounts: state.accounts || [],
-          projects: state.projects || [],
-          categories: state.categories || [],
-        };
-        await remoteSave(out);
+        await remoteSave(buildPayload(state));
         setStatus('ok');
         setLastSync(new Date());
         setErrMsg(null);
@@ -3008,7 +3006,7 @@ function App() {
   const [authError, setAuthError] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [skipSync, setSkipSync] = useState(false);
-  const [state, setState] = useState({ transactions: [], items: [], accounts: [], projects: [], categories: [], lastModified: null });
+  const [state, setState] = useState({ transactions: [], items: [], accounts: [], projects: [], categories: [], users: [], lastModified: null });
   const isOnline = !!account && HAS_CONFIG && !skipSync;
   const { status, lastSync, errMsg, pullOnce, schedulePush } = useSync(state, setState, isOnline);
 
@@ -3215,7 +3213,7 @@ function App() {
     if (booting) return;
     if (firstChangeRef.current) { firstChangeRef.current = false; return; }
     if (isOnline && didPullRef.current) schedulePush();
-  }, [state.transactions, state.items, state.accounts, state.projects, state.categories, state.lastModified, isOnline, booting, schedulePush]);
+  }, [state.transactions, state.items, state.accounts, state.projects, state.categories, state.users, state.lastModified, isOnline, booting, schedulePush]);
 
   // Migration: backfill master lists (accounts/projects/items) from existing transactions.
   // This handles legacy data from before the master list feature existed.
@@ -3260,12 +3258,21 @@ function App() {
     }));
   }, [booting, state.transactions]);
 
-  // v5.0 Migration: seed users + assign legacy transactions to admin
-  // Runs once per session. Idempotent — does nothing if users[] already exists.
+  // v5.0 Migration: seed users + assign legacy transactions to admin.
+  // Must run AFTER initial pull from OneDrive (to avoid overwriting remote users
+  // that already have non-default PINs). We detect "pull complete" by either:
+  //   - account is offline/skipSync (no pull will happen), or
+  //   - didPullRef is true AND state.lastModified is set (data has loaded from remote)
   const didMigrateV5Ref = useRef(false);
   useEffect(() => {
     if (booting) return;
     if (didMigrateV5Ref.current) return;
+    // Wait for the initial pull to settle before migrating, so we don't seed default
+    // users on top of remote users with already-customised PINs.
+    const offlineMode = !account || skipSync;
+    const pullDone = didPullRef.current && (state.lastModified != null || (state.transactions || []).length === 0);
+    if (!offlineMode && !pullDone) return;
+
     didMigrateV5Ref.current = true;
     (async () => {
       const hasUsers = Array.isArray(state.users) && state.users.length > 0;
@@ -3277,8 +3284,9 @@ function App() {
         ? state.users
         : DEFAULT_USERS.map(u => ({ ...u, pinHash: defaultHash }));
       mutate(prev => {
-        const nextUsers = hasUsers ? prev.users : seededUsers;
-        // Tag every legacy transaction without createdBy as belonging to admin (abi)
+        // Re-check inside mutator in case state changed since the effect started
+        const reHasUsers = Array.isArray(prev.users) && prev.users.length > 0;
+        const nextUsers = reHasUsers ? prev.users : seededUsers;
         const adminId = (nextUsers.find(u => u.role === 'admin') || nextUsers[0])?.id || 'abi';
         const nextTx = (prev.transactions || []).map(t =>
           t.createdBy ? t : { ...t, createdBy: adminId }
@@ -3286,7 +3294,7 @@ function App() {
         return { ...prev, users: nextUsers, transactions: nextTx };
       });
     })();
-  }, [booting]);
+  }, [booting, account, skipSync, state.lastModified, state.users, state.transactions]);
 
   // Actions
   const mutate = (mutator) => {
@@ -4833,7 +4841,22 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
   };
 
   const exportJSON = () => {
-    const data = { app: 'my-money', version: 1, exportedAt: new Date().toISOString(), transactions: state.transactions };
+    // v5.4: export ทุก field ของ schema (เคยมีบั๊ก: เก่า export แค่ transactions
+    // → ทำให้ import กลับมา accounts/items/users/etc หาย)
+    // Note: users[].pinHash อาจถูก export ด้วย — ผู้ใช้ admin ที่ดาวน์โหลดไฟล์จะเห็น
+    // แต่ pinHash เป็น SHA-256 reverse ไม่ได้ ปลอดภัยพอ
+    const data = {
+      app: 'my-money',
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      lastModified: state.lastModified,
+      transactions: state.transactions || [],
+      items:        state.items || [],
+      accounts:     state.accounts || [],
+      projects:     state.projects || [],
+      categories:   state.categories || [],
+      users:        state.users || [],
+    };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -4841,7 +4864,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
     a.href = url; a.download = `my-money-backup-${ts}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
-    pushToast('สร้างไฟล์สำรองแล้ว');
+    pushToast('สร้างไฟล์สำรองแล้ว · ครบทุก field');
   };
   const onImport = (e) => {
     const f = e.target.files?.[0]; if (!f) return;
@@ -4849,20 +4872,39 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
     r.onload = () => {
       try {
         const d = JSON.parse(r.result);
-        if (!Array.isArray(d.transactions)) throw 0;
-        const byId = new Map();
-        state.transactions.forEach(t => byId.set(t.id, t));
-        d.transactions.forEach(t => byId.set(t.id, t));
-        const merged = Array.from(byId.values()).sort((a,b) => b.date.localeCompare(a.date));
-        setState({ transactions: merged, lastModified: new Date().toISOString() });
-        pushToast(`นำเข้าแล้ว ${d.transactions.length} รายการ`);
-      } catch { pushToast('ไฟล์ไม่ถูกต้อง'); }
+        if (!Array.isArray(d.transactions)) throw new Error('no tx');
+        // Detect old export format (only had transactions field) vs new full schema
+        const isOldFormat = !Array.isArray(d.accounts) && !Array.isArray(d.users);
+        if (isOldFormat) {
+          if (!confirm('ไฟล์นี้เป็นรูปแบบเก่า (มีแค่รายการ ไม่มีบัญชี/users) ต้องการ merge รายการเข้ากับข้อมูลปัจจุบันไหม?')) return;
+          // Merge transactions only — keep current accounts/users/etc.
+          const byId = new Map();
+          (state.transactions || []).forEach(t => byId.set(t.id, t));
+          d.transactions.forEach(t => byId.set(t.id, t));
+          const merged = Array.from(byId.values()).sort((a,b) => b.date.localeCompare(a.date));
+          setState(prev => ({ ...prev, transactions: merged, lastModified: new Date().toISOString() }));
+          pushToast(`นำเข้า ${d.transactions.length} รายการ (เก็บบัญชี/users เดิม)`);
+          return;
+        }
+        // New full-schema import: replace everything
+        if (!confirm(`ไฟล์ backup นี้มี: ${d.transactions.length} รายการ, ${(d.accounts||[]).length} บัญชี, ${(d.users||[]).length} ผู้ใช้\n\nการ import จะแทนที่ข้อมูลปัจจุบันทั้งหมด ดำเนินการต่อ?`)) return;
+        setState({
+          transactions: d.transactions,
+          items:        d.items || [],
+          accounts:     d.accounts || [],
+          projects:     d.projects || [],
+          categories:   d.categories || [],
+          users:        d.users || [],
+          lastModified: new Date().toISOString(),
+        });
+        pushToast(`กู้คืนแล้ว · ${d.transactions.length} รายการ + ${(d.accounts||[]).length} บัญชี`);
+      } catch (err) { console.error(err); pushToast('ไฟล์ไม่ถูกต้อง'); }
     };
     r.readAsText(f);
     e.target.value = '';
   };
   const clearAll = () => {
-    setState({ transactions: [], lastModified: new Date().toISOString() });
+    setState({ transactions: [], items: [], accounts: [], projects: [], categories: [], users: [], lastModified: new Date().toISOString() });
     setConfirm(false);
     pushToast('ลบข้อมูลทั้งหมดแล้ว');
   };
@@ -5144,7 +5186,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.2 · Detect in-app browser + redirect-only</div>
+      <div className="vstrip">my money · v5.4 · กู้ข้อมูลครบทุก field + sync ที่ถูกต้อง</div>
 
       {showLessonsEditor && (
         <LessonsEditor
