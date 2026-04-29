@@ -5339,6 +5339,7 @@ function MonthSelector({ value, onChange }) {
   );
 }
 
+//begin
 function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
   const cat = getCat(t.type, t.category, customCats);
   const isIn = t.type === 'income';
@@ -5357,14 +5358,15 @@ function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
   const d = t.date ? new Date(t.date + 'T00:00:00') : null;
   const dd = d ? String(d.getDate()).padStart(2, '0') : '--';
   const mm = d ? String(d.getMonth() + 1).padStart(2, '0') : '--';
+  
   return (
-    <button className="tx-row rise" style={{animationDelay: `${delay}ms`}} onClick={onClick}>
+    <button className="tx-row rise" style={{animationDelay: `${delay}ms`, alignItems: 'flex-start'}} onClick={onClick}>
       <div className="date-badge">
         <div className="dd">{dd}/{mm}</div>
         <div className="tt">{timeStr || '--:--:--'}</div>
       </div>
-      <div className="mid">
-        <div className="title-ln">
+      <div className="mid" style={{display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1}}>
+        <div className="title-ln" style={{whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3}}>
           {title}
           {photoCount > 0 && (
             <span style={{marginLeft: 6, fontSize: 11, color: 'var(--gold)', verticalAlign: 'middle'}}>
@@ -5372,14 +5374,18 @@ function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
             </span>
           )}
         </div>
-        {subText && <div className="sub-ln">{subText}</div>}
-      </div>
-      <div className={`amt ${isIn ? 'in' : 'out'}`}>
-        {isIn ? '+' : '−'}฿{fmtMoney(t.amount, getAccountDecimals(t.accountName, accounts))}
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 6, gap: 10}}>
+          <div className="sub-ln" style={{marginTop: 0, textAlign: 'left'}}>{subText || ''}</div>
+          <div className={`amt ${isIn ? 'in' : 'out'}`}>
+            {isIn ? '+' : '−'}฿{fmtMoney(t.amount, getAccountDecimals(t.accountName, accounts))}
+          </div>
+        </div>
       </div>
     </button>
   );
 }
+
+//end 
 
 function EmptyState({ text = 'ยังไม่มีรายการในเดือนนี้' }) {
   return (
