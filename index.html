@@ -2867,7 +2867,7 @@ function useSync(state, setState, isOnline) {
             accounts:   remote.accounts || [],
             projects:   remote.projects || [],
             categories: remote.categories || [],
-            users:      remote.users || [],  // v5.0
+            users:      (remote.users && remote.users.length > 0) ? remote.users : state.users,
             lastModified: remoteTime,
           });
         } else if (localTime > remoteTime) {
@@ -4888,15 +4888,15 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         }
         // New full-schema import: replace everything
         if (!confirm(`ไฟล์ backup นี้มี: ${d.transactions.length} รายการ, ${(d.accounts||[]).length} บัญชี, ${(d.users||[]).length} ผู้ใช้\n\nการ import จะแทนที่ข้อมูลปัจจุบันทั้งหมด ดำเนินการต่อ?`)) return;
-        setState({
+        setState(prev => ({
           transactions: d.transactions,
           items:        d.items || [],
           accounts:     d.accounts || [],
           projects:     d.projects || [],
           categories:   d.categories || [],
-          users:        d.users || [],
+          users:        (d.users && d.users.length > 0) ? d.users : prev.users,
           lastModified: new Date().toISOString(),
-        });
+        }));
         pushToast(`กู้คืนแล้ว · ${d.transactions.length} รายการ + ${(d.accounts||[]).length} บัญชี`);
       } catch (err) { console.error(err); pushToast('ไฟล์ไม่ถูกต้อง'); }
     };
