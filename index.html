@@ -1629,6 +1629,93 @@ body:has(.sheet-backdrop) nav.tabbar {
 }
 .del-btn-confirm:active { transform: scale(0.9); }
 
+/* v5.5: Advanced search */
+.search-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface); color: var(--gold);
+  border: 1px solid var(--line);
+  transition: transform .15s, background .2s;
+}
+.search-btn:active { transform: scale(0.9); background: rgba(106,134,108,0.18); }
+.search-form {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: 6px;
+}
+.search-label {
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  margin-top: 4px;
+}
+.search-input {
+  width: 100%;
+  font-size: 14px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--line);
+  color: var(--text); font-family: inherit;
+}
+.search-input:focus { outline: 1px solid var(--gold); border-color: var(--gold); }
+.search-divider {
+  height: 1px; background: var(--line);
+  margin: 6px 0; opacity: 0.5;
+}
+.search-date-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.search-date-cell {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.search-date-lbl {
+  font-size: 10px; color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+.search-actions {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  margin-top: 10px;
+}
+.search-results {
+  margin-top: 16px;
+  display: flex; flex-direction: column; gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.search-results-hd {
+  font-size: 11px; color: var(--text-faint);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.search-result-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--line);
+  font-family: inherit; color: var(--text);
+  text-align: left; width: 100%;
+  transition: transform .12s, background .2s;
+}
+.search-result-row:active { transform: scale(0.98); background: var(--surface2); }
+.search-result-main {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.search-result-name {
+  font-size: 14px; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.search-result-meta {
+  font-size: 11px; color: var(--text-faint);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.search-result-amount {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px; font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.search-result-amount.in  { color: var(--income); }
+.search-result-amount.out { color: var(--expense); }
+
 /* v4.0: Profile picker (post-login screen) */
 .profile-picker {
   display: flex; flex-direction: column; align-items: center;
@@ -2072,6 +2159,7 @@ const Ic = {
   Pencil:    (p) => <Icon {...p} d={["M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"]} />,
   Users:     (p) => <Icon {...p} d={["M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2","M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z","M23 21v-2a4 4 0 0 0-3-3.87","M16 3.13a4 4 0 0 1 0 7.75"]} />,
   Lock:      (p) => <Icon {...p} d={["M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z","M7 11V7a5 5 0 0 1 10 0v4"]} />,
+  Search:    (p) => <Icon {...p} d={["M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z","M21 21l-4.35-4.35"]} />,
 };
 
 // ========== Categories ==========
@@ -2703,8 +2791,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.4';
-const APP_VERSION_TAG = 'Full-schema export/import + recovery flow';
+const APP_VERSION = 'v5.5';
+const APP_VERSION_TAG = 'Advanced search (3 keywords AND + filters)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -2867,7 +2955,7 @@ function useSync(state, setState, isOnline) {
             accounts:   remote.accounts || [],
             projects:   remote.projects || [],
             categories: remote.categories || [],
-            users:      (remote.users && remote.users.length > 0) ? remote.users : state.users,
+            users:      remote.users || [],  // v5.0
             lastModified: remoteTime,
           });
         } else if (localTime > remoteTime) {
@@ -3073,6 +3161,7 @@ function App() {
   const [showProjectsManager, setShowProjectsManager] = useState(false);
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
   const [showUsersManager, setShowUsersManager] = useState(false); // v5.0: admin-only
+  const [showSearch, setShowSearch] = useState(false); // v5.5: advanced search
   // v2.8: text zoom level — 0=normal, 1=large (115%), 2=larger (130%), 3=largest (145%)
   const [zoomLevel, setZoomLevel] = useState(() => {
     try {
@@ -3812,6 +3901,7 @@ function App() {
             onManageProjects={() => setShowProjectsManager(true)}
             onManageItems={() => setShowItemsManager(true)}
             onManageCategories={() => setShowCategoriesManager(true)}
+            onOpenSearch={() => setShowSearch(true)}
             zoomLevel={zoomLevel}
             onZoom={cycleZoom}
           />
@@ -4029,6 +4119,17 @@ function App() {
           onChangePin={changeUserPin}
           onRemove={removeUser}
           pushToast={pushToast}
+        />
+      )}
+
+      {/* v5.5: Advanced search — uses visibleState so non-admins only search permitted accounts */}
+      {showSearch && (
+        <SearchSheet
+          allTransactions={visibleState.transactions}
+          accounts={visibleState.accounts}
+          projects={state.projects || []}
+          onClose={() => setShowSearch(false)}
+          onPickTx={(t) => { setActionTx(t); setShowSearch(false); }}
         />
       )}
 
@@ -4543,7 +4644,7 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
   );
 }
 
-function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom }) {
+function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom, onOpenSearch }) {
   const [sortDir, setSortDir] = useState('desc');
   const groups = useMemo(() => {
     const g = {};
@@ -4566,6 +4667,11 @@ function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, select
       <header className="page-head rise">
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap: 10}}>
           <div className="crumb">ประวัติรายรับรายจ่าย</div>
+          {onOpenSearch && (
+            <button className="search-btn" onClick={onOpenSearch} aria-label="ค้นหา" title="ค้นหารายการ">
+              <Ic.Search size={18}/>
+            </button>
+          )}
           <ZoomBtn level={zoomLevel} onCycle={onZoom}/>
           <KebabMenu
             onOpenAccounts={onManageAccounts}
@@ -4888,15 +4994,15 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         }
         // New full-schema import: replace everything
         if (!confirm(`ไฟล์ backup นี้มี: ${d.transactions.length} รายการ, ${(d.accounts||[]).length} บัญชี, ${(d.users||[]).length} ผู้ใช้\n\nการ import จะแทนที่ข้อมูลปัจจุบันทั้งหมด ดำเนินการต่อ?`)) return;
-        setState(prev => ({
+        setState({
           transactions: d.transactions,
           items:        d.items || [],
           accounts:     d.accounts || [],
           projects:     d.projects || [],
           categories:   d.categories || [],
-          users:        (d.users && d.users.length > 0) ? d.users : prev.users,
+          users:        d.users || [],
           lastModified: new Date().toISOString(),
-        }));
+        });
         pushToast(`กู้คืนแล้ว · ${d.transactions.length} รายการ + ${(d.accounts||[]).length} บัญชี`);
       } catch (err) { console.error(err); pushToast('ไฟล์ไม่ถูกต้อง'); }
     };
@@ -5186,7 +5292,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.4 · กู้ข้อมูลครบทุก field + sync ที่ถูกต้อง</div>
+      <div className="vstrip">my money · v5.5 · ค้นหาขั้นสูง · 3 คำ + filters</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -7523,6 +7629,207 @@ function OfflineStoragePanel({ account, isOnline, cacheStatus, pendingCount, pus
         {busy ? <><Ic.Refresh size={14} className="spin"/> กำลังล้าง</> : <><Ic.Trash size={14}/> ล้าง cache ในเครื่อง</>}
       </button>
     </div>
+  );
+}
+
+// ============ v5.5: Advanced Search ============
+// User can enter up to 3 keyword fragments (AND-combined), filter by project,
+// account, and date range. Each non-empty keyword must appear (substring,
+// case-insensitive, whitespace-trimmed) somewhere in any field of the transaction.
+// Results are tappable — opens TxActionMenu like the regular list.
+function SearchSheet({ allTransactions, accounts, projects, onClose, onPickTx }) {
+  const [k1, setK1] = useState('');
+  const [k2, setK2] = useState('');
+  const [k3, setK3] = useState('');
+  const [project, setProject] = useState('');
+  const [accountName, setAccountName] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [submitted, setSubmitted] = useState(false); // run search after first click
+
+  // Build a flat searchable string for a transaction across every meaningful field.
+  // We deliberately include numbers (amount), dates, ids — same as the user expects
+  // for "search every field".
+  const searchableText = (t) => {
+    const parts = [
+      t.type, t.category, t.accountName, t.project, t.item, t.payee,
+      t.note, t.date, t.createdAt,
+      t.amount != null ? String(t.amount) : '',
+      // photo names too (in case user remembers a receipt filename)
+      ...(Array.isArray(t.photos) ? t.photos.map(p => p?.name || '') : []),
+    ];
+    return parts.filter(Boolean).join(' ').toLowerCase();
+  };
+
+  const results = useMemo(() => {
+    if (!submitted) return null;
+    const keywords = [k1, k2, k3].map(s => (s || '').trim().toLowerCase()).filter(Boolean);
+    const projF = (project || '').trim();
+    const accF = (accountName || '').trim();
+    return (allTransactions || []).filter(t => {
+      // Date range (inclusive). Skip if date doesn't parse.
+      if (dateFrom && t.date && t.date < dateFrom) return false;
+      if (dateTo && t.date && t.date > dateTo) return false;
+      // Project / account filters (exact match, optional)
+      if (projF && (t.project || '').trim() !== projF) return false;
+      if (accF && (t.accountName || '').trim() !== accF) return false;
+      // Keyword AND across every field
+      if (keywords.length > 0) {
+        const hay = searchableText(t);
+        for (const kw of keywords) {
+          if (!hay.includes(kw)) return false;
+        }
+      }
+      return true;
+    }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }, [submitted, k1, k2, k3, project, accountName, dateFrom, dateTo, allTransactions]);
+
+  const reset = () => {
+    setK1(''); setK2(''); setK3('');
+    setProject(''); setAccountName('');
+    setDateFrom(''); setDateTo('');
+    setSubmitted(false);
+  };
+
+  const onSubmit = () => {
+    setSubmitted(true);
+  };
+
+  // No results yet & not yet submitted → show only the form
+  // Submitted → show results list below the form
+  return (
+    <div className="sheet-backdrop fade" onClick={onClose} style={{zIndex: 90}}>
+      <div className="sheet-wrap sheet-in" onClick={e => e.stopPropagation()}>
+        <div className="sheet">
+          <div className="sheet-handle"></div>
+          <div className="sheet-head">
+            <h2>🔍 ค้นหารายการ</h2>
+            <button className="icon-btn-round" onClick={onClose}><Ic.X size={16}/></button>
+          </div>
+
+          {/* Keyword inputs — all optional, AND-combined */}
+          <div className="search-form">
+            <label className="search-label">คำค้นหา (ใส่อย่างน้อย 1 ช่อง)</label>
+            <input
+              type="text"
+              className="search-input"
+              placeholder="ข้อความที่ 1 (เช่น ค่าน้ำ)"
+              value={k1}
+              onChange={(e) => setK1(e.target.value)}
+            />
+            <input
+              type="text"
+              className="search-input"
+              placeholder="ข้อความที่ 2 (เช่น เมษ — เพิ่มเงื่อนไข)"
+              value={k2}
+              onChange={(e) => setK2(e.target.value)}
+            />
+            <input
+              type="text"
+              className="search-input"
+              placeholder="ข้อความที่ 3 (optional)"
+              value={k3}
+              onChange={(e) => setK3(e.target.value)}
+            />
+
+            <div className="search-divider"></div>
+
+            <label className="search-label">เลือก (optional)</label>
+            <select
+              className="search-input"
+              value={project}
+              onChange={(e) => setProject(e.target.value)}>
+              <option value="">— ทุกโครงการ —</option>
+              {(projects || []).map(p => (
+                <option key={p.id} value={p.name}>{p.name}</option>
+              ))}
+            </select>
+            <select
+              className="search-input"
+              value={accountName}
+              onChange={(e) => setAccountName(e.target.value)}>
+              <option value="">— ทุกบัญชี —</option>
+              {(accounts || []).map(a => (
+                <option key={a.id} value={a.name}>{a.name}</option>
+              ))}
+            </select>
+
+            <div className="search-divider"></div>
+
+            <label className="search-label">ช่วงเวลา (optional)</label>
+            <div className="search-date-row">
+              <div className="search-date-cell">
+                <span className="search-date-lbl">จาก</span>
+                <input
+                  type="date"
+                  className="search-input"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                />
+              </div>
+              <div className="search-date-cell">
+                <span className="search-date-lbl">ถึง</span>
+                <input
+                  type="date"
+                  className="search-input"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="search-actions">
+              <button className="btn-ghost" onClick={reset} type="button">
+                ล้าง
+              </button>
+              <button className="btn-primary" onClick={onSubmit} type="button">
+                <Ic.Search size={14}/> ค้นหา
+              </button>
+            </div>
+          </div>
+
+          {/* Results list */}
+          {submitted && results !== null && (
+            <div className="search-results">
+              <div className="search-results-hd">
+                {results.length === 0
+                  ? '— ไม่พบรายการที่ตรง —'
+                  : `พบ ${results.length} รายการ`}
+              </div>
+              {results.map(t => (
+                <SearchResultRow key={t.id} tx={t} accounts={accounts}
+                                 onTap={() => { onPickTx(t); }}/>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Compact row for search results — shows date, account, item, amount, project
+function SearchResultRow({ tx, accounts, onTap }) {
+  const acc = (accounts || []).find(a => (a.name || '').trim() === (tx.accountName || '').trim());
+  const decimals = acc?.decimals ?? 2;
+  const sign = tx.type === 'income' ? '+' : '-';
+  const cls = tx.type === 'income' ? 'in' : 'out';
+  const amountStr = (tx.amount || 0).toLocaleString('en-US', {
+    minimumFractionDigits: decimals, maximumFractionDigits: decimals,
+  });
+  const d = new Date(tx.date);
+  const dateLabel = isNaN(d) ? tx.date : d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
+  return (
+    <button className="search-result-row" onClick={onTap}>
+      <div className="search-result-main">
+        <div className="search-result-name">{tx.item || tx.payee || tx.category || '(ไม่ระบุ)'}</div>
+        <div className="search-result-meta">
+          {dateLabel} · {tx.accountName || '—'}
+          {tx.project ? ` · ${tx.project}` : ''}
+        </div>
+      </div>
+      <div className={`search-result-amount ${cls}`}>{sign}{amountStr}</div>
+    </button>
   );
 }
 
