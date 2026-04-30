@@ -1951,7 +1951,7 @@ body:has(.sheet-backdrop) nav.tabbar {
   margin-top: 2px; letter-spacing: 0.18em;
 }
 .swipe-area {
-  touch-action: pan-y; /* allow vertical scroll, but we control horizontal */
+  touch-action: pan-y pinch-zoom; /* allow vertical scroll and pinch zoom */
 }
 
 /* v2.6: Thumbnail strip in preview (separate card, full width) */
@@ -6273,9 +6273,20 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
   const [dragX, setDragX] = useState(0);   // current finger offset
   const [animX, setAnimX] = useState(null); // when set, sheet glides to this X then resets
   const dragRef = useRef({ startX: 0, startY: 0, active: false, locked: null });
+  
+  //begin
   const SWIPE_THRESH = 70;  // px to trigger
   const onTouchStart = (e) => {
+    if (e.touches.length > 1) { dragRef.current.active = false; return; } // ปล่อยให้ใช้ 2 นิ้วซูม
     const t = e.touches[0];
+    dragRef.current = { startX: t.clientX, startY: t.clientY, active: true, locked: null };
+    setAnimX(null);
+  };
+  const onTouchMove = (e) => {
+    if (!dragRef.current.active) return;
+    if (e.touches.length > 1) { dragRef.current.active = false; return; } // ปล่อยให้ใช้ 2 นิ้วซูม
+    const t = e.touches[0];
+    //end 
     dragRef.current = { startX: t.clientX, startY: t.clientY, active: true, locked: null };
     setAnimX(null);
   };
