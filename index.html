@@ -2908,8 +2908,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.8';
-const APP_VERSION_TAG = 'Inline thumbnail ในรายการ (รูปแรก + นับจำนวน)';
+const APP_VERSION = 'v5.9';
+const APP_VERSION_TAG = 'Search results ใช้ TxRow (มี thumbnail)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -4286,6 +4286,7 @@ function App() {
           allTransactions={visibleState.transactions}
           accounts={visibleState.accounts}
           projects={state.projects || []}
+          categories={state.categories || []}
           onClose={() => setShowSearch(false)}
           onPickTx={(t) => { setActionTx(t); setShowSearch(false); }}
         />
@@ -5485,7 +5486,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.8 · Thumbnail ในรายการ</div>
+      <div className="vstrip">my money · v5.9 · Search results มี thumbnail</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -8036,7 +8037,7 @@ function OfflineStoragePanel({ account, isOnline, cacheStatus, pendingCount, pus
 // account, and date range. Each non-empty keyword must appear (substring,
 // case-insensitive, whitespace-trimmed) somewhere in any field of the transaction.
 // Results are tappable — opens TxActionMenu like the regular list.
-function SearchSheet({ allTransactions, accounts, projects, onClose, onPickTx }) {
+function SearchSheet({ allTransactions, accounts, projects, categories, onClose, onPickTx }) {
   const [k1, setK1] = useState('');
   const [k2, setK2] = useState('');
   const [k3, setK3] = useState('');
@@ -8187,7 +8188,7 @@ function SearchSheet({ allTransactions, accounts, projects, onClose, onPickTx })
             </div>
           </div>
 
-          {/* Results list */}
+          {/* Results list — v5.9: reuse TxRow so search results show thumbnails too */}
           {submitted && results !== null && (
             <div className="search-results">
               <div className="search-results-hd">
@@ -8195,10 +8196,16 @@ function SearchSheet({ allTransactions, accounts, projects, onClose, onPickTx })
                   ? '— ไม่พบรายการที่ตรง —'
                   : `พบ ${results.length} รายการ`}
               </div>
-              {results.map(t => (
-                <SearchResultRow key={t.id} tx={t} accounts={accounts}
-                                 onTap={() => { onPickTx(t); }}/>
-              ))}
+              <div className="tx-list" style={{marginTop: 8}}>
+                {results.map((t, i) => (
+                  <TxRow key={t.id}
+                         t={t}
+                         delay={Math.min(i * 20, 200)}
+                         accounts={accounts}
+                         customCats={categories || []}
+                         onClick={() => onPickTx(t)}/>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -8207,30 +8214,9 @@ function SearchSheet({ allTransactions, accounts, projects, onClose, onPickTx })
   );
 }
 
-// Compact row for search results — shows date, account, item, amount, project
-function SearchResultRow({ tx, accounts, onTap }) {
-  const acc = (accounts || []).find(a => (a.name || '').trim() === (tx.accountName || '').trim());
-  const decimals = acc?.decimals ?? 2;
-  const sign = tx.type === 'income' ? '+' : '-';
-  const cls = tx.type === 'income' ? 'in' : 'out';
-  const amountStr = (tx.amount || 0).toLocaleString('en-US', {
-    minimumFractionDigits: decimals, maximumFractionDigits: decimals,
-  });
-  const d = new Date(tx.date);
-  const dateLabel = isNaN(d) ? tx.date : d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
-  return (
-    <button className="search-result-row" onClick={onTap}>
-      <div className="search-result-main">
-        <div className="search-result-name">{tx.item || tx.payee || tx.category || '(ไม่ระบุ)'}</div>
-        <div className="search-result-meta">
-          {dateLabel} · {tx.accountName || '—'}
-          {tx.project ? ` · ${tx.project}` : ''}
-        </div>
-      </div>
-      <div className={`search-result-amount ${cls}`}>{sign}{amountStr}</div>
-    </button>
-  );
-}
+// Note: v5.9 removed the dedicated SearchResultRow component — search results
+// now reuse the same TxRow used in the main list, so they get thumbnails and
+// consistent styling for free.
 
 function LessonsEditor({ onClose, pushToast }) {
   const [content, setContent] = useState('');
