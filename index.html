@@ -614,17 +614,43 @@ body:has(.sheet-backdrop) nav.tabbar {
 .form-rows { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 .form-row {
   background: var(--surface2); border: 1px solid var(--line); border-radius: 16px;
-  padding: 12px 16px; display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; display: flex; align-items: flex-start; gap: 10px;
+  min-height: 48px;
 }
 .form-row .lbl {
   font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--text-faint); width: 56px; flex-shrink: 0;
+  color: var(--text-faint);
+  width: 56px; flex-shrink: 0;
+  padding-top: 4px; /* visually align with first line of input text */
 }
-.form-row input {
-  flex: 1; background: transparent; outline: none; border: none; font-size: 14px;
+.form-row input,
+.form-row textarea {
+  flex: 1; min-width: 0;
+  background: transparent; outline: none; border: none;
+  font-size: 14px;
   color: var(--text); color-scheme: dark;
+  font-family: inherit;
+  resize: none; /* user-resize off; we auto-grow via JS */
+  line-height: 1.45;
+  padding: 4px 0;
 }
+.form-row textarea { word-break: break-word; }
 .form-row input.mono { font-family: 'IBM Plex Mono', monospace; }
+/* v5.11: action buttons (✕ clear, ⚙ manage) hug the right edge so the input
+   gets all the horizontal room it can. Buttons stay top-aligned so a wrapping
+   textarea grows down without pushing them around. */
+.form-row .field-actions {
+  display: flex; align-items: flex-start; gap: 4px;
+  flex-shrink: 0;
+  margin-top: 0;
+}
+.form-row .field-actions .clearable-btn {
+  position: static;
+  transform: none;
+}
+.form-row .field-actions .clearable-btn:active {
+  transform: scale(0.9);
+}
 
 /* Sheet actions */
 .sheet-actions { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -2949,8 +2975,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.10';
-const APP_VERSION_TAG = 'Multi-photo upload + clear/restore + simplified summary';
+const APP_VERSION = 'v5.11';
+const APP_VERSION_TAG = 'Auto-grow input + filter sort + edge-aligned actions';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -3215,6 +3241,76 @@ function ClearableInput({ value, onChange, ...rest }) {
         </button>
       )}
     </span>
+  );
+}
+
+// v5.11: textarea variant of ClearableInput — auto-grows up to a max number of
+// rows so long item names / notes wrap onto a second line instead of being
+// truncated. Clear/restore behaviour is identical to ClearableInput.
+function ClearableTextarea({ value, onChange, minRows = 1, maxRows = 4, ...rest }) {
+  const stashRef = useRef('');
+  const taRef = useRef(null);
+  const [justCleared, setJustCleared] = useState(false);
+
+  // Resize the textarea to fit its content, capped between minRows and maxRows.
+  // We measure with scrollHeight on the live element, then clamp.
+  const autosize = () => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const cs = window.getComputedStyle(el);
+    const lh = parseFloat(cs.lineHeight) || 20;
+    const padTop = parseFloat(cs.paddingTop) || 0;
+    const padBot = parseFloat(cs.paddingBottom) || 0;
+    const minH = lh * minRows + padTop + padBot;
+    const maxH = lh * maxRows + padTop + padBot;
+    const next = Math.max(minH, Math.min(maxH, el.scrollHeight));
+    el.style.height = next + 'px';
+    el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden';
+  };
+  useEffect(() => { autosize(); }, [value]);
+
+  const handleChange = (e) => {
+    setJustCleared(false);
+    onChange?.(e);
+  };
+  const clear = () => {
+    if (!value) return;
+    stashRef.current = value;
+    setJustCleared(true);
+    onChange?.({ target: { value: '' } });
+  };
+  const restore = () => {
+    if (!stashRef.current) return;
+    onChange?.({ target: { value: stashRef.current } });
+    setJustCleared(false);
+  };
+  const showClear = !justCleared && (value || '').length > 0;
+  const showRestore = justCleared && stashRef.current.length > 0;
+  return (
+    <>
+      <textarea ref={taRef} rows={minRows} {...rest} value={value} onChange={handleChange}/>
+      {(showClear || showRestore) && (
+        <span className="field-actions">
+          {showClear && (
+            <button type="button" className="clearable-btn clear"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={clear}
+                    aria-label="ล้างข้อความ" title="ล้างข้อความ">
+              <Ic.X size={12}/>
+            </button>
+          )}
+          {showRestore && (
+            <button type="button" className="clearable-btn restore"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={restore}
+                    aria-label="คืนค่าข้อความ" title="คืนค่าข้อความ">
+              <Ic.Refresh size={12}/>
+            </button>
+          )}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -5561,7 +5657,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.10 · Multi-photo + clear/restore</div>
+      <div className="vstrip">my money · v5.11 · Input wrap หลายบรรทัด + filter sort</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -6283,11 +6379,12 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
           <div className="autocomplete-wrap" style={{marginTop: 12}}>
             <label className={`form-row ${attemptedSave && accountMissing ? 'has-error' : ''}`}>
               <span className="lbl">บัญชี<span className="req">*</span></span>
-              <ClearableInput type="text" value={accountName}
+              <ClearableTextarea value={accountName}
                      onChange={e => setAccountName(e.target.value)}
                      onFocus={() => setAccountFocused(true)}
                      onBlur={() => setTimeout(() => setAccountFocused(false), 180)}
-                     placeholder="เช่น เงินสด, ธนาคารกสิกร, บัตรเครดิต KTC"/>
+                     placeholder="เช่น เงินสด, ธนาคารกสิกร, บัตรเครดิต KTC"
+                     minRows={1} maxRows={3}/>
             </label>
             {accountFocused && (accountMatches.length > 0 || accountName.trim()) && (
               <div className="autocomplete-list">
@@ -6373,17 +6470,20 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
             <div className="autocomplete-wrap">
               <label className={`form-row ${attemptedSave && itemMissing ? 'has-error' : ''}`}>
                 <span className="lbl">ชื่อรายการ<span className="req">*</span></span>
-                <ClearableInput type="text" value={item}
+                <ClearableTextarea value={item}
                        onChange={e => setItem(e.target.value)}
                        onFocus={() => setItemFocused(true)}
                        onBlur={() => setTimeout(() => setItemFocused(false), 180)}
-                       placeholder="เช่น กาแฟ, ข้าวมันไก่, ค่าแท็กซี่"/>
-                <button type="button" className="field-manage-btn"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => { onOpenItemsManager?.(); }}
-                        title="จัดการรายการ">
-                  <Ic.Settings size={14}/>
-                </button>
+                       placeholder="เช่น กาแฟ, ข้าวมันไก่, ค่าแท็กซี่"
+                       minRows={1} maxRows={4}/>
+                <span className="field-actions">
+                  <button type="button" className="field-manage-btn"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => { onOpenItemsManager?.(); }}
+                          title="จัดการรายการ">
+                    <Ic.Settings size={14}/>
+                  </button>
+                </span>
               </label>
               {itemFocused && itemMatches.length > 0 && (
                 <div className="autocomplete-list">
@@ -6413,11 +6513,12 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
             <div className="autocomplete-wrap">
               <label className="form-row">
                 <span className="lbl">บันทึก</span>
-                <ClearableInput type="text" value={note}
+                <ClearableTextarea value={note}
                        onChange={e => setNote(e.target.value)}
                        onFocus={() => setNoteFocused(true)}
                        onBlur={() => setTimeout(() => setNoteFocused(false), 180)}
-                       placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)"/>
+                       placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)"
+                       minRows={1} maxRows={4}/>
               </label>
               {noteFocused && noteMatches.length > 0 && (
                 <div className="autocomplete-list">
@@ -7146,17 +7247,26 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
     return m;
   }, [transactions]);
 
-  // Sort: most-used first, then alphabetical
+  // Sort: when the user is typing in the "เพิ่มรายการใหม่" box, push items
+  // that contain that substring to the top so they can spot existing entries
+  // and avoid duplicates. Otherwise: most-used first, then alphabetical.
   const sortedItems = useMemo(() => {
     const list = [...(items || [])];
+    const q = newName.trim().toLowerCase();
     list.sort((a, b) => {
+      // When typing, items matching the query come first
+      if (q) {
+        const aMatch = (a.name || '').toLowerCase().includes(q);
+        const bMatch = (b.name || '').toLowerCase().includes(q);
+        if (aMatch !== bMatch) return aMatch ? -1 : 1;
+      }
       const ca = usageMap.get(a.name) || 0;
       const cb = usageMap.get(b.name) || 0;
       if (ca !== cb) return cb - ca;
       return a.name.localeCompare(b.name, 'th');
     });
     return list;
-  }, [items, usageMap]);
+  }, [items, usageMap, newName]);
 
   const handleAdd = () => {
     const n = newName.trim();
@@ -7359,14 +7469,20 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
   // Sort: most-used first, then alphabetical
   const sortedAccounts = useMemo(() => {
     const list = [...(accounts || [])];
+    const q = newName.trim().toLowerCase();
     list.sort((a, b) => {
+      if (q) {
+        const aMatch = (a.name || '').toLowerCase().includes(q);
+        const bMatch = (b.name || '').toLowerCase().includes(q);
+        if (aMatch !== bMatch) return aMatch ? -1 : 1;
+      }
       const ca = usageMap.get(a.name) || 0;
       const cb = usageMap.get(b.name) || 0;
       if (ca !== cb) return cb - ca;
       return a.name.localeCompare(b.name, 'th');
     });
     return list;
-  }, [accounts, usageMap]);
+  }, [accounts, usageMap, newName]);
 
   const handleAdd = () => {
     const n = newName.trim();
@@ -7678,14 +7794,20 @@ function ProjectsManager({ projects, transactions, onClose, onAdd, onUpdate, onR
 
   const sortedProjects = useMemo(() => {
     const list = [...(projects || [])];
+    const q = newName.trim().toLowerCase();
     list.sort((a, b) => {
+      if (q) {
+        const aMatch = (a.name || '').toLowerCase().includes(q);
+        const bMatch = (b.name || '').toLowerCase().includes(q);
+        if (aMatch !== bMatch) return aMatch ? -1 : 1;
+      }
       const ca = usageMap.get(a.name) || 0;
       const cb = usageMap.get(b.name) || 0;
       if (ca !== cb) return cb - ca;
       return a.name.localeCompare(b.name, 'th');
     });
     return list;
-  }, [projects, usageMap]);
+  }, [projects, usageMap, newName]);
 
   const handleAdd = () => {
     const n = newName.trim();
