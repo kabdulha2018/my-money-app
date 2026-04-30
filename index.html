@@ -2883,8 +2883,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.6';
-const APP_VERSION_TAG = 'Currency/unit symbol per account (15+ presets)';
+const APP_VERSION = 'v5.7';
+const APP_VERSION_TAG = 'ทำซ้ำรายการ — copy ทุกฟิลด์ ยกเว้นรูปภาพ';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -3514,16 +3514,19 @@ function App() {
   // Duplicate a transaction: copy all fields with new ID, current date/time, no photos
   const duplicateTx = (tx) => {
     if (!tx) return;
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10);
-    const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+    // v5.7: "ทำซ้ำ" copies every field of the source transaction except:
+    //   - id (must be unique)
+    //   - photos (don't copy receipts/images — they belong to the original)
+    //   - createdBy (the new entry is owned by whoever clicked Duplicate, so they
+    //     can edit/delete it under the v5.0 permission system)
+    // Date and createdAt are preserved verbatim — user can edit them in the sheet
+    // afterwards if needed.
     const copy = {
       ...tx,
       id: uid(),
-      date: dateStr,
-      createdAt: combineDateTime(dateStr, timeStr),
-      photos: [], // don't copy photos — they belong to the original
+      photos: [],
       photoId: null, photoName: null,
+      createdBy: appProfileId || tx.createdBy,
     };
     mutate(prev => ({ ...prev, transactions: [copy, ...prev.transactions] }));
     pushToast('ทำซ้ำรายการแล้ว');
@@ -5446,7 +5449,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.6 · สัญลักษณ์หน่วยต่อบัญชี (15+ สกุล + custom)</div>
+      <div className="vstrip">my money · v5.7 · ทำซ้ำรายการครบทุกฟิลด์ ยกเว้นรูป</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -6624,11 +6627,11 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
                 <div className="ico">{canEdit ? <Ic.Pencil size={20}/> : <Ic.Lock size={20}/>}</div>
                 <div className="lbl">{canEdit ? 'แก้ไข' : 'ดูอย่างเดียว'}</div>
               </button>
-              <button className="action-btn-row neutral" onClick={onDuplicate} aria-label="คัดลอก"
+              <button className="action-btn-row neutral" onClick={onDuplicate} aria-label="ทำซ้ำ"
                       disabled={!canDuplicate}
-                      title={!canDuplicate ? 'ไม่มีสิทธิ์เพิ่มในบัญชีนี้' : 'คัดลอก'}>
+                      title={!canDuplicate ? 'ไม่มีสิทธิ์เพิ่มในบัญชีนี้' : 'ทำซ้ำรายการ (ยกเว้นรูปภาพ)'}>
                 <div className="ico"><Ic.Copy size={20}/></div>
-                <div className="lbl">คัดลอก</div>
+                <div className="lbl">ทำซ้ำ</div>
               </button>
               <button className="action-btn-row danger" onClick={onDelete} aria-label="ลบ"
                       disabled={!canEdit}
