@@ -2883,8 +2883,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.7';
-const APP_VERSION_TAG = 'ทำซ้ำรายการ — copy ทุกฟิลด์ ยกเว้นรูปภาพ';
+const APP_VERSION = 'v5.7.1';
+const APP_VERSION_TAG = 'แก้บั๊ก ListView หน้าว่าง (fmtSel undefined)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -4809,6 +4809,17 @@ function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, select
       sortDir === 'asc' ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0])
     );
   }, [monthTx, sortDir]);
+  // v5.6: render day-group +/− chips with the selected account's unit symbol.
+  // For "all accounts" view fall back to ฿ since totals mix currencies.
+  const selUnit = selectedAccount === 'all'
+    ? { symbol: '฿', position: 'before' }
+    : getAccountUnit(selectedAccount, masterAccounts || []);
+  const fmtSel = (n, sign = '') => {
+    const num = fmtMoney(n);
+    if (!selUnit.symbol) return `${sign}${num}`;
+    if (selUnit.position === 'after') return `${sign}${num} ${selUnit.symbol}`;
+    return `${sign}${selUnit.symbol}${num}`;
+  };
   return (
     <div>
       <header className="page-head rise">
@@ -5449,7 +5460,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.7 · ทำซ้ำรายการครบทุกฟิลด์ ยกเว้นรูป</div>
+      <div className="vstrip">my money · v5.7.1 · แก้ ListView หน้าว่าง</div>
 
       {showLessonsEditor && (
         <LessonsEditor
