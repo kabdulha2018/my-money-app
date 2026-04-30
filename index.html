@@ -386,6 +386,31 @@ h1.page-title {
 }
 .month-sel .today-btn:active { transform: scale(0.95); }
 
+/* v5.8: Inline thumbnail in list rows */
+.tx-row-thumb-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 48px; height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.tx-row-thumb {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.tx-row-thumb-badge {
+  position: absolute; top: 2px; right: 2px;
+  background: rgba(0,0,0,0.65); color: #fff;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; font-weight: 600;
+  padding: 1px 5px; border-radius: 999px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+
 /* Tx row */
 .tx-list { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .tx-row {
@@ -2883,8 +2908,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.7.1';
-const APP_VERSION_TAG = 'แก้บั๊ก ListView หน้าว่าง (fmtSel undefined)';
+const APP_VERSION = 'v5.8';
+const APP_VERSION_TAG = 'Inline thumbnail ในรายการ (รูปแรก + นับจำนวน)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -5460,7 +5485,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.7.1 · แก้ ListView หน้าว่าง</div>
+      <div className="vstrip">my money · v5.8 · Thumbnail ในรายการ</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -5493,6 +5518,32 @@ function MonthSelector({ value, onChange }) {
 }
 
 //begin
+// v5.8: Inline thumbnail loader for the list view. Loads only the FIRST photo's
+// blob (saves bandwidth + decode time on long lists), revokes the object URL on
+// unmount, and silently shows nothing if the photo isn't available yet.
+function TxRowThumb({ photoId }) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    let createdUrl = null;
+    if (!photoId) return;
+    fetchPhotoUrl(photoId).then(u => {
+      if (cancelled) {
+        try { URL.revokeObjectURL(u); } catch {}
+        return;
+      }
+      createdUrl = u;
+      setUrl(u);
+    }).catch(() => { /* photo not available yet — silently hide */ });
+    return () => {
+      cancelled = true;
+      if (createdUrl) { try { URL.revokeObjectURL(createdUrl); } catch {} }
+    };
+  }, [photoId]);
+  if (!url) return null;
+  return <img className="tx-row-thumb" src={url} alt="" loading="lazy"/>;
+}
+
 function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
   const cat = getCat(t.type, t.category, customCats);
   const isIn = t.type === 'income';
@@ -5506,6 +5557,11 @@ function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
   if (t.project) subParts.push('📁 ' + t.project);
   if (t.accountName) subParts.push(t.accountName);
   const subText = subParts.join(' · ');
+  // v5.8: pull the first photo (if any) for the inline thumbnail. Older rows may
+  // use the legacy single-photoId field; both shapes are handled.
+  const firstPhotoId = Array.isArray(t.photos) && t.photos.length > 0
+    ? t.photos[0].id
+    : (t.photoId || null);
   const photoCount = Array.isArray(t.photos) ? t.photos.length : (t.photoId ? 1 : 0);
   // Build short DD/MM date for the badge
   const d = t.date ? new Date(t.date + 'T00:00:00') : null;
@@ -5521,16 +5577,19 @@ function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
       <div className="mid" style={{display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1}}>
         <div className="title-ln" style={{whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3}}>
           {title}
-          {photoCount > 0 && (
-            <span style={{marginLeft: 6, fontSize: 11, color: 'var(--gold)', verticalAlign: 'middle'}}>
-              📷{photoCount > 1 ? ` ${photoCount}` : ''}
-            </span>
-          )}
         </div>
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 6, gap: 10}}>
           <div className="sub-ln" style={{marginTop: 0, textAlign: 'left'}}>{subText || ''}</div>
-          <div className={`amt ${isIn ? 'in' : 'out'}`}>
-            {fmtAmount(t.amount, isIn, t.accountName, accounts)}
+          <div style={{display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0}}>
+            <div className={`amt ${isIn ? 'in' : 'out'}`}>
+              {fmtAmount(t.amount, isIn, t.accountName, accounts)}
+            </div>
+            {firstPhotoId && (
+              <div className="tx-row-thumb-wrap">
+                <TxRowThumb photoId={firstPhotoId}/>
+                {photoCount > 1 && <span className="tx-row-thumb-badge">{photoCount}</span>}
+              </div>
+            )}
           </div>
         </div>
       </div>
