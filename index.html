@@ -1456,6 +1456,47 @@ body:has(.sheet-backdrop) nav.tabbar {
   transition: all .15s;
 }
 .field-manage-btn:active { transform: scale(0.9); }
+
+/* v5.10: ClearableInput — ✕ to clear, ↩ to restore last cleared text */
+.clearable-wrap {
+  position: relative;
+  display: block;
+  flex: 1;
+  min-width: 0;
+}
+.clearable-wrap > input {
+  width: 100%;
+  padding-right: 32px; /* leave room for the ✕/↩ button */
+}
+.clearable-btn {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 0;
+  transition: background .15s, color .15s, transform .15s;
+}
+.clearable-btn:active { transform: translateY(-50%) scale(0.9); }
+.clearable-btn.clear:hover, .clearable-btn.clear:active {
+  background: rgba(184,88,66,0.15);
+  color: var(--expense-soft);
+  border-color: var(--expense-soft);
+}
+.clearable-btn.restore {
+  background: rgba(106,134,108,0.15);
+  color: var(--income-soft);
+  border-color: var(--income-soft);
+}
+.clearable-btn.restore:active {
+  background: rgba(106,134,108,0.25);
+}
 .field-manage-btn:hover { background: rgba(106,134,108,0.15); }
 
 /* v2.5: Full-width transaction preview card */
@@ -2908,8 +2949,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.9';
-const APP_VERSION_TAG = 'Search results ใช้ TxRow (มี thumbnail)';
+const APP_VERSION = 'v5.10';
+const APP_VERSION_TAG = 'Multi-photo upload + clear/restore + simplified summary';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -3123,6 +3164,60 @@ function useSync(state, setState, isOnline) {
 // ============ v5.0: PIN-based profile gate (uses runtime user list) ============
 // User picks profile after Microsoft login → enters 4-digit PIN → enters app.
 // Profile stored in sessionStorage so closing the tab/Chrome auto-locks.
+// v5.10: text input with clear (✕) and restore (↩) buttons.
+// - Empty value → no buttons
+// - Has text → show ✕ to clear (saves the text in a stash)
+// - Just cleared → show ↩ to restore the stashed text
+// Stash is reset whenever the user types again, so restore only works
+// immediately after the most recent clear.
+// Spreads any extra props onto the inner <input> (placeholder, type, onFocus, …).
+function ClearableInput({ value, onChange, ...rest }) {
+  const stashRef = useRef('');
+  const [justCleared, setJustCleared] = useState(false);
+  const handleChange = (e) => {
+    setJustCleared(false);
+    onChange?.(e);
+  };
+  const clear = () => {
+    if (!value) return;
+    stashRef.current = value;
+    setJustCleared(true);
+    // Synthesize an event so the parent's onChange handler treats this as a
+    // normal text edit (no special "clear" callback needed in callers).
+    onChange?.({ target: { value: '' } });
+  };
+  const restore = () => {
+    if (!stashRef.current) return;
+    onChange?.({ target: { value: stashRef.current } });
+    setJustCleared(false);
+  };
+  const showClear = !justCleared && (value || '').length > 0;
+  const showRestore = justCleared && stashRef.current.length > 0;
+  return (
+    <span className="clearable-wrap">
+      <input {...rest} value={value} onChange={handleChange}/>
+      {showClear && (
+        <button type="button" className="clearable-btn clear"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={clear}
+                aria-label="ล้างข้อความ"
+                title="ล้างข้อความ">
+          <Ic.X size={12}/>
+        </button>
+      )}
+      {showRestore && (
+        <button type="button" className="clearable-btn restore"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={restore}
+                aria-label="คืนค่าข้อความ"
+                title="คืนค่าข้อความ">
+          <Ic.Refresh size={12}/>
+        </button>
+      )}
+    </span>
+  );
+}
+
 function ProfilePicker({ users, onPick }) {
   // Filter out users without a PIN set (shouldn't happen, but safe)
   const visible = users || [];
@@ -4766,36 +4861,16 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
 
       <MonthSelector value={viewMonth} onChange={setViewMonth}/>
 
-      {/* --- ส่วนแสดงผล A และ B แบบใหม่ --- */}
+      {/* v5.10: simplified summary — only the all-time balance "รวมทั้งหมด" remains.
+          Monthly stats (A) and rายรับ/รายจ่าย breakdowns were removed at user
+          request — they duplicated info already visible in the chart and the
+          day-group chips below. */}
       <div className="card hero rise" style={{marginTop: 20}}>
-        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px'}}>
-          <div>
-            <div className="label">รวมทั้งหมด (B)</div>
-            <div className="amount" style={{marginTop: 8}}>
-              <span className="value font-mono-n" style={{fontSize: '24px', color: grandBal >= 0 ? 'var(--gold)' : 'var(--expense-soft)'}}>
-                {fmtMoney(grandBal)}
-              </span>
-            </div>
-          </div>
-          <div style={{borderLeft: '1px solid var(--line)', paddingLeft: '16px'}}>
-            <div className="label">เดือนนี้ (A)</div>
-            <div className="amount" style={{marginTop: 8}}>
-              <span className="value font-mono-n" style={{fontSize: '24px', color: totals.bal >= 0 ? 'var(--text)' : 'var(--expense-soft)'}}>
-                {fmtMoney(totals.bal)}
-              </span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="stat-grid" style={{marginTop: 20, borderTop: '1px solid var(--line)', paddingTop: '16px'}}>
-          <div className="stat-mini">
-            <div className="lbl"><Ic.ArrowIn size={12} color="var(--income-soft)"/> รายรับเดือนนี้</div>
-            <div className="val" style={{color: 'var(--income-soft)', fontSize: '16px'}}>{fmtSel(totals.inc)}</div>
-          </div>
-          <div className="stat-mini">
-            <div className="lbl"><Ic.ArrowOut size={12} color="var(--expense-soft)"/> รายจ่ายเดือนนี้</div>
-            <div className="val" style={{color: 'var(--expense-soft)', fontSize: '16px'}}>{fmtSel(totals.exp)}</div>
-          </div>
+        <div className="label">สรุปยอด</div>
+        <div className="amount" style={{marginTop: 8}}>
+          <span className="value font-mono-n" style={{fontSize: '32px', color: grandBal >= 0 ? 'var(--gold)' : 'var(--expense-soft)'}}>
+            {fmtSel(grandBal)}
+          </span>
         </div>
       </div>
 
@@ -5486,7 +5561,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.9 · Search results มี thumbnail</div>
+      <div className="vstrip">my money · v5.10 · Multi-photo + clear/restore</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -5986,24 +6061,52 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
   const canSave = parseFloat(amount) > 0 && !itemMissing && !accountMissing;
 
   // --- Photo handlers ---
+  // v5.10: handle multiple photos in one pick. Uploads sequentially so we don't
+  // overwhelm the network (mobile data, OneDrive throttling) and so the user
+  // sees progress one photo at a time. Each photo failure is reported but doesn't
+  // abort the rest.
   const onPhotoPick = async (e) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []);
     e.target.value = '';
-    if (!file) return;
+    if (files.length === 0) return;
     if (!isOnline) { pushToast?.('ต้องเข้าสู่ระบบก่อน'); return; }
-    if (!file.type.startsWith('image/')) { pushToast?.('ไฟล์ต้องเป็นรูปภาพ'); return; }
-    if (photos.length >= 5) { pushToast?.('รูปได้สูงสุด 5 รูปต่อรายการ'); return; }
+
+    // Filter out non-image files first
+    const images = files.filter(f => f.type.startsWith('image/'));
+    if (images.length === 0) { pushToast?.('ไฟล์ต้องเป็นรูปภาพ'); return; }
+    if (images.length < files.length) pushToast?.('ข้ามไฟล์ที่ไม่ใช่รูป');
+
+    // Cap at remaining slots (5 total per transaction)
+    const remaining = 5 - photos.length;
+    if (remaining <= 0) { pushToast?.('รูปได้สูงสุด 5 รูปต่อรายการ'); return; }
+    const toUpload = images.slice(0, remaining);
+    if (toUpload.length < images.length) {
+      pushToast?.(`อัปได้อีก ${remaining} รูป (จำกัด 5 รูปต่อรายการ)`);
+    }
+
     setUploadingPhoto(true);
+    let successCount = 0;
     try {
       const txId = initial?.id || uid();
-      const result = await uploadPhoto(file, txId);
-      const localUrl = URL.createObjectURL(file);
-      setPhotos(prev => [...prev, { id: result.id, name: result.name }]);
-      setPhotoUrls(prev => ({ ...prev, [result.id]: localUrl }));
-      pushToast?.('อัปโหลดรูปแล้ว');
-    } catch (err) {
-      console.error(err);
-      pushToast?.('อัปโหลดรูปไม่สำเร็จ');
+      for (let i = 0; i < toUpload.length; i++) {
+        const file = toUpload[i];
+        try {
+          const result = await uploadPhoto(file, txId);
+          const localUrl = URL.createObjectURL(file);
+          setPhotos(prev => [...prev, { id: result.id, name: result.name }]);
+          setPhotoUrls(prev => ({ ...prev, [result.id]: localUrl }));
+          successCount++;
+        } catch (err) {
+          console.error('photo upload failed', err);
+        }
+      }
+      if (successCount === toUpload.length) {
+        pushToast?.(successCount > 1 ? `อัปโหลด ${successCount} รูปแล้ว` : 'อัปโหลดรูปแล้ว');
+      } else if (successCount > 0) {
+        pushToast?.(`อัปโหลด ${successCount}/${toUpload.length} รูป`);
+      } else {
+        pushToast?.('อัปโหลดรูปไม่สำเร็จ');
+      }
     } finally {
       setUploadingPhoto(false);
     }
@@ -6089,8 +6192,15 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
 
   const openFilePicker = (useCamera) => {
     if (photoInputRef.current) {
-      if (useCamera) photoInputRef.current.setAttribute('capture', 'environment');
-      else photoInputRef.current.removeAttribute('capture');
+      if (useCamera) {
+        // Camera mode: one shot at a time, with rear camera by default.
+        photoInputRef.current.setAttribute('capture', 'environment');
+        photoInputRef.current.removeAttribute('multiple');
+      } else {
+        // Gallery mode: allow selecting many at once via long-press to multi-select.
+        photoInputRef.current.removeAttribute('capture');
+        photoInputRef.current.setAttribute('multiple', 'multiple');
+      }
       photoInputRef.current.click();
     }
   };
@@ -6173,7 +6283,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
           <div className="autocomplete-wrap" style={{marginTop: 12}}>
             <label className={`form-row ${attemptedSave && accountMissing ? 'has-error' : ''}`}>
               <span className="lbl">บัญชี<span className="req">*</span></span>
-              <input type="text" value={accountName}
+              <ClearableInput type="text" value={accountName}
                      onChange={e => setAccountName(e.target.value)}
                      onFocus={() => setAccountFocused(true)}
                      onBlur={() => setTimeout(() => setAccountFocused(false), 180)}
@@ -6229,7 +6339,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
             </div>
             {showNewProject && (
               <div className="project-input-row fade">
-                <input type="text" value={newProjectName}
+                <ClearableInput type="text" value={newProjectName}
                        onChange={e => setNewProjectName(e.target.value)}
                        placeholder="ชื่อโครงการใหม่"
                        autoFocus
@@ -6263,7 +6373,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
             <div className="autocomplete-wrap">
               <label className={`form-row ${attemptedSave && itemMissing ? 'has-error' : ''}`}>
                 <span className="lbl">ชื่อรายการ<span className="req">*</span></span>
-                <input type="text" value={item}
+                <ClearableInput type="text" value={item}
                        onChange={e => setItem(e.target.value)}
                        onFocus={() => setItemFocused(true)}
                        onBlur={() => setTimeout(() => setItemFocused(false), 180)}
@@ -6303,7 +6413,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
             <div className="autocomplete-wrap">
               <label className="form-row">
                 <span className="lbl">บันทึก</span>
-                <input type="text" value={note}
+                <ClearableInput type="text" value={note}
                        onChange={e => setNote(e.target.value)}
                        onFocus={() => setNoteFocused(true)}
                        onBlur={() => setTimeout(() => setNoteFocused(false), 180)}
@@ -8110,21 +8220,21 @@ function SearchSheet({ allTransactions, accounts, projects, categories, onClose,
           {/* Keyword inputs — all optional, AND-combined */}
           <div className="search-form">
             <label className="search-label">คำค้นหา (ใส่อย่างน้อย 1 ช่อง)</label>
-            <input
+            <ClearableInput
               type="text"
               className="search-input"
               placeholder="ข้อความที่ 1 (เช่น ค่าน้ำ)"
               value={k1}
               onChange={(e) => setK1(e.target.value)}
             />
-            <input
+            <ClearableInput
               type="text"
               className="search-input"
               placeholder="ข้อความที่ 2 (เช่น เมษ — เพิ่มเงื่อนไข)"
               value={k2}
               onChange={(e) => setK2(e.target.value)}
             />
-            <input
+            <ClearableInput
               type="text"
               className="search-input"
               placeholder="ข้อความที่ 3 (optional)"
