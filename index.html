@@ -556,6 +556,7 @@ body:has(.sheet-backdrop) nav.tabbar {
 .amount-box .cur {
   font-family: 'IBM Plex Mono', monospace; font-size: 20px; color: var(--text-dim);
 }
+.amount-box .cur.after { font-size: 16px; }
 .amount-box input {
   font-family: 'Noto Serif Thai', serif; font-variant-numeric: tabular-nums;
   font-size: 44px; line-height: 1; background: transparent; outline: none; border: none;
@@ -1354,6 +1355,43 @@ body:has(.sheet-backdrop) nav.tabbar {
   -webkit-appearance: none; margin: 0;
 }
 .decimals-input-wrap .dec-input:focus { border-color: var(--gold); }
+
+/* v5.6: Unit symbol picker (currency / item-count) */
+.unit-picker {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-top: 10px; margin-bottom: 4px;
+}
+.unit-picker.inline { margin-top: 8px; }
+.unit-picker-lbl {
+  font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+.unit-select {
+  padding: 10px 12px; font-size: 13px;
+  background: var(--surface2); border: 1px solid var(--line); border-radius: 10px;
+  color: var(--text); outline: none; font-family: inherit;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23b0a47c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat; background-position: right 12px center;
+  padding-right: 30px;
+}
+.unit-select:focus { border-color: var(--gold); }
+.unit-custom-row {
+  display: flex; gap: 6px;
+}
+.unit-custom-input {
+  flex: 1; padding: 10px 12px; font-size: 13px;
+  background: var(--surface2); border: 1px solid var(--line); border-radius: 10px;
+  color: var(--text); outline: none; min-width: 0;
+  font-family: inherit;
+}
+.unit-custom-input:focus { border-color: var(--gold); }
+.unit-pos-select {
+  padding: 10px 8px; font-size: 12px;
+  background: var(--surface2); border: 1px solid var(--line); border-radius: 10px;
+  color: var(--text); outline: none; font-family: inherit;
+  flex-shrink: 0;
+}
 
 .add-btn-gold {
   padding: 0 16px; border-radius: 12px;
@@ -2223,6 +2261,60 @@ const getAccountDecimals = (accountName, accounts) => {
   const found = accounts.find(a => (a.name || '').toLowerCase() === n);
   return found ? (Number.isFinite(found.decimals) ? found.decimals : 2) : 2;
 };
+// v5.6: Currency / unit symbol presets — admin can also enter custom symbols.
+// `position` is 'before' for currency-style symbols (฿100, $100, €100) or
+// 'after' for unit nouns (5 ชิ้น, 3 kg). Empty string = no symbol shown.
+const UNIT_PRESETS = [
+  { symbol: '฿',    label: '฿ บาท (THB)',           position: 'before' },
+  { symbol: '$',    label: '$ ดอลลาร์สหรัฐ (USD)',   position: 'before' },
+  { symbol: '€',    label: '€ ยูโร (EUR)',          position: 'before' },
+  { symbol: '£',    label: '£ ปอนด์อังกฤษ (GBP)',   position: 'before' },
+  { symbol: '¥',    label: '¥ เยน/หยวน (JPY/CNY)',  position: 'before' },
+  { symbol: '₩',    label: '₩ วอนเกาหลี (KRW)',     position: 'before' },
+  { symbol: 'CHF',  label: 'CHF ฟรังก์สวิส',         position: 'before' },
+  { symbol: 'A$',   label: 'A$ ดอลลาร์ออสเตรเลีย',   position: 'before' },
+  { symbol: 'C$',   label: 'C$ ดอลลาร์แคนาดา',       position: 'before' },
+  { symbol: 'S$',   label: 'S$ ดอลลาร์สิงคโปร์',     position: 'before' },
+  { symbol: 'HK$',  label: 'HK$ ดอลลาร์ฮ่องกง',      position: 'before' },
+  { symbol: '₹',    label: '₹ รูปีอินเดีย (INR)',    position: 'before' },
+  { symbol: 'RM',   label: 'RM ริงกิตมาเลเซีย (MYR)', position: 'before' },
+  { symbol: '₿',    label: '₿ Bitcoin (BTC)',        position: 'before' },
+  { symbol: 'g',    label: 'g กรัม (ทอง)',           position: 'after'  },
+  { symbol: 'ชิ้น', label: 'ชิ้น (สิ่งของ)',          position: 'after'  },
+  { symbol: '',     label: '— ไม่มีสัญลักษณ์ —',     position: 'before' },
+];
+// Resolve the unit symbol + position for an account name.
+// Defaults: legacy/missing accounts → '฿' before (Thai baht), so old data still
+// renders correctly with no migration needed.
+const guessUnitPosition = (symbol) => {
+  if (!symbol) return 'before';
+  const found = UNIT_PRESETS.find(p => p.symbol === symbol);
+  return found ? found.position : 'before';
+};
+const getAccountUnit = (accountName, accounts) => {
+  const fallback = { symbol: '฿', position: 'before' };
+  if (!accountName || !Array.isArray(accounts)) return fallback;
+  const n = accountName.trim().toLowerCase();
+  const found = accounts.find(a => (a.name || '').toLowerCase() === n);
+  if (!found) return fallback;
+  // unitSymbol === '' is a valid value (means "no symbol"); only undefined/null
+  // falls back to '฿' for backward compatibility with pre-v5.6 data.
+  const symbol = found.unitSymbol != null ? found.unitSymbol : '฿';
+  const position = found.unitPosition || guessUnitPosition(symbol);
+  return { symbol, position };
+};
+// Centralised amount formatter. `isIn` is the income/expense sign to prepend
+// ('+' true / '−' false / null = no sign). Currency symbols (฿, $, €) appear
+// before the number; unit nouns (ชิ้น, g) appear after with a space.
+const fmtAmount = (amount, isIn, accountName, accounts) => {
+  const decimals = getAccountDecimals(accountName, accounts);
+  const { symbol, position } = getAccountUnit(accountName, accounts);
+  const sign = isIn === true ? '+' : isIn === false ? '−' : '';
+  const num = fmtMoney(amount, decimals);
+  if (!symbol) return `${sign}${num}`;
+  if (position === 'after') return `${sign}${num} ${symbol}`;
+  return `${sign}${symbol}${num}`;
+};
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const nowTime = () => {
   const d = new Date();
@@ -2791,8 +2883,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.5';
-const APP_VERSION_TAG = 'Advanced search (3 keywords AND + filters)';
+const APP_VERSION = 'v5.6';
+const APP_VERSION_TAG = 'Currency/unit symbol per account (15+ presets)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -3525,20 +3617,28 @@ function App() {
   };
 
   // ============ Accounts Master List Handlers ============
-  const addMasterAccount = (name, decimals = 2) => {
+  const addMasterAccount = (name, decimals = 2, unitSymbol = '฿', unitPosition = 'before') => {
     const n = (name || '').trim();
     if (!n) return false;
     const accs = state.accounts || [];
     const exists = accs.some(a => (a.name || '').toLowerCase() === n.toLowerCase());
     if (exists) return false;
     const d = Math.max(0, Math.min(10, Number.isFinite(+decimals) ? +decimals : 2));
+    // unitSymbol can be empty string ('') — keep as-is. Only fall back to '฿' when undefined/null.
+    const sym = unitSymbol == null ? '฿' : String(unitSymbol);
+    const pos = unitPosition === 'after' ? 'after' : 'before';
     mutate(prev => ({
       ...prev,
-      accounts: [...(prev.accounts || []), { id: uid(), name: n, decimals: d, permissions: {}, createdAt: new Date().toISOString() }],
+      accounts: [...(prev.accounts || []), {
+        id: uid(), name: n, decimals: d,
+        unitSymbol: sym, unitPosition: pos,
+        permissions: {},
+        createdAt: new Date().toISOString()
+      }],
     }));
     return true;
   };
-  const updateMasterAccount = (id, newName, newDecimals) => {
+  const updateMasterAccount = (id, newName, newDecimals, newUnitSymbol, newUnitPosition) => {
     const n = (newName || '').trim();
     if (!n) return { ok: false, reason: 'empty' };
     const d = Math.max(0, Math.min(10, Number.isFinite(+newDecimals) ? +newDecimals : 2));
@@ -3552,9 +3652,18 @@ function App() {
     if (target.name !== n) {
       affected = renameMasterField('accountName', target.name, n);
     }
+    // Resolve unit fields (preserve current value if caller doesn't pass them)
+    const sym = newUnitSymbol === undefined
+      ? (target.unitSymbol != null ? target.unitSymbol : '฿')
+      : (newUnitSymbol == null ? '฿' : String(newUnitSymbol));
+    const pos = newUnitPosition === undefined
+      ? (target.unitPosition || guessUnitPosition(sym))
+      : (newUnitPosition === 'after' ? 'after' : 'before');
     mutate(prev => ({
       ...prev,
-      accounts: (prev.accounts || []).map(a => a.id === id ? { ...a, name: n, decimals: d } : a),
+      accounts: (prev.accounts || []).map(a =>
+        a.id === id ? { ...a, name: n, decimals: d, unitSymbol: sym, unitPosition: pos } : a
+      ),
     }));
     return { ok: true, affectedTx: affected };
   };
@@ -4043,14 +4152,14 @@ function App() {
           accounts={state.accounts || []}
           transactions={state.transactions}
           onClose={() => setShowAccountsManager(false)}
-          onAdd={(name, decimals) => {
-            const ok = addMasterAccount(name, decimals);
+          onAdd={(name, decimals, unitSymbol, unitPosition) => {
+            const ok = addMasterAccount(name, decimals, unitSymbol, unitPosition);
             if (!ok) pushToast('มีบัญชีนี้อยู่แล้ว');
-            else pushToast(`เพิ่มบัญชีแล้ว (ทศนิยม ${decimals} ตำแหน่ง)`);
+            else pushToast(`เพิ่มบัญชีแล้ว`);
             return ok;
           }}
-          onUpdate={(id, name, decimals) => {
-            const r = updateMasterAccount(id, name, decimals);
+          onUpdate={(id, name, decimals, unitSymbol, unitPosition) => {
+            const r = updateMasterAccount(id, name, decimals, unitSymbol, unitPosition);
             if (r.ok) {
               pushToast(r.affectedTx > 0
                 ? `แก้ไขแล้ว · อัปเดต ${r.affectedTx} รายการ`
@@ -4485,9 +4594,13 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
     (state.accounts || []).forEach(a => {
       const key = (a.name || '').toLowerCase();
       if (!key) return;
+      // v5.6: derive unit symbol+position once. Legacy/missing → ฿ before.
+      const unitSymbol = a.unitSymbol != null ? a.unitSymbol : '฿';
+      const unitPosition = a.unitPosition || (UNIT_PRESETS.find(p => p.symbol === unitSymbol)?.position) || 'before';
       stats.set(key, {
         name: a.name,
         decimals: Number.isFinite(a.decimals) ? a.decimals : 2,
+        unitSymbol, unitPosition,
         income: 0, expense: 0, count: 0,
       });
     });
@@ -4497,7 +4610,7 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
       if (!name) return;
       const key = name.toLowerCase();
       if (!stats.has(key)) {
-        stats.set(key, { name, decimals: 2, income: 0, expense: 0, count: 0 });
+        stats.set(key, { name, decimals: 2, unitSymbol: '฿', unitPosition: 'before', income: 0, expense: 0, count: 0 });
       }
       const s = stats.get(key);
       if (t.type === 'income') s.income += t.amount;
@@ -4553,7 +4666,9 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
                 <div className="acct-line2">
                   <div className="acct-balance font-mono-n"
                        style={{color: a.balance < 0 ? 'var(--expense-soft)' : a.balance > 0 ? 'var(--income-soft)' : 'var(--text-faint)'}}>
-                    ฿{fmtMoney(a.balance, a.decimals)}
+                    {a.unitPosition === 'after'
+                      ? <>{fmtMoney(a.balance, a.decimals)}{a.unitSymbol ? ` ${a.unitSymbol}` : ''}</>
+                      : <>{a.unitSymbol || ''}{fmtMoney(a.balance, a.decimals)}</>}
                   </div>
                   <div className="acct-meta">
                     {a.count > 0 ? `${a.count} รายการ` : 'ยังไม่มีรายการ'}
@@ -4583,6 +4698,20 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
     return list;
   }, [monthTx, sortDir]);
   const recent = sortedTx.slice(0, 5);
+  // v5.6: when a single account is selected, render numbers with that account's
+  // unit symbol (฿, $, ชิ้น, …). For "all accounts" we fall back to ฿ since the
+  // totals are mixed currencies anyway.
+  const selUnit = selectedAccount === 'all'
+    ? { symbol: '฿', position: 'before' }
+    : getAccountUnit(selectedAccount, masterAccounts || []);
+  // Format a positive amount with the selected account's symbol + position.
+  // `sign` is one of '', '+', '−'.
+  const fmtSel = (n, sign = '') => {
+    const num = fmtMoney(n);
+    if (!selUnit.symbol) return `${sign}${num}`;
+    if (selUnit.position === 'after') return `${sign}${num} ${selUnit.symbol}`;
+    return `${sign}${selUnit.symbol}${num}`;
+  };
   
   return (
     <div>
@@ -4632,11 +4761,11 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
         <div className="stat-grid" style={{marginTop: 20, borderTop: '1px solid var(--line)', paddingTop: '16px'}}>
           <div className="stat-mini">
             <div className="lbl"><Ic.ArrowIn size={12} color="var(--income-soft)"/> รายรับเดือนนี้</div>
-            <div className="val" style={{color: 'var(--income-soft)', fontSize: '16px'}}>฿{fmtMoney(totals.inc)}</div>
+            <div className="val" style={{color: 'var(--income-soft)', fontSize: '16px'}}>{fmtSel(totals.inc)}</div>
           </div>
           <div className="stat-mini">
             <div className="lbl"><Ic.ArrowOut size={12} color="var(--expense-soft)"/> รายจ่ายเดือนนี้</div>
-            <div className="val" style={{color: 'var(--expense-soft)', fontSize: '16px'}}>฿{fmtMoney(totals.exp)}</div>
+            <div className="val" style={{color: 'var(--expense-soft)', fontSize: '16px'}}>{fmtSel(totals.exp)}</div>
           </div>
         </div>
       </div>
@@ -4724,8 +4853,8 @@ function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, select
                   <div className="d2">{THAI_DAYS[d.getDay()]}</div>
                 </div>
                 <div className="chip">
-                  {inc > 0 && <div className="in">+฿{fmtMoney(inc)}</div>}
-                  {exp > 0 && <div className="out">−฿{fmtMoney(exp)}</div>}
+                  {inc > 0 && <div className="in">{fmtSel(inc, '+')}</div>}
+                  {exp > 0 && <div className="out">{fmtSel(exp, '−')}</div>}
                 </div>
               </div>
               <div className="tx-list" style={{marginTop:0}}>
@@ -4747,6 +4876,16 @@ function ChartView({ viewMonth, setViewMonth, monthTx, accountList, selectedAcco
   }, [monthTx]);
   const palette = ['#6A866C','#B85842','#88A88A','#A8BC8A','#C99A4A','#7FA678','#B0A47C','#94A37C','#5C7A5E'];
   const total = byCat.reduce((a,b)=>a+b.value,0);
+  // v5.6: render with the selected account's unit symbol + position.
+  const selUnit = selectedAccount === 'all'
+    ? { symbol: '฿', position: 'before' }
+    : getAccountUnit(selectedAccount, masterAccounts || []);
+  const fmtSel = (n) => {
+    const num = fmtMoney(n);
+    if (!selUnit.symbol) return num;
+    if (selUnit.position === 'after') return `${num} ${selUnit.symbol}`;
+    return `${selUnit.symbol}${num}`;
+  };
 
   return (
     <div>
@@ -4773,7 +4912,7 @@ function ChartView({ viewMonth, setViewMonth, monthTx, accountList, selectedAcco
         <>
           <div className="chart-wrap rise">
             <div className="total-lbl">รายจ่ายรวม</div>
-            <div className="total-val font-mono-n">฿{fmtMoney(total)}</div>
+            <div className="total-val font-mono-n">{fmtSel(total)}</div>
             <DonutChart data={byCat} palette={palette} total={total}/>
           </div>
           <div className="cat-list rise">
@@ -4787,7 +4926,7 @@ function ChartView({ viewMonth, setViewMonth, monthTx, accountList, selectedAcco
                     <div className="nm">{c.label}</div>
                     <div className="pc">{pct}% ของรายจ่าย</div>
                   </div>
-                  <div className="val">฿{fmtMoney(c.value)}</div>
+                  <div className="val">{fmtSel(c.value)}</div>
                 </div>
               );
             })}
@@ -5307,7 +5446,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.5 · ค้นหาขั้นสูง · 3 คำ + filters</div>
+      <div className="vstrip">my money · v5.6 · สัญลักษณ์หน่วยต่อบัญชี (15+ สกุล + custom)</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -5377,7 +5516,7 @@ function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 6, gap: 10}}>
           <div className="sub-ln" style={{marginTop: 0, textAlign: 'left'}}>{subText || ''}</div>
           <div className={`amt ${isIn ? 'in' : 'out'}`}>
-            {isIn ? '+' : '−'}฿{fmtMoney(t.amount, getAccountDecimals(t.accountName, accounts))}
+            {fmtAmount(t.amount, isIn, t.accountName, accounts)}
           </div>
         </div>
       </div>
@@ -5859,6 +5998,8 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
 
   // Current account's decimals (affects amount precision + display)
   const currentDecimals = getAccountDecimals(accountName.trim(), masterAccounts || []);
+  // v5.6: unit symbol+position for the currently picked account (defaults ฿ before)
+  const currentUnit = getAccountUnit(accountName.trim(), masterAccounts || []);
 
   const handleAmount = (e) => {
     let v = e.target.value.replace(/[^\d.]/g, '');
@@ -5914,7 +6055,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
 
           <div className="amount-box">
             <div className="lbl">
-              จำนวนเงิน
+              {currentUnit.symbol && currentUnit.position === 'after' ? `จำนวน (${currentUnit.symbol})` : 'จำนวนเงิน'}
               {currentDecimals > 2 && accountName.trim() && (
                 <span style={{color: 'var(--gold)', marginLeft: 8, fontSize: 10, letterSpacing: '0.05em', textTransform: 'none'}}>
                   · ทศนิยม {currentDecimals} ตำแหน่ง
@@ -5922,9 +6063,14 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
               )}
             </div>
             <div className="row">
-              <span className="cur">฿</span>
+              {currentUnit.symbol && currentUnit.position === 'before' && (
+                <span className="cur">{currentUnit.symbol}</span>
+              )}
               <input inputMode="decimal" placeholder="0" value={amount} onChange={handleAmount}
                      style={{color: type === 'income' ? 'var(--income-soft)' : 'var(--text)'}}/>
+              {currentUnit.symbol && currentUnit.position === 'after' && (
+                <span className="cur after">{currentUnit.symbol}</span>
+              )}
             </div>
           </div>
 
@@ -6404,7 +6550,7 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
                   {isIn ? <><Ic.ArrowIn size={11}/> รายรับ</> : <><Ic.ArrowOut size={11}/> รายจ่าย</>}
                 </span>
                 <span className={`amt ${isIn ? 'in' : 'out'}`}>
-                  {isIn ? '+' : '−'}฿{fmtMoney(tx.amount, decimals)}
+                  {fmtAmount(tx.amount, isIn, tx.accountName, accounts)}
                 </span>
               </div>
 
@@ -6522,7 +6668,7 @@ function ConfirmDeleteTx({ tx, onCancel, onConfirm, accounts }) {
         <div className="c-icon"><Ic.Trash size={22}/></div>
         <h3>ลบรายการนี้?</h3>
         <div className="c-desc">
-          <strong>{title}</strong> — ฿{fmtMoney(tx.amount, decimals)}
+          <strong>{title}</strong> — {fmtAmount(tx.amount, null, tx.accountName, accounts)}
           <br/>
           การลบนี้ถาวร ไม่สามารถกู้คืนได้
           {photoCount > 0 && (
@@ -6984,11 +7130,37 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
 function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpdate, onRemove, onSetPerm, isAdmin, pushToast }) {
   const [newName, setNewName] = useState('');
   const [newDecimals, setNewDecimals] = useState(2);
+  // v5.6: unit symbol per account. '__custom' is a sentinel meaning "show custom input".
+  const [newUnitChoice, setNewUnitChoice] = useState('฿');
+  const [newUnitCustom, setNewUnitCustom] = useState('');
+  const [newUnitPosition, setNewUnitPosition] = useState('before');
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState('');
   const [editDecimals, setEditDecimals] = useState(2);
+  const [editUnitChoice, setEditUnitChoice] = useState('฿');
+  const [editUnitCustom, setEditUnitCustom] = useState('');
+  const [editUnitPosition, setEditUnitPosition] = useState('before');
   const [confirmDelId, setConfirmDelId] = useState(null);
   const [permPanelId, setPermPanelId] = useState(null); // v5.0: which account's perm panel is open
+
+  // When user picks a preset, sync the position automatically.
+  // For '__custom' we leave position editable.
+  const onPickNewUnit = (choice) => {
+    setNewUnitChoice(choice);
+    if (choice !== '__custom') {
+      const preset = UNIT_PRESETS.find(p => p.symbol === choice);
+      if (preset) setNewUnitPosition(preset.position);
+    }
+  };
+  const onPickEditUnit = (choice) => {
+    setEditUnitChoice(choice);
+    if (choice !== '__custom') {
+      const preset = UNIT_PRESETS.find(p => p.symbol === choice);
+      if (preset) setEditUnitPosition(preset.position);
+    }
+  };
+  // Resolve actual symbol value to save: '__custom' → use custom textbox value.
+  const resolveSymbol = (choice, custom) => choice === '__custom' ? (custom || '') : choice;
 
   // Count usage of each account across transactions
   const usageMap = useMemo(() => {
@@ -7015,18 +7187,30 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
   const handleAdd = () => {
     const n = newName.trim();
     if (!n) return;
-    const ok = onAdd(n, newDecimals);
-    if (ok) { setNewName(''); setNewDecimals(2); }
+    const sym = resolveSymbol(newUnitChoice, newUnitCustom);
+    const ok = onAdd(n, newDecimals, sym, newUnitPosition);
+    if (ok) {
+      setNewName(''); setNewDecimals(2);
+      setNewUnitChoice('฿'); setNewUnitCustom(''); setNewUnitPosition('before');
+    }
   };
 
   const startEdit = (a) => {
     setEditingId(a.id);
     setEditName(a.name);
     setEditDecimals(Number.isFinite(a.decimals) ? a.decimals : 2);
+    // Resolve current symbol → preset id or '__custom'
+    const curSym = a.unitSymbol != null ? a.unitSymbol : '฿';
+    const curPos = a.unitPosition || guessUnitPosition(curSym);
+    const isPreset = UNIT_PRESETS.some(p => p.symbol === curSym);
+    setEditUnitChoice(isPreset ? curSym : '__custom');
+    setEditUnitCustom(isPreset ? '' : curSym);
+    setEditUnitPosition(curPos);
     setConfirmDelId(null);
   };
   const saveEdit = () => {
-    const ok = onUpdate(editingId, editName, editDecimals);
+    const sym = resolveSymbol(editUnitChoice, editUnitCustom);
+    const ok = onUpdate(editingId, editName, editDecimals, sym, editUnitPosition);
     if (ok) { setEditingId(null); setEditName(''); }
   };
   const cancelEdit = () => { setEditingId(null); setEditName(''); };
@@ -7066,8 +7250,34 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
               <Ic.Plus size={14}/>
             </button>
           </div>
+          <div className="unit-picker">
+            <label className="unit-picker-lbl">สัญลักษณ์หน่วย</label>
+            <select className="unit-select"
+                    value={newUnitChoice}
+                    onChange={e => onPickNewUnit(e.target.value)}>
+              {UNIT_PRESETS.map(p => (
+                <option key={p.label} value={p.symbol}>{p.label}</option>
+              ))}
+              <option value="__custom">⚙️ กำหนดเอง...</option>
+            </select>
+            {newUnitChoice === '__custom' && (
+              <div className="unit-custom-row">
+                <input type="text" maxLength="6"
+                       value={newUnitCustom}
+                       onChange={e => setNewUnitCustom(e.target.value)}
+                       placeholder="เช่น kg, ตัว, กล่อง"
+                       className="unit-custom-input"/>
+                <select className="unit-pos-select"
+                        value={newUnitPosition}
+                        onChange={e => setNewUnitPosition(e.target.value)}>
+                  <option value="before">ก่อนเลข ({newUnitCustom || '◌'}100)</option>
+                  <option value="after">หลังเลข (100 {newUnitCustom || '◌'})</option>
+                </select>
+              </div>
+            )}
+          </div>
           <div className="acct-mgr-hint">
-            💡 บัญชีปกติใช้ 2 ตำแหน่ง · คริปโต/ทองใช้ได้ถึง 10 ตำแหน่ง
+            💡 บัญชีปกติใช้ 2 ตำแหน่ง · คริปโต/ทองใช้ได้ถึง 10 ตำแหน่ง · เลือกหน่วยตามชนิดบัญชี
           </div>
 
           {/* List */}
@@ -7109,6 +7319,32 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
                                        if (e.key === 'Enter') saveEdit();
                                        else if (e.key === 'Escape') cancelEdit();
                                      }}/>
+                            </div>
+                            <div className="unit-picker inline">
+                              <label className="unit-picker-lbl">สัญลักษณ์หน่วย</label>
+                              <select className="unit-select"
+                                      value={editUnitChoice}
+                                      onChange={e => onPickEditUnit(e.target.value)}>
+                                {UNIT_PRESETS.map(p => (
+                                  <option key={p.label} value={p.symbol}>{p.label}</option>
+                                ))}
+                                <option value="__custom">⚙️ กำหนดเอง...</option>
+                              </select>
+                              {editUnitChoice === '__custom' && (
+                                <div className="unit-custom-row">
+                                  <input type="text" maxLength="6"
+                                         value={editUnitCustom}
+                                         onChange={e => setEditUnitCustom(e.target.value)}
+                                         placeholder="เช่น kg, ตัว"
+                                         className="unit-custom-input"/>
+                                  <select className="unit-pos-select"
+                                          value={editUnitPosition}
+                                          onChange={e => setEditUnitPosition(e.target.value)}>
+                                    <option value="before">ก่อนเลข</option>
+                                    <option value="after">หลังเลข</option>
+                                  </select>
+                                </div>
+                              )}
                             </div>
                           </div>
                           <div className="actions">
