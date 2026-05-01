@@ -588,6 +588,53 @@ body:has(.sheet-backdrop) nav.tabbar {
   text-align: center; width: 65%; caret-color: var(--gold);
 }
 
+/* v5.12: Per-digit spinner — ^ above each digit increments that place value,
+   v below decrements. Acts as an overlay sitting on top of the existing
+   <input> so direct typing still works. The spinner row is hidden until the
+   input has a value, to avoid visual clutter for users who just want to type. */
+.amount-spinner-stack {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 4px;
+}
+.amount-spinner-row {
+  display: flex; gap: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  user-select: none;
+  height: 22px;
+  align-items: center;
+}
+.amount-spinner-row .step {
+  width: 26px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-faint);
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background .15s, color .15s, transform .1s;
+}
+.amount-spinner-row .step.up:hover, .amount-spinner-row .step.up:active {
+  background: rgba(139,179,139,0.18);
+  color: var(--income-soft);
+}
+.amount-spinner-row .step.down:hover, .amount-spinner-row .step.down:active {
+  background: rgba(184,88,66,0.18);
+  color: var(--expense-soft);
+}
+.amount-spinner-row .step:active { transform: scale(0.85); }
+.amount-spinner-row .gap {
+  width: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: transparent;
+  font-size: 14px;
+}
+.amount-spinner-row.dot-row .gap { color: var(--text-faint); }
+.amount-input-wrap {
+  display: flex; align-items: center; justify-content: center;
+}
+
 /* Category grid */
 .cat-head {
   font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
@@ -730,6 +777,18 @@ body:has(.sheet-backdrop) nav.tabbar {
 .signin .skip {
   margin-top: 14px; font-size: 12px; color: var(--text-dim);
   text-decoration: underline; text-underline-offset: 3px;
+}
+/* v5.12: explicit redirect fallback link */
+.signin .signin-alt {
+  margin-top: 16px;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-decoration: underline; text-underline-offset: 3px;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.signin .signin-alt:active {
+  background: var(--surface2);
 }
 .signin .hint {
   margin-top: 32px; font-size: 11px; color: var(--text-faint); max-width: 300px; line-height: 1.6;
@@ -2554,40 +2613,59 @@ function isInAppBrowser() {
     const ua = navigator.userAgent || '';
     // Common in-app browser markers — covers Messenger, FB, Instagram, LINE,
     // KakaoTalk, WeChat, TikTok, etc.
+    // v5.12: Removed the `window.opener !== null` check because Chrome on Android
+    // sometimes has a non-null opener even when running as a normal tab (e.g. when
+    // the user followed a link from Messenger → opened in Chrome). That false
+    // positive made us route to redirect prematurely, but worse, we still tried
+    // popup first when the user clicked the button explicitly, leading to a
+    // visible block_nested_popups error before the redirect fallback kicked in.
     if (/FBAN|FBAV|Messenger|Instagram|Line\/|KAKAOTALK|MicroMessenger|Twitter|TikTok|Snapchat/i.test(ua)) {
       return true;
     }
-    // Detect "is this window itself a popup" — works for any in-app browser even if
-    // the user-agent doesn't list itself. window.opener !== null means another window
-    // opened us (which is what in-app browsers do).
-    if (window.opener && window.opener !== window) return true;
   } catch {}
   return false;
 }
 
 async function signIn() {
   const inst = await initMsal();
-  // v5.2: If we're already inside an in-app browser, skip popup and go straight to
-  // redirect — popup will only fail with block_nested_popups.
+  // to redirect — popup will only fail with block_nested_popups.
   if (isInAppBrowser()) {
     await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
     return null; // navigation happens; nothing more to do
   }
-  // Try popup first (works in regular Chrome).
-  // If MSAL throws ANY popup-related error, fall back to redirect.
+  // v5.12: Try popup first (works in regular Chrome desktop and most mobile
+  // Chrome). On any popup-related failure we silently fall through to redirect
+  // so the user never sees the raw "block_nested_popups" error in the UI.
   try {
     const res = await inst.loginPopup({ scopes: CFG.scopes, prompt: 'select_account' });
     return res.account;
   } catch (e) {
     const code = String(e?.errorCode || e?.errorMessage || e?.message || '');
-    const isPopupBlocked = /block_nested_popups|popup_window_error|empty_window_error|popup_blocked/i.test(code)
+    const isPopupBlocked =
+      /block_nested_popups|popup_window_error|empty_window_error|popup_blocked|user_cancelled/i.test(code)
       || (e?.name === 'BrowserAuthError' && /popup/i.test(code));
     if (isPopupBlocked) {
-      await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
+      // Silent transition — user will be redirected to Microsoft, not see an error.
+      try {
+        await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
+      } catch (redirErr) {
+        // If even redirect fails (very rare — bad config etc.) re-throw the
+        // original popup error so the user gets some feedback rather than a
+        // silent dead end.
+        throw e;
+      }
       return null;
     }
     throw e;
   }
+}
+
+// v5.12: Explicit redirect-based sign-in for users where popup doesn't work.
+// Triggered by the "ลองวิธีอื่น" link on the sign-in screen. This always
+// navigates away from the page, so the function never returns normally.
+async function signInRedirect() {
+  const inst = await initMsal();
+  await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
 }
 
 async function signOut() {
@@ -2975,8 +3053,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.11';
-const APP_VERSION_TAG = 'Auto-grow input + filter sort + edge-aligned actions';
+const APP_VERSION = 'v5.13';
+const APP_VERSION_TAG = 'Per-digit spinner ✦ format ทศนิยมตามบัญชี';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -4049,8 +4127,27 @@ function App() {
       setAccount(acc);
     } catch (e) {
       console.error(e);
-      setAuthError(String(e.message || e));
+      // v5.12: Don't display popup-related errors — they're handled internally
+      // (we always fall back to redirect). If we're here it's a genuine config
+      // or network error worth showing.
+      const msg = String(e?.errorCode || e?.message || e || '');
+      if (!/popup|block_nested|user_cancelled/i.test(msg)) {
+        setAuthError(msg);
+      }
     } finally { setAuthLoading(false); }
+  };
+  // v5.12: Explicit redirect path. Used by the "ลองวิธีอื่น" link when popup
+  // sign-in doesn't work for the user (e.g. opened from another app).
+  const doSignInRedirect = async () => {
+    setAuthLoading(true); setAuthError(null);
+    try {
+      await signInRedirect();
+      // navigation happens — page unloads; no further code runs here
+    } catch (e) {
+      console.error(e);
+      setAuthError(String(e?.errorCode || e?.message || e || ''));
+      setAuthLoading(false);
+    }
   };
   const doSignOut = async () => {
     try { await signOut(); } catch (e) { console.error(e); }
@@ -4128,6 +4225,7 @@ function App() {
         loading={authLoading}
         error={authError}
         onSignIn={doSignIn}
+        onSignInRedirect={doSignInRedirect}
         onSkip={() => setSkipSync(true)}
       />
     );
@@ -4551,7 +4649,7 @@ function SetupNeeded() {
 }
 
 // ============ Sign In ============
-function SignIn({ loading, error, onSignIn, onSkip }) {
+function SignIn({ loading, error, onSignIn, onSignInRedirect, onSkip }) {
   // v5.2: warn users opening from Messenger/LINE in-app browsers — login still works
   // (we use redirect fallback) but it's smoother in real Chrome.
   const inApp = isInAppBrowser();
@@ -4575,6 +4673,13 @@ function SignIn({ loading, error, onSignIn, onSkip }) {
       </button>
       <button className="skip" onClick={onSkip}>ใช้งานแบบออฟไลน์ก่อน</button>
       {error && <div className="err">⚠️ {error}</div>}
+      {/* v5.12: explicit redirect option for users where the popup approach
+          has trouble (common on Android Chrome when opened from another app) */}
+      {onSignInRedirect && !loading && (
+        <button className="signin-alt" onClick={onSignInRedirect}>
+          ⚠️ เข้าสู่ระบบไม่ได้? ลองวิธีอื่น (redirect)
+        </button>
+      )}
       <div className="hint">
         ข้อมูลจะถูกเก็บในโฟลเดอร์ <strong style={{color: 'var(--gold)'}}>/Apps/</strong> บน OneDrive ของคุณเท่านั้น แอปเข้าถึงไฟล์อื่นไม่ได้
       </div>
@@ -5657,7 +5762,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.11 · Input wrap หลายบรรทัด + filter sort</div>
+      <div className="vstrip">my money · v5.13 · Per-digit spinner ✦ format ทศนิยมตามบัญชี</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -6274,6 +6379,21 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
   // v5.6: unit symbol+position for the currently picked account (defaults ฿ before)
   const currentUnit = getAccountUnit(accountName.trim(), masterAccounts || []);
 
+  // v5.12: when the edit sheet first opens for an existing transaction, format
+  // the amount with the account's decimal precision (e.g. "2" → "2.00") so it
+  // visually matches the on-list display. Skip while the input is focused so
+  // we don't fight the user mid-typing.
+  const didInitialFormatRef = useRef(false);
+  useEffect(() => {
+    if (didInitialFormatRef.current) return;
+    if (!initial?.amount) return;
+    if (!accountName.trim()) return; // wait until decimals are known via account
+    const n = parseFloat(amount);
+    if (isNaN(n)) return;
+    setAmount(n.toFixed(currentDecimals));
+    didInitialFormatRef.current = true;
+  }, [accountName, currentDecimals, initial, amount]);
+
   const handleAmount = (e) => {
     let v = e.target.value.replace(/[^\d.]/g, '');
     const parts = v.split('.');
@@ -6285,6 +6405,37 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
     }
     setAmount(v);
   };
+
+  // v5.12: Per-digit spinner — adjust the amount by ±1, ±0.1, ±0.01, etc.
+  // `delta` is a signed power-of-10 magnitude (e.g. +1, -1, +0.1, -0.01).
+  // We do the math with rounding on the integer scale to avoid float drift,
+  // then re-format using the account's decimals so the displayed value
+  // always shows trailing zeros (e.g. "2.00" instead of "2").
+  const stepAmount = (delta) => {
+    const cur = parseFloat(amount) || 0;
+    const next = cur + delta;
+    if (next < 0) return; // never go negative
+    // Round to current account precision, then format with that many decimals.
+    const factor = Math.pow(10, currentDecimals);
+    const rounded = Math.round(next * factor) / factor;
+    setAmount(rounded.toFixed(currentDecimals));
+  };
+
+  // Build the layout for the spinner rows. The "shape" is:
+  //   - integer part: at least 1 digit (more if amount is large) → each gets a step button
+  //   - decimal point separator (if decimals > 0)
+  //   - decimal part: `currentDecimals` digits, each with its own step button
+  // Step magnitudes:
+  //   - integer place i (rightmost = 0) → 10^i
+  //   - decimal place i (1-indexed from the dot) → 10^(-i)
+  const spinnerLayout = useMemo(() => {
+    const intLen = Math.max(1, String(Math.floor(parseFloat(amount) || 0)).length);
+    const ints = [];
+    for (let i = intLen - 1; i >= 0; i--) ints.push(Math.pow(10, i));
+    const decs = [];
+    for (let i = 1; i <= currentDecimals; i++) decs.push(Math.pow(10, -i));
+    return { ints, decs, hasDot: currentDecimals > 0 };
+  }, [amount, currentDecimals]);
 
   const openFilePicker = (useCamera) => {
     if (photoInputRef.current) {
@@ -6342,15 +6493,55 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
                 </span>
               )}
             </div>
+
+            {/* v5.12: Spinner row above input — ^ per digit */}
+            <div className="amount-spinner-row" aria-hidden="true">
+              {spinnerLayout.ints.map((mag, i) => (
+                <button key={`up-i-${i}`} type="button" className="step up"
+                        onClick={() => stepAmount(mag)} tabIndex={-1}
+                        title={`+${mag}`}>^</button>
+              ))}
+              {spinnerLayout.hasDot && <span className="gap"></span>}
+              {spinnerLayout.decs.map((mag, i) => (
+                <button key={`up-d-${i}`} type="button" className="step up"
+                        onClick={() => stepAmount(mag)} tabIndex={-1}
+                        title={`+${mag}`}>^</button>
+              ))}
+            </div>
+
             <div className="row">
               {currentUnit.symbol && currentUnit.position === 'before' && (
                 <span className="cur">{currentUnit.symbol}</span>
               )}
               <input inputMode="decimal" placeholder="0" value={amount} onChange={handleAmount}
+                     onBlur={() => {
+                       // Format with trailing zeros when the user leaves the field,
+                       // so the display matches the account's precision.
+                       if (amount !== '' && !isNaN(parseFloat(amount))) {
+                         setAmount(parseFloat(amount).toFixed(currentDecimals));
+                       }
+                     }}
                      style={{color: type === 'income' ? 'var(--income-soft)' : 'var(--text)'}}/>
               {currentUnit.symbol && currentUnit.position === 'after' && (
                 <span className="cur after">{currentUnit.symbol}</span>
               )}
+            </div>
+
+            {/* v5.12: Spinner row below input — v per digit (uses same magnitudes) */}
+            <div className="amount-spinner-row dot-row" aria-hidden="true">
+              {spinnerLayout.ints.map((mag, i) => (
+                <button key={`dn-i-${i}`} type="button" className="step down"
+                        onClick={() => stepAmount(-mag)} tabIndex={-1}
+                        title={`−${mag}`}
+                        style={{transform:'rotate(180deg)'}}>^</button>
+              ))}
+              {spinnerLayout.hasDot && <span className="gap">·</span>}
+              {spinnerLayout.decs.map((mag, i) => (
+                <button key={`dn-d-${i}`} type="button" className="step down"
+                        onClick={() => stepAmount(-mag)} tabIndex={-1}
+                        title={`−${mag}`}
+                        style={{transform:'rotate(180deg)'}}>^</button>
+              ))}
             </div>
           </div>
 
