@@ -2777,7 +2777,7 @@ async function remoteSave(data, options = {}) {
       (!Array.isArray(data?.items)        || data.items.length === 0);
     if (looksEmpty) {
       try {
-        const remote = await remoteLoad();
+        const remote = await remoteFetch();
         const remoteHasData =
           (Array.isArray(remote?.transactions) && remote.transactions.length > 0) ||
           (Array.isArray(remote?.accounts)     && remote.accounts.length > 0)     ||
@@ -2805,7 +2805,7 @@ async function remoteSave(data, options = {}) {
   // erase the first one's edits.
   if (!force && expectedLastModified) {
     try {
-      const remote = await remoteLoad();
+      const remote = await remoteFetch();
       const remoteTs = remote?.lastModified || null;
       if (remoteTs && remoteTs !== expectedLastModified) {
         const err = new Error('REMOTE_MOVED_FORWARD');
@@ -3151,8 +3151,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.14';
-const APP_VERSION_TAG = 'แก้บั๊กข้อมูลหาย: ID ไทย + Empty guard + Optimistic lock';
+const APP_VERSION = 'v5.14.1';
+const APP_VERSION_TAG = 'แก้ typo remoteLoad → remoteFetch';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -5921,7 +5921,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.14 · แก้บั๊กข้อมูลหาย — Safe Sync</div>
+      <div className="vstrip">my money · v5.14.1 · Safe Sync (typo fix)</div>
 
       {showLessonsEditor && (
         <LessonsEditor
