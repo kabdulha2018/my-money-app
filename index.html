@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#F4F1EA">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -386,31 +386,6 @@ h1.page-title {
 }
 .month-sel .today-btn:active { transform: scale(0.95); }
 
-/* v5.8: Inline thumbnail in list rows */
-.tx-row-thumb-wrap {
-  position: relative;
-  flex-shrink: 0;
-  width: 48px; height: 48px;
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--surface2);
-  border: 1px solid var(--line);
-}
-.tx-row-thumb {
-  width: 100%; height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.tx-row-thumb-badge {
-  position: absolute; top: 2px; right: 2px;
-  background: rgba(0,0,0,0.65); color: #fff;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9px; font-weight: 600;
-  padding: 1px 5px; border-radius: 999px;
-  line-height: 1.2;
-  letter-spacing: 0.02em;
-}
-
 /* Tx row */
 .tx-list { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .tx-row {
@@ -581,7 +556,6 @@ body:has(.sheet-backdrop) nav.tabbar {
 .amount-box .cur {
   font-family: 'IBM Plex Mono', monospace; font-size: 20px; color: var(--text-dim);
 }
-.amount-box .cur.after { font-size: 16px; }
 .amount-box input {
   font-family: 'Noto Serif Thai', serif; font-variant-numeric: tabular-nums;
   font-size: 44px; line-height: 1; background: transparent; outline: none; border: none;
@@ -714,13 +688,6 @@ body:has(.sheet-backdrop) nav.tabbar {
   color: var(--expense-soft); font-size: 12px; max-width: 340px;
   text-align: left; line-height: 1.5;
 }
-.signin .inapp-warn {
-  margin: 18px 0 -10px; padding: 12px 14px; border-radius: 12px;
-  background: rgba(201,154,74,0.12); border: 1px solid rgba(201,154,74,0.45);
-  color: var(--gold); font-size: 12px; max-width: 340px;
-  text-align: left; line-height: 1.55;
-}
-.signin .inapp-warn strong { color: var(--text); }
 
 /* Setup needed */
 .setup-needed {
@@ -1381,43 +1348,6 @@ body:has(.sheet-backdrop) nav.tabbar {
 }
 .decimals-input-wrap .dec-input:focus { border-color: var(--gold); }
 
-/* v5.6: Unit symbol picker (currency / item-count) */
-.unit-picker {
-  display: flex; flex-direction: column; gap: 6px;
-  margin-top: 10px; margin-bottom: 4px;
-}
-.unit-picker.inline { margin-top: 8px; }
-.unit-picker-lbl {
-  font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
-  color: var(--text-faint);
-}
-.unit-select {
-  padding: 10px 12px; font-size: 13px;
-  background: var(--surface2); border: 1px solid var(--line); border-radius: 10px;
-  color: var(--text); outline: none; font-family: inherit;
-  appearance: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23b0a47c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
-  background-repeat: no-repeat; background-position: right 12px center;
-  padding-right: 30px;
-}
-.unit-select:focus { border-color: var(--gold); }
-.unit-custom-row {
-  display: flex; gap: 6px;
-}
-.unit-custom-input {
-  flex: 1; padding: 10px 12px; font-size: 13px;
-  background: var(--surface2); border: 1px solid var(--line); border-radius: 10px;
-  color: var(--text); outline: none; min-width: 0;
-  font-family: inherit;
-}
-.unit-custom-input:focus { border-color: var(--gold); }
-.unit-pos-select {
-  padding: 10px 8px; font-size: 12px;
-  background: var(--surface2); border: 1px solid var(--line); border-radius: 10px;
-  color: var(--text); outline: none; font-family: inherit;
-  flex-shrink: 0;
-}
-
 .add-btn-gold {
   padding: 0 16px; border-radius: 12px;
   background: var(--gold); color: #FBFAF6; font-weight: 600;
@@ -1532,7 +1462,7 @@ body:has(.sheet-backdrop) nav.tabbar {
   margin-right: 4px; font-size: 14px;
 }
 
-/* v4.0: Profile banner — shows current profile + switch button */
+/* v3.6: Shared role banner */
 .shared-banner {
   position: sticky;
   top: 0;
@@ -1543,345 +1473,35 @@ body:has(.sheet-backdrop) nav.tabbar {
   margin: 0 -16px 14px;
   background: linear-gradient(90deg, rgba(106,134,108,0.18), rgba(47,107,61,0.18));
   border-bottom: 1px solid var(--line-strong);
-  font-size: 13px; color: var(--income-soft);
+  font-size: 12px; color: var(--income-soft);
   letter-spacing: 0.02em;
   backdrop-filter: blur(8px);
 }
-.exit-shared-btn {
-  font-size: 11px;
-  color: var(--gold);
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.55);
-  border: 1px solid var(--line);
-  font-family: inherit;
-  text-decoration: none;
+.shared-lock-icon {
+  font-size: 14px;
+  opacity: 0.85;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.1));
 }
-.exit-shared-btn:active { transform: scale(0.94); }
-
-/* v5.0: Per-user permission panel + admin badges */
-.vis-select {
-  font-size: 11px;
-  padding: 5px 8px;
-  border-radius: 8px;
-  background: var(--surface); color: var(--text);
-  border: 1px solid var(--line);
-  font-family: inherit;
-}
-.shared-badge {
-  display: inline-block;
-  margin-right: 5px;
-  font-size: 13px;
-  vertical-align: -1px;
-}
-.admin-tag {
-  display: inline-block;
-  margin-top: 4px;
-  padding: 2px 8px;
-  background: rgba(201,154,74,0.15);
-  border: 1px solid rgba(201,154,74,0.4);
-  border-radius: 999px;
-  font-size: 9px;
-  font-family: 'IBM Plex Mono', monospace;
-  letter-spacing: 0.08em;
-  color: var(--gold);
-  text-transform: uppercase;
-}
-.admin-tag-inline {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 1px 7px;
-  background: var(--gold);
-  color: var(--bg);
-  border-radius: 999px;
-  font-size: 9px;
-  font-family: 'IBM Plex Mono', monospace;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  vertical-align: middle;
-}
-.perm-btn {
+/* Share toggle button in account manager */
+.share-btn {
   width: 30px; height: 30px; border-radius: 8px;
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--surface); color: var(--text-faint);
   border: 1px solid var(--line);
-  transition: transform .15s, background .2s, color .2s;
+  transition: transform .15s, background .2s, color .2s, border-color .2s;
 }
-.perm-btn:active { transform: scale(0.9); background: rgba(106,134,108,0.18); color: var(--gold); }
-.perm-panel {
-  margin-top: 12px;
-  padding: 12px;
-  background: var(--surface2);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  display: flex; flex-direction: column; gap: 8px;
+.share-btn:active { transform: scale(0.9); }
+.share-btn.on {
+  background: rgba(47,107,61,0.14);
+  border-color: var(--income-soft);
+  color: var(--income-soft);
 }
-.perm-panel-hd {
-  font-size: 11px; color: var(--text-faint);
-  letter-spacing: 0.04em; text-transform: uppercase;
-  margin-bottom: 4px;
-}
-.perm-row {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px;
-  padding: 6px 4px;
-}
-.perm-user {
-  font-size: 13px; color: var(--text);
-  display: inline-flex; align-items: center; gap: 8px;
-  flex: 1; min-width: 0;
-}
-.perm-user-icon { font-size: 18px; }
-.perm-empty {
-  font-size: 12px; color: var(--text-faint);
-  text-align: center; padding: 8px;
-}
-
-/* v5.0: Users manager UI */
-.user-add-card {
-  background: var(--surface2);
-  border: 1px solid var(--gold);
-  border-radius: 12px;
-  padding: 12px;
-  margin-bottom: 14px;
-}
-.user-add-row {
-  display: flex; gap: 8px; align-items: center;
-}
-.user-icon-select {
-  font-size: 22px;
-  padding: 6px 4px;
-  border-radius: 8px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  color: var(--text);
-  font-family: inherit;
-  width: 56px; text-align: center;
-}
-.user-name-input {
-  flex: 1; min-width: 0;
-  font-size: 14px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  color: var(--text);
-  font-family: inherit;
-}
-.user-row-icon {
-  font-size: 22px;
-  margin-right: 8px;
-  vertical-align: -2px;
-}
-.me-tag {
+.shared-badge {
   display: inline-block;
-  margin-left: 8px;
-  font-size: 10px;
-  color: var(--gold);
-  font-style: italic;
+  margin-right: 4px;
+  font-size: 12px;
+  vertical-align: -1px;
 }
-.mgr-row.me {
-  background: rgba(106,134,108,0.06);
-  border-color: rgba(106,134,108,0.3);
-}
-.del-btn-confirm {
-  width: 30px; height: 30px; border-radius: 8px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--expense); color: #fff;
-  border: 1px solid var(--expense);
-}
-.del-btn-confirm:active { transform: scale(0.9); }
-
-/* v5.5: Advanced search */
-.search-btn {
-  width: 36px; height: 36px; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--surface); color: var(--gold);
-  border: 1px solid var(--line);
-  transition: transform .15s, background .2s;
-}
-.search-btn:active { transform: scale(0.9); background: rgba(106,134,108,0.18); }
-.search-form {
-  display: flex; flex-direction: column; gap: 10px;
-  margin-top: 6px;
-}
-.search-label {
-  font-size: 11px;
-  color: var(--text-faint);
-  letter-spacing: 0.06em; text-transform: uppercase;
-  margin-top: 4px;
-}
-.search-input {
-  width: 100%;
-  font-size: 14px;
-  padding: 11px 13px;
-  border-radius: 10px;
-  background: var(--surface); border: 1px solid var(--line);
-  color: var(--text); font-family: inherit;
-}
-.search-input:focus { outline: 1px solid var(--gold); border-color: var(--gold); }
-.search-divider {
-  height: 1px; background: var(--line);
-  margin: 6px 0; opacity: 0.5;
-}
-.search-date-row {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-}
-.search-date-cell {
-  display: flex; flex-direction: column; gap: 4px;
-}
-.search-date-lbl {
-  font-size: 10px; color: var(--text-faint);
-  letter-spacing: 0.04em;
-}
-.search-actions {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
-  margin-top: 10px;
-}
-.search-results {
-  margin-top: 16px;
-  display: flex; flex-direction: column; gap: 6px;
-  border-top: 1px solid var(--line);
-  padding-top: 14px;
-}
-.search-results-hd {
-  font-size: 11px; color: var(--text-faint);
-  letter-spacing: 0.06em; text-transform: uppercase;
-  margin-bottom: 4px;
-}
-.search-result-row {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px;
-  padding: 11px 12px; border-radius: 10px;
-  background: var(--surface); border: 1px solid var(--line);
-  font-family: inherit; color: var(--text);
-  text-align: left; width: 100%;
-  transition: transform .12s, background .2s;
-}
-.search-result-row:active { transform: scale(0.98); background: var(--surface2); }
-.search-result-main {
-  flex: 1; min-width: 0;
-  display: flex; flex-direction: column; gap: 3px;
-}
-.search-result-name {
-  font-size: 14px; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.search-result-meta {
-  font-size: 11px; color: var(--text-faint);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.search-result-amount {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 14px; font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.search-result-amount.in  { color: var(--income); }
-.search-result-amount.out { color: var(--expense); }
-
-/* v4.0: Profile picker (post-login screen) */
-.profile-picker {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center;
-  min-height: 100dvh; padding: 20px; text-align: center;
-}
-.profile-picker .logo-mini {
-  font-family: Georgia, serif;
-  font-size: 56px;
-  width: 88px; height: 88px;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--gold); color: var(--bg);
-  margin-bottom: 18px;
-  box-shadow: 0 8px 30px rgba(106,134,108,0.35);
-}
-.profile-picker-title {
-  font-size: 26px;
-  margin-bottom: 28px;
-  color: var(--text);
-}
-.profile-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
-  width: 100%; max-width: 320px;
-}
-.profile-grid.three-col {
-  grid-template-columns: repeat(2, 1fr);
-  max-width: 360px;
-}
-@media (min-width: 380px) {
-  .profile-grid.three-col { grid-template-columns: repeat(3, 1fr); }
-}
-.profile-btn {
-  display: flex; flex-direction: column; align-items: center;
-  padding: 22px 12px; border-radius: 16px;
-  background: var(--surface); border: 1px solid var(--line);
-  color: var(--text); font-family: inherit;
-  transition: transform .15s, background .2s, border-color .2s;
-}
-.profile-btn:active {
-  transform: scale(0.96);
-  background: var(--surface2);
-  border-color: var(--gold);
-}
-.profile-btn .icon { font-size: 40px; margin-bottom: 8px; }
-.profile-btn .name { font-size: 13px; line-height: 1.3; }
-.profile-hint {
-  margin-top: 22px; font-size: 12px; color: var(--text-faint);
-}
-
-/* v4.0: PIN pad screen */
-.pin-pad {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: flex-start;
-  min-height: 100dvh; padding: 60px 20px 32px;
-  text-align: center;
-  position: relative;
-}
-.pin-back {
-  position: absolute; top: 16px; left: 16px;
-  width: 40px; height: 40px; border-radius: 50%;
-  background: var(--surface); border: 1px solid var(--line);
-  color: var(--text); display: inline-flex; align-items: center; justify-content: center;
-}
-.pin-back:active { transform: scale(0.92); }
-.pin-icon { font-size: 56px; margin-bottom: 8px; }
-.pin-name { font-family: 'Noto Serif Thai', serif; font-size: 22px; color: var(--text); margin: 0; }
-.pin-prompt { font-size: 13px; color: var(--text-dim); margin-top: 10px; }
-.pin-prompt.err { color: var(--expense-soft); }
-
-.pin-dots { display: flex; gap: 14px; margin: 26px 0 28px; }
-.pin-dot {
-  width: 16px; height: 16px; border-radius: 50%;
-  border: 2px solid var(--gold);
-  background: transparent;
-  transition: background .15s, border-color .15s;
-}
-.pin-dot.filled { background: var(--gold); }
-.pin-dot.err { border-color: var(--expense-soft); background: var(--expense-soft); }
-.pin-dots.shake { animation: pin-shake 0.4s; }
-@keyframes pin-shake {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-8px); }
-  40% { transform: translateX(8px); }
-  60% { transform: translateX(-6px); }
-  80% { transform: translateX(6px); }
-}
-
-.pin-keys {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 18px; max-width: 280px; margin: 0 auto;
-}
-.pin-key {
-  width: 64px; height: 64px; border-radius: 50%;
-  background: var(--surface); border: 1px solid var(--line);
-  font-size: 24px; font-family: 'IBM Plex Mono', monospace;
-  display: inline-flex; align-items: center; justify-content: center;
-  color: var(--text);
-  transition: transform .1s, background .15s;
-}
-.pin-key:active { transform: scale(0.9); background: rgba(106,134,108,0.18); }
-.pin-key.empty { background: transparent; border: none; pointer-events: none; }
-.pin-key.del { font-size: 20px; }
 
 /* v3.5: Offline storage panel */
 .cache-stats {
@@ -2014,7 +1634,7 @@ body:has(.sheet-backdrop) nav.tabbar {
   margin-top: 2px; letter-spacing: 0.18em;
 }
 .swipe-area {
-  touch-action: pan-y pinch-zoom; /* allow vertical scroll and pinch zoom */
+  touch-action: pan-y; /* allow vertical scroll, but we control horizontal */
 }
 
 /* v2.6: Thumbnail strip in preview (separate card, full width) */
@@ -2220,9 +1840,6 @@ const Ic = {
   Image:     (p) => <Icon {...p} d={["M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z","M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z","m21 15-5-5L5 21"]} />,
   Eye:       (p) => <Icon {...p} d={["M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z","M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"]} />,
   Pencil:    (p) => <Icon {...p} d={["M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"]} />,
-  Users:     (p) => <Icon {...p} d={["M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2","M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z","M23 21v-2a4 4 0 0 0-3-3.87","M16 3.13a4 4 0 0 1 0 7.75"]} />,
-  Lock:      (p) => <Icon {...p} d={["M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z","M7 11V7a5 5 0 0 1 10 0v4"]} />,
-  Search:    (p) => <Icon {...p} d={["M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z","M21 21l-4.35-4.35"]} />,
 };
 
 // ========== Categories ==========
@@ -2286,60 +1903,6 @@ const getAccountDecimals = (accountName, accounts) => {
   const found = accounts.find(a => (a.name || '').toLowerCase() === n);
   return found ? (Number.isFinite(found.decimals) ? found.decimals : 2) : 2;
 };
-// v5.6: Currency / unit symbol presets — admin can also enter custom symbols.
-// `position` is 'before' for currency-style symbols (฿100, $100, €100) or
-// 'after' for unit nouns (5 ชิ้น, 3 kg). Empty string = no symbol shown.
-const UNIT_PRESETS = [
-  { symbol: '฿',    label: '฿ บาท (THB)',           position: 'before' },
-  { symbol: '$',    label: '$ ดอลลาร์สหรัฐ (USD)',   position: 'before' },
-  { symbol: '€',    label: '€ ยูโร (EUR)',          position: 'before' },
-  { symbol: '£',    label: '£ ปอนด์อังกฤษ (GBP)',   position: 'before' },
-  { symbol: '¥',    label: '¥ เยน/หยวน (JPY/CNY)',  position: 'before' },
-  { symbol: '₩',    label: '₩ วอนเกาหลี (KRW)',     position: 'before' },
-  { symbol: 'CHF',  label: 'CHF ฟรังก์สวิส',         position: 'before' },
-  { symbol: 'A$',   label: 'A$ ดอลลาร์ออสเตรเลีย',   position: 'before' },
-  { symbol: 'C$',   label: 'C$ ดอลลาร์แคนาดา',       position: 'before' },
-  { symbol: 'S$',   label: 'S$ ดอลลาร์สิงคโปร์',     position: 'before' },
-  { symbol: 'HK$',  label: 'HK$ ดอลลาร์ฮ่องกง',      position: 'before' },
-  { symbol: '₹',    label: '₹ รูปีอินเดีย (INR)',    position: 'before' },
-  { symbol: 'RM',   label: 'RM ริงกิตมาเลเซีย (MYR)', position: 'before' },
-  { symbol: '₿',    label: '₿ Bitcoin (BTC)',        position: 'before' },
-  { symbol: 'g',    label: 'g กรัม (ทอง)',           position: 'after'  },
-  { symbol: 'ชิ้น', label: 'ชิ้น (สิ่งของ)',          position: 'after'  },
-  { symbol: '',     label: '— ไม่มีสัญลักษณ์ —',     position: 'before' },
-];
-// Resolve the unit symbol + position for an account name.
-// Defaults: legacy/missing accounts → '฿' before (Thai baht), so old data still
-// renders correctly with no migration needed.
-const guessUnitPosition = (symbol) => {
-  if (!symbol) return 'before';
-  const found = UNIT_PRESETS.find(p => p.symbol === symbol);
-  return found ? found.position : 'before';
-};
-const getAccountUnit = (accountName, accounts) => {
-  const fallback = { symbol: '฿', position: 'before' };
-  if (!accountName || !Array.isArray(accounts)) return fallback;
-  const n = accountName.trim().toLowerCase();
-  const found = accounts.find(a => (a.name || '').toLowerCase() === n);
-  if (!found) return fallback;
-  // unitSymbol === '' is a valid value (means "no symbol"); only undefined/null
-  // falls back to '฿' for backward compatibility with pre-v5.6 data.
-  const symbol = found.unitSymbol != null ? found.unitSymbol : '฿';
-  const position = found.unitPosition || guessUnitPosition(symbol);
-  return { symbol, position };
-};
-// Centralised amount formatter. `isIn` is the income/expense sign to prepend
-// ('+' true / '−' false / null = no sign). Currency symbols (฿, $, €) appear
-// before the number; unit nouns (ชิ้น, g) appear after with a space.
-const fmtAmount = (amount, isIn, accountName, accounts) => {
-  const decimals = getAccountDecimals(accountName, accounts);
-  const { symbol, position } = getAccountUnit(accountName, accounts);
-  const sign = isIn === true ? '+' : isIn === false ? '−' : '';
-  const num = fmtMoney(amount, decimals);
-  if (!symbol) return `${sign}${num}`;
-  if (position === 'after') return `${sign}${num} ${symbol}`;
-  return `${sign}${symbol}${num}`;
-};
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const nowTime = () => {
   const d = new Date();
@@ -2366,83 +1929,20 @@ const LS_KEY = 'mymoney:v1';
 function loadLocal() {
   try {
     const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return { transactions: [], items: [], accounts: [], projects: [], categories: [], users: [], lastModified: null };
+    if (!raw) return { transactions: [], items: [], accounts: [], projects: [], categories: [], lastModified: null };
     const d = JSON.parse(raw);
     return {
       transactions: d.transactions || [],
-      items:        d.items || [],
-      accounts:     d.accounts || [],
-      projects:     d.projects || [],
-      categories:   d.categories || [],
-      users:        d.users || [], // v5.0
+      items: d.items || [],
+      accounts: d.accounts || [],
+      projects: d.projects || [],
+      categories: d.categories || [],
       lastModified: d.lastModified || null,
     };
-  } catch { return { transactions: [], items: [], accounts: [], projects: [], categories: [], users: [], lastModified: null }; }
+  } catch { return { transactions: [], items: [], accounts: [], projects: [], categories: [], lastModified: null }; }
 }
 function saveLocal(state) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e) { console.error(e); }
-}
-
-// ============ ⚠️ v5.0: User & Permission System ============
-// User registry is stored INSIDE state.users (synced via OneDrive).
-// PINs are stored as SHA-256 hashes — even someone with raw OneDrive access can't
-// read the PIN.
-//
-// On first run after upgrading from v4.x (or fresh install), DEFAULT_USERS is
-// seeded into state. Admin can then add/remove/rename/change-PIN from inside the app.
-
-const DEFAULT_USERS = [
-  { id: 'abi',     label: 'อาบี',       icon: '👑', role: 'admin'  },
-  { id: 'amimoh',  label: 'อามีเมาะห์', icon: '👩', role: 'member' },
-  { id: 'ummirin', label: 'อุมมีรีน',   icon: '👩', role: 'member' },
-  { id: 'hakam',   label: 'ฮากัม',      icon: '👦', role: 'member' },
-];
-const DEFAULT_PIN = '1234'; // ทุก user เริ่มต้นด้วย PIN 1234 — admin ควรเปลี่ยนทันทีหลัง deploy
-
-// Per-account permission levels (for non-admin users; admins always have full access)
-const PERM_OPTS = [
-  { id: 'none',     label: '🚫 ไม่เห็น'                    },
-  { id: 'view',     label: '👁️ ดูอย่างเดียว'                },
-  { id: 'edit-own', label: '✏️ ดู+แก้เฉพาะของตัวเอง'        },
-];
-const PERM_LABEL = (id) => (PERM_OPTS.find(p => p.id === id) || PERM_OPTS[0]).label;
-
-// Hash a PIN using SHA-256 + a fixed app salt. Pure function, no side effects.
-// Returns hex string. Used both when creating a user and when verifying a PIN entry.
-async function hashPin(pin) {
-  const text = `mymoney:v5:${pin}`;
-  const buf = new TextEncoder().encode(text);
-  const digest = await crypto.subtle.digest('SHA-256', buf);
-  return Array.from(new Uint8Array(digest))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-// Resolve effective permission for a user on a given account.
-// Admin → always 'edit-own' (treated as full edit; combined with admin role checks
-// elsewhere they can edit any tx, not just their own).
-// Member → looks up account.permissions[userId], defaults to 'none'.
-function getAccountPerm(user, account) {
-  if (!user || !account) return 'none';
-  if (user.role === 'admin') return 'admin';
-  return (account.permissions && account.permissions[user.id]) || 'none';
-}
-// True if user can see this account at all
-function canViewAccount(user, account) {
-  const p = getAccountPerm(user, account);
-  return p !== 'none';
-}
-// True if user can edit/delete this specific transaction
-function canEditTx(user, account, tx) {
-  const p = getAccountPerm(user, account);
-  if (p === 'admin') return true;       // admin can edit anything
-  if (p === 'edit-own') return tx.createdBy === user.id;
-  return false;                         // 'view' or 'none'
-}
-// True if user can ADD new transactions to this account
-function canAddToAccount(user, account) {
-  const p = getAccountPerm(user, account);
-  return p === 'admin' || p === 'edit-own';
 }
 
 // ========== MSAL + Graph ==========
@@ -2479,48 +1979,10 @@ async function getAccount() {
   return accs[0] || null;
 }
 
-// v5.2: Detect in-app browsers (Messenger, LINE, Facebook, Instagram, etc.)
-// These browsers run pages inside a popup which prevents MSAL popup-based login.
-// When detected we skip popup entirely and use redirect from the start.
-function isInAppBrowser() {
-  try {
-    const ua = navigator.userAgent || '';
-    // Common in-app browser markers — covers Messenger, FB, Instagram, LINE,
-    // KakaoTalk, WeChat, TikTok, etc.
-    if (/FBAN|FBAV|Messenger|Instagram|Line\/|KAKAOTALK|MicroMessenger|Twitter|TikTok|Snapchat/i.test(ua)) {
-      return true;
-    }
-    // Detect "is this window itself a popup" — works for any in-app browser even if
-    // the user-agent doesn't list itself. window.opener !== null means another window
-    // opened us (which is what in-app browsers do).
-    if (window.opener && window.opener !== window) return true;
-  } catch {}
-  return false;
-}
-
 async function signIn() {
   const inst = await initMsal();
-  // v5.2: If we're already inside an in-app browser, skip popup and go straight to
-  // redirect — popup will only fail with block_nested_popups.
-  if (isInAppBrowser()) {
-    await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
-    return null; // navigation happens; nothing more to do
-  }
-  // Try popup first (works in regular Chrome).
-  // If MSAL throws ANY popup-related error, fall back to redirect.
-  try {
-    const res = await inst.loginPopup({ scopes: CFG.scopes, prompt: 'select_account' });
-    return res.account;
-  } catch (e) {
-    const code = String(e?.errorCode || e?.errorMessage || e?.message || '');
-    const isPopupBlocked = /block_nested_popups|popup_window_error|empty_window_error|popup_blocked/i.test(code)
-      || (e?.name === 'BrowserAuthError' && /popup/i.test(code));
-    if (isPopupBlocked) {
-      await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
-      return null;
-    }
-    throw e;
-  }
+  const res = await inst.loginPopup({ scopes: CFG.scopes, prompt: 'select_account' });
+  return res.account;
 }
 
 async function signOut() {
@@ -2530,10 +1992,8 @@ async function signOut() {
     try {
       await inst.logoutPopup({ account, mainWindowRedirectUri: window.location.origin + window.location.pathname });
     } catch (e) {
-      // Popup blocked (in-app browser) or other error — clear local cache as last resort.
-      // We deliberately don't try logoutRedirect here because users normally want to
-      // stay on this page after sign-out, not navigate to Microsoft's logout page.
-      try { await inst.clearCache(); } catch {}
+      // logout popup may be blocked; just clear local
+      await inst.clearCache();
     }
   }
 }
@@ -2547,24 +2007,8 @@ async function getToken() {
     return r.accessToken;
   } catch (e) {
     if (e.name === 'InteractionRequiredAuthError' || /interaction_required|consent_required|login_required/i.test(String(e?.errorCode || e?.message))) {
-      // v5.2: in in-app browser go straight to redirect
-      if (isInAppBrowser()) {
-        await inst.acquireTokenRedirect({ scopes: CFG.scopes, account });
-        throw new Error('Redirecting for token...');
-      }
-      try {
-        const r = await inst.acquireTokenPopup({ scopes: CFG.scopes, account });
-        return r.accessToken;
-      } catch (popupErr) {
-        const code = String(popupErr?.errorCode || popupErr?.errorMessage || popupErr?.message || '');
-        const isPopupBlocked = /block_nested_popups|popup_window_error|empty_window_error|popup_blocked/i.test(code)
-          || (popupErr?.name === 'BrowserAuthError' && /popup/i.test(code));
-        if (isPopupBlocked) {
-          await inst.acquireTokenRedirect({ scopes: CFG.scopes, account });
-          throw new Error('Redirecting for token...');
-        }
-        throw popupErr;
-      }
+      const r = await inst.acquireTokenPopup({ scopes: CFG.scopes, account });
+      return r.accessToken;
     }
     throw e;
   }
@@ -2908,8 +2352,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.9';
-const APP_VERSION_TAG = 'Search results ใช้ TxRow (มี thumbnail)';
+const APP_VERSION = 'v3.7';
+const APP_VERSION_TAG = 'Hard lock for shared role + secret unlock';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -3042,20 +2486,6 @@ function useSync(state, setState, isOnline) {
   const timerRef = useRef(null);
   const syncingRef = useRef(false);
 
-  // Build the full payload sent to OneDrive. Centralised so we don't forget any
-  // top-level field (e.g. v5.0 added `users`).
-  const buildPayload = (s) => ({
-    app: 'my-money',
-    version: 2, // bumped for v5.0 users schema (still readable by older versions which ignore unknown fields)
-    lastModified: s.lastModified || new Date().toISOString(),
-    transactions: s.transactions || [],
-    items:        s.items || [],
-    accounts:     s.accounts || [],
-    projects:     s.projects || [],
-    categories:   s.categories || [],
-    users:        s.users || [],   // v5.0
-  });
-
   // Initial pull
   const pullOnce = useCallback(async () => {
     if (!isOnline) { setStatus('offline'); return; }
@@ -3068,20 +2498,28 @@ function useSync(state, setState, isOnline) {
         if (!localTime || remoteTime > localTime) {
           setState({
             transactions: remote.transactions,
-            items:      remote.items || [],
-            accounts:   remote.accounts || [],
-            projects:   remote.projects || [],
+            items: remote.items || [],
+            accounts: remote.accounts || [],
+            projects: remote.projects || [],
             categories: remote.categories || [],
-            users:      remote.users || [],  // v5.0
             lastModified: remoteTime,
           });
         } else if (localTime > remoteTime) {
           // push local up
-          await remoteSave(buildPayload(state));
+          const out = { app: 'my-money', version: 1, lastModified: localTime,
+                        transactions: state.transactions, items: state.items || [],
+                        accounts: state.accounts || [], projects: state.projects || [],
+                        categories: state.categories || [] };
+          await remoteSave(out);
         }
-      } else if (state.transactions.length > 0 || (state.items || []).length > 0 || (state.accounts || []).length > 0 || (state.projects || []).length > 0 || (state.categories || []).length > 0 || (state.users || []).length > 0) {
+      } else if (state.transactions.length > 0 || (state.items || []).length > 0 || (state.accounts || []).length > 0 || (state.projects || []).length > 0 || (state.categories || []).length > 0) {
         // remote is empty but we have local data → push it
-        await remoteSave(buildPayload(state));
+        const out = { app: 'my-money', version: 1,
+                      lastModified: state.lastModified || new Date().toISOString(),
+                      transactions: state.transactions, items: state.items || [],
+                      accounts: state.accounts || [], projects: state.projects || [],
+                      categories: state.categories || [] };
+        await remoteSave(out);
       }
       setStatus('ok');
       setLastSync(new Date());
@@ -3102,7 +2540,16 @@ function useSync(state, setState, isOnline) {
       syncingRef.current = true;
       setStatus('syncing');
       try {
-        await remoteSave(buildPayload(state));
+        const out = {
+          app: 'my-money', version: 1,
+          lastModified: state.lastModified || new Date().toISOString(),
+          transactions: state.transactions,
+          items: state.items || [],
+          accounts: state.accounts || [],
+          projects: state.projects || [],
+          categories: state.categories || [],
+        };
+        await remoteSave(out);
         setStatus('ok');
         setLastSync(new Date());
         setErrMsg(null);
@@ -3120,148 +2567,82 @@ function useSync(state, setState, isOnline) {
 }
 
 // ========== App ==========
-// ============ v5.0: PIN-based profile gate (uses runtime user list) ============
-// User picks profile after Microsoft login → enters 4-digit PIN → enters app.
-// Profile stored in sessionStorage so closing the tab/Chrome auto-locks.
-function ProfilePicker({ users, onPick }) {
-  // Filter out users without a PIN set (shouldn't happen, but safe)
-  const visible = users || [];
-  return (
-    <div className="profile-picker rise">
-      <div className="logo-mini">฿</div>
-      <h1 className="font-display profile-picker-title">ใครกำลังใช้งาน?</h1>
-      <div className={`profile-grid ${visible.length > 4 ? 'three-col' : ''}`}>
-        {visible.map(p => (
-          <button key={p.id} className="profile-btn" onClick={() => onPick(p)}>
-            <span className="icon">{p.icon || '👤'}</span>
-            <span className="name">{p.label}</span>
-            {p.role === 'admin' && <span className="admin-tag">admin</span>}
-          </button>
-        ))}
-      </div>
-      <div className="profile-hint">แตะโปรไฟล์เพื่อใส่รหัส PIN</div>
-    </div>
-  );
-}
-
-function PinScreen({ profile, onBack, onSuccess }) {
-  const [pin, setPin] = useState('');
-  const [error, setError] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-
-  const tryPin = async (entered) => {
-    setVerifying(true);
-    try {
-      const expected = profile.pinHash;
-      const got = await hashPin(entered);
-      if (got === expected) {
-        setTimeout(onSuccess, 100);
-      } else {
-        setError(true);
-        setTimeout(() => { setPin(''); setError(false); }, 600);
-      }
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const handleKey = (n) => {
-    if (verifying) return;
-    if (pin.length >= 4) return;
-    const next = pin + n;
-    setPin(next);
-    if (next.length === 4) {
-      tryPin(next);
-    }
-  };
-  const del = () => { if (!verifying) setPin(prev => prev.slice(0, -1)); };
-
-  return (
-    <div className="pin-pad rise">
-      <button className="pin-back" onClick={onBack} aria-label="ย้อนกลับ">
-        <Ic.ChevL size={20}/>
-      </button>
-      <div className="pin-icon">{profile.icon || '👤'}</div>
-      <h2 className="pin-name">{profile.label}</h2>
-      <div className={`pin-prompt ${error ? 'err' : ''}`}>
-        {error ? 'รหัสผ่านไม่ถูกต้อง' : 'กรุณาใส่รหัส PIN 4 หลัก'}
-      </div>
-      <div className={`pin-dots ${error ? 'shake' : ''}`}>
-        {[0,1,2,3].map(i => (
-          <div key={i}
-               className={`pin-dot ${pin.length > i ? 'filled' : ''} ${error ? 'err' : ''}`}>
-          </div>
-        ))}
-      </div>
-      <div className="pin-keys">
-        {[1,2,3,4,5,6,7,8,9].map(n => (
-          <button key={n} className="pin-key" onClick={() => handleKey(String(n))}>{n}</button>
-        ))}
-        <button className="pin-key empty" tabIndex={-1}></button>
-        <button className="pin-key" onClick={() => handleKey('0')}>0</button>
-        <button className="pin-key del" onClick={del} aria-label="ลบ">⌫</button>
-      </div>
-    </div>
-  );
-}
-
 function App() {
   const [booting, setBooting] = useState(true);
   const [account, setAccount] = useState(null);
   const [authError, setAuthError] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [skipSync, setSkipSync] = useState(false);
-  const [state, setState] = useState({ transactions: [], items: [], accounts: [], projects: [], categories: [], users: [], lastModified: null });
+  const [state, setState] = useState({ transactions: [], items: [], accounts: [], projects: [], categories: [], lastModified: null });
   const isOnline = !!account && HAS_CONFIG && !skipSync;
   const { status, lastSync, errMsg, pullOnce, schedulePush } = useSync(state, setState, isOnline);
 
-  // v5.0: PIN-based profile gate (replaces v3.7 role+lock and v4.0 hardcoded profiles)
+  // v3.6/v3.7: Role detection with HARD LOCK
   //
-  // Flow:
-  //   Microsoft login → Profile Picker → PIN entry → app
-  //
-  // - Profile is stored in sessionStorage so closing the tab/Chrome auto-locks.
-  //   Next time the user opens the URL they must re-enter PIN.
-  // - User list lives in state.users (synced via OneDrive). Admin manages from UsersManager.
-  // - PINs are stored as SHA-256 hashes — viewing the JSON file does not reveal them.
-  // - There is NO URL bypass — even ?as=wife or ?unlock= do nothing now.
-  const [appProfileId, setAppProfileId] = useState(() => {
-    try { return sessionStorage.getItem('mymoney:profile') || null; }
-    catch { return null; }
+  // Behaviour:
+  // 1. First time `?as=wife` is visited → sets BOTH role + LOCK flag in localStorage.
+  //    LOCK means: future visits ALWAYS run as shared, regardless of URL parameters.
+  // 2. To unlock requires secret URL: `?unlock=<UNLOCK_SECRET>` — only the owner knows it.
+  //    Without the secret, even removing ?as=wife or visiting ?as=owner has no effect.
+  // 3. The owner can change UNLOCK_SECRET below before sharing the wife URL with someone
+  //    who might be tech-savvy enough to read this source code.
+  const UNLOCK_SECRET = 'kabovergreen2026'; // ⚠️ change before sharing the URL
+  const [role, setRole] = useState(() => {
+    try {
+      const url = new URL(window.location.href);
+      const qRole = url.searchParams.get('as');
+      const qUnlock = url.searchParams.get('unlock');
+
+      // First check for owner unlocking via secret
+      if (qUnlock === UNLOCK_SECRET) {
+        localStorage.removeItem('mymoney:role');
+        localStorage.removeItem('mymoney:locked');
+        return 'owner';
+      }
+
+      // If device is locked into shared mode → cannot escape via URL
+      const lockedAs = localStorage.getItem('mymoney:locked');
+      if (lockedAs === 'shared') return 'shared';
+
+      // Normal role detection
+      if (qRole === 'wife' || qRole === 'shared') {
+        localStorage.setItem('mymoney:role', 'shared');
+        // Engage hard lock as soon as the wife URL is visited the first time
+        localStorage.setItem('mymoney:locked', 'shared');
+        return 'shared';
+      }
+      if (qRole === 'owner' || qRole === 'me') {
+        // ?as=owner alone is NOT enough to escape lock — must include unlock secret too
+        localStorage.removeItem('mymoney:role');
+        return 'owner';
+      }
+      const stored = localStorage.getItem('mymoney:role');
+      return stored === 'shared' ? 'shared' : 'owner';
+    } catch { return 'owner'; }
   });
-  const [unlockTarget, setUnlockTarget] = useState(null); // profile being unlocked
-  const switchProfile = (p) => {
-    try { sessionStorage.setItem('mymoney:profile', p.id); } catch {}
-    setAppProfileId(p.id);
-    setUnlockTarget(null);
+  const isSharedView = role === 'shared';
+  const isLocked = (() => {
+    try { return localStorage.getItem('mymoney:locked') === 'shared'; }
+    catch { return false; }
+  })();
+  // Owner-only unlock (used by Settings panel after typing secret)
+  const unlockSharedDevice = (typedSecret) => {
+    if (typedSecret !== UNLOCK_SECRET) return false;
+    try {
+      localStorage.removeItem('mymoney:role');
+      localStorage.removeItem('mymoney:locked');
+    } catch {}
+    setRole('owner');
+    return true;
   };
-  const lockProfile = () => {
-    try { sessionStorage.removeItem('mymoney:profile'); } catch {}
-    setAppProfileId(null);
-    setUnlockTarget(null);
-  };
-  // v5.0: derive current user object from state.users + appProfileId
-  const currentUser = useMemo(
-    () => (state.users || []).find(u => u.id === appProfileId) || null,
-    [state.users, appProfileId]
-  );
-  const isAdmin = currentUser?.role === 'admin';
-  // Strip any legacy URL parameters from previous versions (?as=, ?unlock=, ?role=)
+  // Strip ?as= and ?unlock= from URL after first visit so they don't show in history
   useEffect(() => {
     try {
       const url = new URL(window.location.href);
       let changed = false;
-      ['as', 'unlock', 'role'].forEach(k => {
-        if (url.searchParams.has(k)) { url.searchParams.delete(k); changed = true; }
-      });
+      if (url.searchParams.has('as')) { url.searchParams.delete('as'); changed = true; }
+      if (url.searchParams.has('unlock')) { url.searchParams.delete('unlock'); changed = true; }
       if (changed) window.history.replaceState({}, '', url.toString());
-    } catch {}
-  }, []);
-  // One-time cleanup of v3.x localStorage flags now that we use sessionStorage profile
-  useEffect(() => {
-    try {
-      localStorage.removeItem('mymoney:role');
-      localStorage.removeItem('mymoney:locked');
     } catch {}
   }, []);
 
@@ -3277,8 +2658,6 @@ function App() {
   const [showAccountsManager, setShowAccountsManager] = useState(false);
   const [showProjectsManager, setShowProjectsManager] = useState(false);
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
-  const [showUsersManager, setShowUsersManager] = useState(false); // v5.0: admin-only
-  const [showSearch, setShowSearch] = useState(false); // v5.5: advanced search
   // v2.8: text zoom level — 0=normal, 1=large (115%), 2=larger (130%), 3=largest (145%)
   const [zoomLevel, setZoomLevel] = useState(() => {
     try {
@@ -3419,7 +2798,7 @@ function App() {
     if (booting) return;
     if (firstChangeRef.current) { firstChangeRef.current = false; return; }
     if (isOnline && didPullRef.current) schedulePush();
-  }, [state.transactions, state.items, state.accounts, state.projects, state.categories, state.users, state.lastModified, isOnline, booting, schedulePush]);
+  }, [state.transactions, state.items, state.accounts, state.projects, state.categories, state.lastModified, isOnline, booting, schedulePush]);
 
   // Migration: backfill master lists (accounts/projects/items) from existing transactions.
   // This handles legacy data from before the master list feature existed.
@@ -3464,44 +2843,6 @@ function App() {
     }));
   }, [booting, state.transactions]);
 
-  // v5.0 Migration: seed users + assign legacy transactions to admin.
-  // Must run AFTER initial pull from OneDrive (to avoid overwriting remote users
-  // that already have non-default PINs). We detect "pull complete" by either:
-  //   - account is offline/skipSync (no pull will happen), or
-  //   - didPullRef is true AND state.lastModified is set (data has loaded from remote)
-  const didMigrateV5Ref = useRef(false);
-  useEffect(() => {
-    if (booting) return;
-    if (didMigrateV5Ref.current) return;
-    // Wait for the initial pull to settle before migrating, so we don't seed default
-    // users on top of remote users with already-customised PINs.
-    const offlineMode = !account || skipSync;
-    const pullDone = didPullRef.current && (state.lastModified != null || (state.transactions || []).length === 0);
-    if (!offlineMode && !pullDone) return;
-
-    didMigrateV5Ref.current = true;
-    (async () => {
-      const hasUsers = Array.isArray(state.users) && state.users.length > 0;
-      const needsTxOwner = (state.transactions || []).some(t => !t.createdBy);
-      if (hasUsers && !needsTxOwner) return;
-      // Seed users with default PIN '1234' hashed
-      const defaultHash = await hashPin(DEFAULT_PIN);
-      const seededUsers = hasUsers
-        ? state.users
-        : DEFAULT_USERS.map(u => ({ ...u, pinHash: defaultHash }));
-      mutate(prev => {
-        // Re-check inside mutator in case state changed since the effect started
-        const reHasUsers = Array.isArray(prev.users) && prev.users.length > 0;
-        const nextUsers = reHasUsers ? prev.users : seededUsers;
-        const adminId = (nextUsers.find(u => u.role === 'admin') || nextUsers[0])?.id || 'abi';
-        const nextTx = (prev.transactions || []).map(t =>
-          t.createdBy ? t : { ...t, createdBy: adminId }
-        );
-        return { ...prev, users: nextUsers, transactions: nextTx };
-      });
-    })();
-  }, [booting, account, skipSync, state.lastModified, state.users, state.transactions]);
-
   // Actions
   const mutate = (mutator) => {
     setState(prev => {
@@ -3514,15 +2855,10 @@ function App() {
     mutate(prev => {
       const idx = prev.transactions.findIndex(t => t.id === entry.id);
       if (idx >= 0) {
-        // Preserve original createdBy on edit — never reassign ownership
-        const existing = prev.transactions[idx];
-        const merged = { ...entry, createdBy: existing.createdBy || entry.createdBy || appProfileId };
-        const copy = [...prev.transactions]; copy[idx] = merged;
+        const copy = [...prev.transactions]; copy[idx] = entry;
         return { ...prev, transactions: copy };
       }
-      // New transaction → tag with current user as creator
-      const tagged = { ...entry, createdBy: appProfileId };
-      return { ...prev, transactions: [tagged, ...prev.transactions] };
+      return { ...prev, transactions: [entry, ...prev.transactions] };
     });
     pushToast(entry.type === 'income' ? 'บันทึกรายรับแล้ว' : 'บันทึกรายจ่ายแล้ว');
   };
@@ -3539,19 +2875,16 @@ function App() {
   // Duplicate a transaction: copy all fields with new ID, current date/time, no photos
   const duplicateTx = (tx) => {
     if (!tx) return;
-    // v5.7: "ทำซ้ำ" copies every field of the source transaction except:
-    //   - id (must be unique)
-    //   - photos (don't copy receipts/images — they belong to the original)
-    //   - createdBy (the new entry is owned by whoever clicked Duplicate, so they
-    //     can edit/delete it under the v5.0 permission system)
-    // Date and createdAt are preserved verbatim — user can edit them in the sheet
-    // afterwards if needed.
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
     const copy = {
       ...tx,
       id: uid(),
-      photos: [],
+      date: dateStr,
+      createdAt: combineDateTime(dateStr, timeStr),
+      photos: [], // don't copy photos — they belong to the original
       photoId: null, photoName: null,
-      createdBy: appProfileId || tx.createdBy,
     };
     mutate(prev => ({ ...prev, transactions: [copy, ...prev.transactions] }));
     pushToast('ทำซ้ำรายการแล้ว');
@@ -3645,28 +2978,20 @@ function App() {
   };
 
   // ============ Accounts Master List Handlers ============
-  const addMasterAccount = (name, decimals = 2, unitSymbol = '฿', unitPosition = 'before') => {
+  const addMasterAccount = (name, decimals = 2) => {
     const n = (name || '').trim();
     if (!n) return false;
     const accs = state.accounts || [];
     const exists = accs.some(a => (a.name || '').toLowerCase() === n.toLowerCase());
     if (exists) return false;
     const d = Math.max(0, Math.min(10, Number.isFinite(+decimals) ? +decimals : 2));
-    // unitSymbol can be empty string ('') — keep as-is. Only fall back to '฿' when undefined/null.
-    const sym = unitSymbol == null ? '฿' : String(unitSymbol);
-    const pos = unitPosition === 'after' ? 'after' : 'before';
     mutate(prev => ({
       ...prev,
-      accounts: [...(prev.accounts || []), {
-        id: uid(), name: n, decimals: d,
-        unitSymbol: sym, unitPosition: pos,
-        permissions: {},
-        createdAt: new Date().toISOString()
-      }],
+      accounts: [...(prev.accounts || []), { id: uid(), name: n, decimals: d, createdAt: new Date().toISOString() }],
     }));
     return true;
   };
-  const updateMasterAccount = (id, newName, newDecimals, newUnitSymbol, newUnitPosition) => {
+  const updateMasterAccount = (id, newName, newDecimals) => {
     const n = (newName || '').trim();
     if (!n) return { ok: false, reason: 'empty' };
     const d = Math.max(0, Math.min(10, Number.isFinite(+newDecimals) ? +newDecimals : 2));
@@ -3680,90 +3005,21 @@ function App() {
     if (target.name !== n) {
       affected = renameMasterField('accountName', target.name, n);
     }
-    // Resolve unit fields (preserve current value if caller doesn't pass them)
-    const sym = newUnitSymbol === undefined
-      ? (target.unitSymbol != null ? target.unitSymbol : '฿')
-      : (newUnitSymbol == null ? '฿' : String(newUnitSymbol));
-    const pos = newUnitPosition === undefined
-      ? (target.unitPosition || guessUnitPosition(sym))
-      : (newUnitPosition === 'after' ? 'after' : 'before');
     mutate(prev => ({
       ...prev,
-      accounts: (prev.accounts || []).map(a =>
-        a.id === id ? { ...a, name: n, decimals: d, unitSymbol: sym, unitPosition: pos } : a
-      ),
+      accounts: (prev.accounts || []).map(a => a.id === id ? { ...a, name: n, decimals: d } : a),
     }));
     return { ok: true, affectedTx: affected };
   };
   const removeMasterAccount = (id) => {
     mutate(prev => ({ ...prev, accounts: (prev.accounts || []).filter(a => a.id !== id) }));
   };
-  // v5.0: set per-user permission on an account (admin only).
-  // perm ∈ { 'none', 'view', 'edit-own' }
-  const setAccountPerm = (accountId, userId, perm) => {
-    if (!PERM_OPTS.some(p => p.id === perm)) return;
+  // v3.6: toggle "shared" flag — used by role-based filter for sharing specific accounts
+  const toggleAccountShared = (id) => {
     mutate(prev => ({
       ...prev,
-      accounts: (prev.accounts || []).map(a => {
-        if (a.id !== accountId) return a;
-        const nextPerms = { ...(a.permissions || {}) };
-        if (perm === 'none') delete nextPerms[userId];
-        else nextPerms[userId] = perm;
-        return { ...a, permissions: nextPerms };
-      }),
+      accounts: (prev.accounts || []).map(a => a.id === id ? { ...a, shared: !a.shared } : a),
     }));
-  };
-
-  // v5.0: user management (admin-only). All ops mutate state.users which syncs to OneDrive.
-  const addUser = async (label, role = 'member', icon = '👤', pin = DEFAULT_PIN) => {
-    const trimmed = (label || '').trim();
-    if (!trimmed) return { ok: false, reason: 'empty' };
-    const users = state.users || [];
-    // Generate id from label (transliterated to ASCII isn't trivial in the browser without
-    // libs; we just slugify whitespace + fallback to random suffix to avoid collisions).
-    const baseId = trimmed.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'user';
-    let id = baseId;
-    let n = 2;
-    while (users.some(u => u.id === id)) { id = `${baseId}-${n++}`; }
-    const pinHash = await hashPin(pin);
-    mutate(prev => ({
-      ...prev,
-      users: [...(prev.users || []), { id, label: trimmed, icon, role: role === 'admin' ? 'admin' : 'member', pinHash }],
-    }));
-    return { ok: true, id };
-  };
-  const updateUser = (id, patch) => {
-    mutate(prev => ({
-      ...prev,
-      users: (prev.users || []).map(u => u.id === id ? { ...u, ...patch, id: u.id } : u),
-    }));
-  };
-  const changeUserPin = async (id, newPin) => {
-    if (!/^\d{4}$/.test(newPin)) return { ok: false, reason: 'format' };
-    const pinHash = await hashPin(newPin);
-    updateUser(id, { pinHash });
-    return { ok: true };
-  };
-  const removeUser = (id) => {
-    // Cannot remove the only admin
-    const users = state.users || [];
-    const admins = users.filter(u => u.role === 'admin');
-    const target = users.find(u => u.id === id);
-    if (target?.role === 'admin' && admins.length <= 1) {
-      return { ok: false, reason: 'last-admin' };
-    }
-    mutate(prev => ({
-      ...prev,
-      users: (prev.users || []).filter(u => u.id !== id),
-      // Strip removed user from every account's permissions map
-      accounts: (prev.accounts || []).map(a => {
-        if (!a.permissions || !a.permissions[id]) return a;
-        const next = { ...a.permissions };
-        delete next[id];
-        return { ...a, permissions: next };
-      }),
-    }));
-    return { ok: true };
   };
 
   // ============ Projects Master List Handlers ============
@@ -3865,64 +3121,65 @@ function App() {
     try { await signOut(); } catch (e) { console.error(e); }
     setAccount(null);
     didPullRef.current = false;
-    lockProfile(); // v4.0: also clear active profile so PIN is needed again next login
     pushToast('ออกจากระบบแล้ว');
   };
 
-  // v4.0: Profile-based visibility filtering (replaces v3.7 shared flag).
-  // v5.0: Filter accounts visible to the current user.
-  // - Admin sees every account.
-  // - Members see accounts where account.permissions[user.id] is 'view' or 'edit-own'.
-  // Legacy schema migration is best-effort: 'shared:true' (v3.x) or visibility:'all'
-  // (v4.x) → all members get 'view' access. visibility:'<userId>' (v4.x) →
-  // that single user gets 'edit-own'. visibility:'owner' (v4.x default) → no member access.
-  const visibleAccounts = useMemo(() => {
-    if (!currentUser) return [];
-    return (state.accounts || []).filter(a => {
-      if (currentUser.role === 'admin') return true;
-      // Backfill legacy schema on-the-fly for read; persisted by AccountsManager when edited.
-      let perms = a.permissions;
-      if (!perms) {
-        perms = {};
-        const allMembers = (state.users || []).filter(u => u.role !== 'admin').map(u => u.id);
-        if (a.shared === true || a.visibility === 'all') {
-          allMembers.forEach(id => { perms[id] = 'view'; });
-        } else if (a.visibility && a.visibility !== 'owner') {
-          // legacy v4 single-user visibility → that user gets edit-own
-          perms[a.visibility] = 'edit-own';
-        }
-      }
-      return (perms[currentUser.id] || 'none') !== 'none';
+  // Derive unique account list from all transactions (hooks MUST be before early returns)
+  // v3.6: When role=shared, filter to accounts marked as shared
+  const sharedAccountNames = useMemo(() => {
+    const set = new Set();
+    (state.accounts || []).forEach(a => {
+      if (a.shared && a.name) set.add(a.name.trim());
     });
-  }, [state.accounts, state.users, currentUser]);
-
-  const visibleAccountNames = useMemo(
-    () => new Set(visibleAccounts.map(a => (a.name || '').trim())),
-    [visibleAccounts]
-  );
+    return set;
+  }, [state.accounts]);
 
   const accountList = useMemo(() => {
     const set = new Set();
     state.transactions.forEach(t => {
       const k = (t.accountName || '').trim();
       if (!k) return;
-      if (!isAdmin && !visibleAccountNames.has(k)) return;
+      if (isSharedView && !sharedAccountNames.has(k)) return; // filter out non-shared in wife mode
       set.add(k);
     });
-    visibleAccounts.forEach(a => { if (a.name) set.add(a.name); });
+    // Also include shared master accounts even if they have no transactions yet
+    if (isSharedView) {
+      sharedAccountNames.forEach(n => set.add(n));
+    }
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'th'));
-  }, [state.transactions, isAdmin, visibleAccountNames, visibleAccounts]);
+  }, [state.transactions, isSharedView, sharedAccountNames]);
 
-  // visibleState: filtered view that downstream components consume.
-  // Admin sees everything; members see only their permitted accounts + transactions.
-  // Master items/projects/users stay intact (admin-only managers gate write access).
+  // v3.6: in shared view, the rest of the app sees a filtered state.accounts so
+  // managers, autocomplete, and pickers only show shared accounts.
+  // v3.7: visibleState — filter accounts AND transactions/projects/items shown to wife
+  // so the rest of the app sees a clean read of "wife's data only".
   const visibleState = useMemo(() => {
-    if (isAdmin) return state;
-    const filteredTx = (state.transactions || []).filter(
-      t => visibleAccountNames.has((t.accountName || '').trim())
+    if (!isSharedView) return state;
+    const sharedNames = new Set(
+      (state.accounts || []).filter(a => a.shared).map(a => (a.name || '').trim())
     );
-    return { ...state, accounts: visibleAccounts, transactions: filteredTx };
-  }, [state, isAdmin, visibleAccounts, visibleAccountNames]);
+    // Filter transactions to those on shared accounts only
+    const filteredTx = (state.transactions || []).filter(t => sharedNames.has((t.accountName || '').trim()));
+    // Derive which projects/items are actually used in those filtered transactions
+    const usedProjects = new Set();
+    const usedItems = new Set();
+    filteredTx.forEach(t => {
+      const p = (t.project || '').trim();
+      if (p) usedProjects.add(p);
+      const i = (t.item || t.payee || '').trim();
+      if (i) usedItems.add(i);
+    });
+    // Keep all master items/projects (so wife can add new ones), but downstream
+    // autocomplete will only suggest items that appear in shared transactions.
+    // For now we keep the master lists intact — UI managers see filtered counts only.
+    return {
+      ...state,
+      accounts: (state.accounts || []).filter(a => a.shared),
+      transactions: filteredTx,
+      // Keep master projects/items unchanged so wife can pick from them when adding
+      // (but she won't see other-account transactions anyway).
+    };
+  }, [state, isSharedView]);
 
   // ============ Render boot / setup / signin / app ============
   if (booting) {
@@ -3941,69 +3198,33 @@ function App() {
       />
     );
   }
-  // v5.0: After Microsoft login, show profile picker → PIN screen.
-  // Use the live user list from state so admin can add/remove and changes show immediately.
-  if (account && !skipSync && !appProfileId) {
-    if (unlockTarget) {
-      return (
-        <PinScreen
-          profile={unlockTarget}
-          onBack={() => setUnlockTarget(null)}
-          onSuccess={() => switchProfile(unlockTarget)}
-        />
-      );
-    }
-    // If users haven't been seeded yet (very first run, before migration completes),
-    // show a brief loading state instead of an empty picker.
-    if (!state.users || state.users.length === 0) {
-      return <div className="boot"><div className="dot-ring"></div><div>กำลังเตรียมโปรไฟล์...</div></div>;
-    }
-    return <ProfilePicker users={state.users} onPick={(p) => setUnlockTarget(p)} />;
-  }
 
-  // Filter by month + account
-  const txSource = isAdmin ? state.transactions : visibleState.transactions;
-  const monthTx = txSource.filter(t => {
+  // Filter by month + account (and role)
+  const monthTx = state.transactions.filter(t => {
     const d = new Date(t.date);
     if (d.getFullYear() !== viewMonth.y || d.getMonth() !== viewMonth.m) return false;
+    // v3.6: in shared view, only include transactions on shared accounts
+    if (isSharedView) {
+      const accName = (t.accountName || '').trim();
+      if (!sharedAccountNames.has(accName)) return false;
+    }
     if (selectedAccount === 'all') return true;
     return (t.accountName || '').trim() === selectedAccount;
   });
-  //begin
- const totals = monthTx.reduce((a, t) => {
-    const amt = Number(t.amount) || 0; // ป้องกัน Error จากค่าว่าง
-    if (t.type === 'income') a.inc += amt; else a.exp += amt;
+  const totals = monthTx.reduce((a, t) => {
+    if (t.type === 'income') a.inc += t.amount; else a.exp += t.amount;
     return a;
   }, { inc: 0, exp: 0 });
   totals.bal = totals.inc - totals.exp;
 
-//begin
-// คำนวณยอดรวมทั้งหมด (B) โดยให้กรองตามบัญชีที่เลือกด้วย
-  const grandTotals = txSource.reduce((a, t) => {
-    // ถ้าไม่ได้เลือก 'ทั้งหมด' และชื่อบัญชีของรายการนี้ไม่ตรงกับบัญชีที่กำลังเลือก ให้ข้ามไป
-    if (selectedAccount !== 'all' && (t.accountName || '').trim() !== selectedAccount) {
-      return a;
-    }
-    const amt = Number(t.amount) || 0; // ป้องกัน Error จากค่าว่าง
-    if (t.type === 'income') a.inc += amt; else a.exp += amt;
-    return a;
-  }, { inc: 0, exp: 0 });
-  const grandBal = grandTotals.inc - grandTotals.exp;
-  // end
-
   return (
     <>
       <main>
-        {/* v5.0: profile banner — shows current user with admin badge if applicable */}
-        {appProfileId && currentUser && (
+        {/* v3.6/v3.7: shared-mode banner (no exit button — locked) */}
+        {isSharedView && (
           <div className="shared-banner">
-            <span>
-              {currentUser.icon || '👤'} {currentUser.label}
-              {isAdmin && <span className="admin-tag-inline">admin</span>}
-            </span>
-            <button onClick={lockProfile} className="exit-shared-btn" title="สลับผู้ใช้ / ล็อก">
-              สลับผู้ใช้ 🔒
-            </button>
+            <span>👁️ โหมดดูร่วม · เห็นเฉพาะบัญชีที่แชร์</span>
+            <span className="shared-lock-icon" title="โหมดล็อก · ปลดได้เฉพาะเจ้าของ">🔒</span>
           </div>
         )}
         {tab === 'home' && homeView === 'overview' && (
@@ -4025,8 +3246,6 @@ function App() {
             status={status} lastSync={lastSync}
             viewMonth={viewMonth} setViewMonth={setViewMonth}
             totals={totals} monthTx={monthTx}
-            
-            grandBal={grandBal}
             onTap={setActionTx}
             accountList={accountList}
             selectedAccount={selectedAccount}
@@ -4046,9 +3265,6 @@ function App() {
           <ListView
             viewMonth={viewMonth} setViewMonth={setViewMonth}
             monthTx={monthTx}
-            
-            grandBal={grandBal}
-            
             onTap={setActionTx}
             accountList={accountList}
             selectedAccount={selectedAccount}
@@ -4059,7 +3275,6 @@ function App() {
             onManageProjects={() => setShowProjectsManager(true)}
             onManageItems={() => setShowItemsManager(true)}
             onManageCategories={() => setShowCategoriesManager(true)}
-            onOpenSearch={() => setShowSearch(true)}
             zoomLevel={zoomLevel}
             onZoom={cycleZoom}
           />
@@ -4095,9 +3310,6 @@ function App() {
             cacheStatus={cacheStatus}
             pendingCount={pendingCount}
             isOnline={isOnline}
-            isAdmin={isAdmin}
-            currentUser={currentUser}
-            onOpenUsersManager={() => setShowUsersManager(true)}
           />
         )}
       </main>
@@ -4180,14 +3392,14 @@ function App() {
           accounts={state.accounts || []}
           transactions={state.transactions}
           onClose={() => setShowAccountsManager(false)}
-          onAdd={(name, decimals, unitSymbol, unitPosition) => {
-            const ok = addMasterAccount(name, decimals, unitSymbol, unitPosition);
+          onAdd={(name, decimals) => {
+            const ok = addMasterAccount(name, decimals);
             if (!ok) pushToast('มีบัญชีนี้อยู่แล้ว');
-            else pushToast(`เพิ่มบัญชีแล้ว`);
+            else pushToast(`เพิ่มบัญชีแล้ว (ทศนิยม ${decimals} ตำแหน่ง)`);
             return ok;
           }}
-          onUpdate={(id, name, decimals, unitSymbol, unitPosition) => {
-            const r = updateMasterAccount(id, name, decimals, unitSymbol, unitPosition);
+          onUpdate={(id, name, decimals) => {
+            const r = updateMasterAccount(id, name, decimals);
             if (r.ok) {
               pushToast(r.affectedTx > 0
                 ? `แก้ไขแล้ว · อัปเดต ${r.affectedTx} รายการ`
@@ -4200,13 +3412,11 @@ function App() {
             removeMasterAccount(id);
             pushToast('ลบบัญชีแล้ว');
           }}
-          onSetPerm={(accId, userId, perm) => {
-            setAccountPerm(accId, userId, perm);
-            const u = (state.users || []).find(x => x.id === userId);
-            pushToast(`${u?.label || userId}: ${PERM_LABEL(perm)}`);
+          onToggleShared={(id) => {
+            const a = (state.accounts || []).find(x => x.id === id);
+            toggleAccountShared(id);
+            pushToast(a?.shared ? 'เลิกแชร์แล้ว' : 'แชร์บัญชีแล้ว · ภรรยาเห็นในโหมดดูร่วม');
           }}
-          users={state.users || []}
-          isAdmin={isAdmin}
           pushToast={pushToast}
         />
       )}
@@ -4266,32 +3476,6 @@ function App() {
         />
       )}
 
-      {/* v5.0: Users manager — admin only */}
-      {showUsersManager && isAdmin && (
-        <UsersManager
-          users={state.users || []}
-          currentUserId={appProfileId}
-          onClose={() => setShowUsersManager(false)}
-          onAdd={addUser}
-          onUpdate={updateUser}
-          onChangePin={changeUserPin}
-          onRemove={removeUser}
-          pushToast={pushToast}
-        />
-      )}
-
-      {/* v5.5: Advanced search — uses visibleState so non-admins only search permitted accounts */}
-      {showSearch && (
-        <SearchSheet
-          allTransactions={visibleState.transactions}
-          accounts={visibleState.accounts}
-          projects={state.projects || []}
-          categories={state.categories || []}
-          onClose={() => setShowSearch(false)}
-          onPickTx={(t) => { setActionTx(t); setShowSearch(false); }}
-        />
-      )}
-
       {/* Row action menu (tap row → show menu) */}
       {actionTx && (
         <TxActionMenu
@@ -4304,19 +3488,6 @@ function App() {
           onEdit={() => { setEditing(actionTx); setActionTx(null); }}
           onDuplicate={() => { duplicateTx(actionTx); setActionTx(null); }}
           onDelete={() => { setConfirmDeleteTx(actionTx); setActionTx(null); }}
-          canEdit={(() => {
-            // v5.0: per-user permission check on this transaction's account
-            const acc = (state.accounts || []).find(a =>
-              (a.name || '').trim() === (actionTx.accountName || '').trim()
-            );
-            return canEditTx(currentUser, acc, actionTx);
-          })()}
-          canDuplicate={(() => {
-            const acc = (state.accounts || []).find(a =>
-              (a.name || '').trim() === (actionTx.accountName || '').trim()
-            );
-            return canAddToAccount(currentUser, acc);
-          })()}
         />
       )}
 
@@ -4361,9 +3532,6 @@ function SetupNeeded() {
 
 // ============ Sign In ============
 function SignIn({ loading, error, onSignIn, onSkip }) {
-  // v5.2: warn users opening from Messenger/LINE in-app browsers — login still works
-  // (we use redirect fallback) but it's smoother in real Chrome.
-  const inApp = isInAppBrowser();
   return (
     <div className="signin">
       <div className="logo">฿</div>
@@ -4372,12 +3540,6 @@ function SignIn({ loading, error, onSignIn, onSkip }) {
         สมุดเงินส่วนตัวของคุณ ซิงค์อัตโนมัติกับ OneDrive<br/>
         เข้าถึงได้ทุกอุปกรณ์
       </div>
-      {inApp && (
-        <div className="inapp-warn">
-          ⚠️ คุณกำลังเปิดผ่านแอปอื่น (เช่น Messenger / LINE)<br/>
-          แนะนำ: แตะ <strong>⋮</strong> มุมขวาบน → <strong>"เปิดใน Chrome"</strong> เพื่อใช้งานสะดวกที่สุด
-        </div>
-      )}
       <button className="ms-btn" onClick={onSignIn} disabled={loading}>
         {loading ? <Ic.Refresh size={18} className="spin"/> : <Ic.Cloud size={18}/>}
         {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบด้วย Microsoft'}
@@ -4623,13 +3785,9 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
     (state.accounts || []).forEach(a => {
       const key = (a.name || '').toLowerCase();
       if (!key) return;
-      // v5.6: derive unit symbol+position once. Legacy/missing → ฿ before.
-      const unitSymbol = a.unitSymbol != null ? a.unitSymbol : '฿';
-      const unitPosition = a.unitPosition || (UNIT_PRESETS.find(p => p.symbol === unitSymbol)?.position) || 'before';
       stats.set(key, {
         name: a.name,
         decimals: Number.isFinite(a.decimals) ? a.decimals : 2,
-        unitSymbol, unitPosition,
         income: 0, expense: 0, count: 0,
       });
     });
@@ -4639,7 +3797,7 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
       if (!name) return;
       const key = name.toLowerCase();
       if (!stats.has(key)) {
-        stats.set(key, { name, decimals: 2, unitSymbol: '฿', unitPosition: 'before', income: 0, expense: 0, count: 0 });
+        stats.set(key, { name, decimals: 2, income: 0, expense: 0, count: 0 });
       }
       const s = stats.get(key);
       if (t.type === 'income') s.income += t.amount;
@@ -4695,9 +3853,7 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
                 <div className="acct-line2">
                   <div className="acct-balance font-mono-n"
                        style={{color: a.balance < 0 ? 'var(--expense-soft)' : a.balance > 0 ? 'var(--income-soft)' : 'var(--text-faint)'}}>
-                    {a.unitPosition === 'after'
-                      ? <>{fmtMoney(a.balance, a.decimals)}{a.unitSymbol ? ` ${a.unitSymbol}` : ''}</>
-                      : <>{a.unitSymbol || ''}{fmtMoney(a.balance, a.decimals)}</>}
+                    ฿{fmtMoney(a.balance, a.decimals)}
                   </div>
                   <div className="acct-meta">
                     {a.count > 0 ? `${a.count} รายการ` : 'ยังไม่มีรายการ'}
@@ -4714,9 +3870,8 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
   );
 }
 
-
-function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth, totals, monthTx, grandBal, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, onBack, zoomLevel, onZoom }) {
-  const [sortDir, setSortDir] = useState('desc');
+function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth, totals, monthTx, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, onBack, zoomLevel, onZoom }) {
+  const [sortDir, setSortDir] = useState('desc'); // 'desc' = newest first (Z→A), 'asc' = oldest first (A→Z)
   const sortedTx = useMemo(() => {
     const list = [...monthTx];
     list.sort((a, b) => {
@@ -4727,74 +3882,60 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
     return list;
   }, [monthTx, sortDir]);
   const recent = sortedTx.slice(0, 5);
-  // v5.6: when a single account is selected, render numbers with that account's
-  // unit symbol (฿, $, ชิ้น, …). For "all accounts" we fall back to ฿ since the
-  // totals are mixed currencies anyway.
-  const selUnit = selectedAccount === 'all'
-    ? { symbol: '฿', position: 'before' }
-    : getAccountUnit(selectedAccount, masterAccounts || []);
-  // Format a positive amount with the selected account's symbol + position.
-  // `sign` is one of '', '+', '−'.
-  const fmtSel = (n, sign = '') => {
-    const num = fmtMoney(n);
-    if (!selUnit.symbol) return `${sign}${num}`;
-    if (selUnit.position === 'after') return `${sign}${num} ${selUnit.symbol}`;
-    return `${sign}${selUnit.symbol}${num}`;
-  };
-  
   return (
     <div>
       <header className="page-head rise">
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap: 10}}>
           <div style={{display:'flex', alignItems:'center', gap: 8, flex: 1, minWidth: 0}}>
-            {onBack && <button className="back-btn" onClick={onBack}><Ic.ChevL size={16}/></button>}
+            {onBack && (
+              <button className="back-btn" onClick={onBack} aria-label="กลับ">
+                <Ic.ChevL size={16}/>
+              </button>
+            )}
             <div className="crumb" style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
-              {selectedAccount === 'all' ? 'ทุกบัญชี' : selectedAccount}
+              {onBack ? `${selectedAccount === 'all' ? 'ทุกบัญชี' : selectedAccount}` : 'สมุดเงินส่วนตัว'}
             </div>
           </div>
           <div style={{display:'flex', alignItems:'center', gap: 8}}>
             <SyncPill status={status} account={account} skipSync={skipSync}/>
             <ZoomBtn level={zoomLevel} onCycle={onZoom}/>
-            <KebabMenu onOpenAccounts={onManageAccounts} onOpenProjects={onManageProjects} onOpenItems={onManageItems} onOpenCategories={onManageCategories} />
+            <KebabMenu
+              onOpenAccounts={onManageAccounts}
+              onOpenProjects={onManageProjects}
+              onOpenItems={onManageItems}
+            onOpenCategories={onManageCategories}
+            />
           </div>
         </div>
         <div className="title-row">
-          <h1 className="page-title">สรุปยอด</h1>
-          <AccountFilter accountList={accountList} selected={selectedAccount} onSelect={onSelectAccount} onManage={onManageAccounts} />
+          <h1 className="page-title">my money</h1>
+          <AccountFilter
+            accountList={accountList}
+            selected={selectedAccount}
+            onSelect={onSelectAccount}
+            onManage={onManageAccounts}
+          />
         </div>
       </header>
 
       <MonthSelector value={viewMonth} onChange={setViewMonth}/>
 
-      {/* --- ส่วนแสดงผล A และ B แบบใหม่ --- */}
       <div className="card hero rise" style={{marginTop: 20}}>
-        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px'}}>
-          <div>
-            <div className="label">รวมทั้งหมด (B)</div>
-            <div className="amount" style={{marginTop: 8}}>
-              <span className="value font-mono-n" style={{fontSize: '24px', color: grandBal >= 0 ? 'var(--gold)' : 'var(--expense-soft)'}}>
-                {fmtMoney(grandBal)}
-              </span>
-            </div>
-          </div>
-          <div style={{borderLeft: '1px solid var(--line)', paddingLeft: '16px'}}>
-            <div className="label">เดือนนี้ (A)</div>
-            <div className="amount" style={{marginTop: 8}}>
-              <span className="value font-mono-n" style={{fontSize: '24px', color: totals.bal >= 0 ? 'var(--text)' : 'var(--expense-soft)'}}>
-                {fmtMoney(totals.bal)}
-              </span>
-            </div>
-          </div>
+        <div className="label">คงเหลือเดือนนี้</div>
+        <div className="amount">
+          <span className="currency">฿</span>
+          <span className="value font-mono-n" style={{color: totals.bal >= 0 ? 'var(--text)' : 'var(--expense-soft)'}}>
+            {fmtMoney(totals.bal)}
+          </span>
         </div>
-        
-        <div className="stat-grid" style={{marginTop: 20, borderTop: '1px solid var(--line)', paddingTop: '16px'}}>
+        <div className="stat-grid">
           <div className="stat-mini">
-            <div className="lbl"><Ic.ArrowIn size={12} color="var(--income-soft)"/> รายรับเดือนนี้</div>
-            <div className="val" style={{color: 'var(--income-soft)', fontSize: '16px'}}>{fmtSel(totals.inc)}</div>
+            <div className="lbl"><Ic.ArrowIn size={12} color="var(--income-soft)"/>รายรับ</div>
+            <div className="val" style={{color: 'var(--income-soft)'}}>฿{fmtMoney(totals.inc)}</div>
           </div>
           <div className="stat-mini">
-            <div className="lbl"><Ic.ArrowOut size={12} color="var(--expense-soft)"/> รายจ่ายเดือนนี้</div>
-            <div className="val" style={{color: 'var(--expense-soft)', fontSize: '16px'}}>{fmtSel(totals.exp)}</div>
+            <div className="lbl"><Ic.ArrowOut size={12} color="var(--expense-soft)"/>รายจ่าย</div>
+            <div className="val" style={{color: 'var(--expense-soft)'}}>฿{fmtMoney(totals.exp)}</div>
           </div>
         </div>
       </div>
@@ -4802,7 +3943,9 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
       <div className="section-head">
         <h2>รายการล่าสุด</h2>
         <div style={{display:'flex', alignItems:'center', gap: 10}}>
-          <button className={`sort-btn ${sortDir === 'asc' ? 'asc' : ''}`} onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}>
+          <button className={`sort-btn ${sortDir === 'asc' ? 'asc' : ''}`}
+                  onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                  aria-label="สลับการเรียง">
             <span className="ico">{sortDir === 'asc' ? 'A→Z' : 'Z→A'}</span>
           </button>
           <span className="count">{monthTx.length} รายการ</span>
@@ -4813,11 +3956,16 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
         {recent.length === 0 && <EmptyState/>}
         {recent.map((t, i) => <TxRow key={t.id} t={t} onClick={() => onTap(t)} delay={i * 40} accounts={masterAccounts} customCats={masterCategories}/>)}
       </div>
+      {monthTx.length > 5 && (
+        <div style={{marginTop: 12, textAlign: 'center', fontSize: 11, color: 'var(--text-faint)'}}>
+          ดูทั้งหมดในแท็บ "รายการ"
+        </div>
+      )}
     </div>
   );
 }
 
-function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom, onOpenSearch }) {
+function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom }) {
   const [sortDir, setSortDir] = useState('desc');
   const groups = useMemo(() => {
     const g = {};
@@ -4835,27 +3983,11 @@ function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, select
       sortDir === 'asc' ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0])
     );
   }, [monthTx, sortDir]);
-  // v5.6: render day-group +/− chips with the selected account's unit symbol.
-  // For "all accounts" view fall back to ฿ since totals mix currencies.
-  const selUnit = selectedAccount === 'all'
-    ? { symbol: '฿', position: 'before' }
-    : getAccountUnit(selectedAccount, masterAccounts || []);
-  const fmtSel = (n, sign = '') => {
-    const num = fmtMoney(n);
-    if (!selUnit.symbol) return `${sign}${num}`;
-    if (selUnit.position === 'after') return `${sign}${num} ${selUnit.symbol}`;
-    return `${sign}${selUnit.symbol}${num}`;
-  };
   return (
     <div>
       <header className="page-head rise">
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap: 10}}>
           <div className="crumb">ประวัติรายรับรายจ่าย</div>
-          {onOpenSearch && (
-            <button className="search-btn" onClick={onOpenSearch} aria-label="ค้นหา" title="ค้นหารายการ">
-              <Ic.Search size={18}/>
-            </button>
-          )}
           <ZoomBtn level={zoomLevel} onCycle={onZoom}/>
           <KebabMenu
             onOpenAccounts={onManageAccounts}
@@ -4893,8 +4025,8 @@ function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, select
                   <div className="d2">{THAI_DAYS[d.getDay()]}</div>
                 </div>
                 <div className="chip">
-                  {inc > 0 && <div className="in">{fmtSel(inc, '+')}</div>}
-                  {exp > 0 && <div className="out">{fmtSel(exp, '−')}</div>}
+                  {inc > 0 && <div className="in">+฿{fmtMoney(inc)}</div>}
+                  {exp > 0 && <div className="out">−฿{fmtMoney(exp)}</div>}
                 </div>
               </div>
               <div className="tx-list" style={{marginTop:0}}>
@@ -4916,16 +4048,6 @@ function ChartView({ viewMonth, setViewMonth, monthTx, accountList, selectedAcco
   }, [monthTx]);
   const palette = ['#6A866C','#B85842','#88A88A','#A8BC8A','#C99A4A','#7FA678','#B0A47C','#94A37C','#5C7A5E'];
   const total = byCat.reduce((a,b)=>a+b.value,0);
-  // v5.6: render with the selected account's unit symbol + position.
-  const selUnit = selectedAccount === 'all'
-    ? { symbol: '฿', position: 'before' }
-    : getAccountUnit(selectedAccount, masterAccounts || []);
-  const fmtSel = (n) => {
-    const num = fmtMoney(n);
-    if (!selUnit.symbol) return num;
-    if (selUnit.position === 'after') return `${num} ${selUnit.symbol}`;
-    return `${selUnit.symbol}${num}`;
-  };
 
   return (
     <div>
@@ -4952,7 +4074,7 @@ function ChartView({ viewMonth, setViewMonth, monthTx, accountList, selectedAcco
         <>
           <div className="chart-wrap rise">
             <div className="total-lbl">รายจ่ายรวม</div>
-            <div className="total-val font-mono-n">{fmtSel(total)}</div>
+            <div className="total-val font-mono-n">฿{fmtMoney(total)}</div>
             <DonutChart data={byCat} palette={palette} total={total}/>
           </div>
           <div className="cat-list rise">
@@ -4966,7 +4088,7 @@ function ChartView({ viewMonth, setViewMonth, monthTx, accountList, selectedAcco
                     <div className="nm">{c.label}</div>
                     <div className="pc">{pct}% ของรายจ่าย</div>
                   </div>
-                  <div className="val">{fmtSel(c.value)}</div>
+                  <div className="val">฿{fmtMoney(c.value)}</div>
                 </div>
               );
             })}
@@ -4995,7 +4117,7 @@ function DonutChart({ data, palette, total }) {
   return <svg viewBox={`0 0 ${size} ${size}`}>{arcs}</svg>;
 }
 
-function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setState, pushToast, onSignIn, onSignOut, onSyncNow, onEnableSync, authLoading, cacheStatus, pendingCount, isOnline, isAdmin, currentUser, onOpenUsersManager }) {
+function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setState, pushToast, onSignIn, onSignOut, onSyncNow, onEnableSync, authLoading, cacheStatus, pendingCount, isOnline }) {
   const fileRef = useRef(null);
   const [confirm, setConfirm] = useState(false);
   // v2.9: Lessons editor state
@@ -5141,22 +4263,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
   };
 
   const exportJSON = () => {
-    // v5.4: export ทุก field ของ schema (เคยมีบั๊ก: เก่า export แค่ transactions
-    // → ทำให้ import กลับมา accounts/items/users/etc หาย)
-    // Note: users[].pinHash อาจถูก export ด้วย — ผู้ใช้ admin ที่ดาวน์โหลดไฟล์จะเห็น
-    // แต่ pinHash เป็น SHA-256 reverse ไม่ได้ ปลอดภัยพอ
-    const data = {
-      app: 'my-money',
-      version: 2,
-      exportedAt: new Date().toISOString(),
-      lastModified: state.lastModified,
-      transactions: state.transactions || [],
-      items:        state.items || [],
-      accounts:     state.accounts || [],
-      projects:     state.projects || [],
-      categories:   state.categories || [],
-      users:        state.users || [],
-    };
+    const data = { app: 'my-money', version: 1, exportedAt: new Date().toISOString(), transactions: state.transactions };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -5164,7 +4271,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
     a.href = url; a.download = `my-money-backup-${ts}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
-    pushToast('สร้างไฟล์สำรองแล้ว · ครบทุก field');
+    pushToast('สร้างไฟล์สำรองแล้ว');
   };
   const onImport = (e) => {
     const f = e.target.files?.[0]; if (!f) return;
@@ -5172,39 +4279,20 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
     r.onload = () => {
       try {
         const d = JSON.parse(r.result);
-        if (!Array.isArray(d.transactions)) throw new Error('no tx');
-        // Detect old export format (only had transactions field) vs new full schema
-        const isOldFormat = !Array.isArray(d.accounts) && !Array.isArray(d.users);
-        if (isOldFormat) {
-          if (!confirm('ไฟล์นี้เป็นรูปแบบเก่า (มีแค่รายการ ไม่มีบัญชี/users) ต้องการ merge รายการเข้ากับข้อมูลปัจจุบันไหม?')) return;
-          // Merge transactions only — keep current accounts/users/etc.
-          const byId = new Map();
-          (state.transactions || []).forEach(t => byId.set(t.id, t));
-          d.transactions.forEach(t => byId.set(t.id, t));
-          const merged = Array.from(byId.values()).sort((a,b) => b.date.localeCompare(a.date));
-          setState(prev => ({ ...prev, transactions: merged, lastModified: new Date().toISOString() }));
-          pushToast(`นำเข้า ${d.transactions.length} รายการ (เก็บบัญชี/users เดิม)`);
-          return;
-        }
-        // New full-schema import: replace everything
-        if (!confirm(`ไฟล์ backup นี้มี: ${d.transactions.length} รายการ, ${(d.accounts||[]).length} บัญชี, ${(d.users||[]).length} ผู้ใช้\n\nการ import จะแทนที่ข้อมูลปัจจุบันทั้งหมด ดำเนินการต่อ?`)) return;
-        setState({
-          transactions: d.transactions,
-          items:        d.items || [],
-          accounts:     d.accounts || [],
-          projects:     d.projects || [],
-          categories:   d.categories || [],
-          users:        d.users || [],
-          lastModified: new Date().toISOString(),
-        });
-        pushToast(`กู้คืนแล้ว · ${d.transactions.length} รายการ + ${(d.accounts||[]).length} บัญชี`);
-      } catch (err) { console.error(err); pushToast('ไฟล์ไม่ถูกต้อง'); }
+        if (!Array.isArray(d.transactions)) throw 0;
+        const byId = new Map();
+        state.transactions.forEach(t => byId.set(t.id, t));
+        d.transactions.forEach(t => byId.set(t.id, t));
+        const merged = Array.from(byId.values()).sort((a,b) => b.date.localeCompare(a.date));
+        setState({ transactions: merged, lastModified: new Date().toISOString() });
+        pushToast(`นำเข้าแล้ว ${d.transactions.length} รายการ`);
+      } catch { pushToast('ไฟล์ไม่ถูกต้อง'); }
     };
     r.readAsText(f);
     e.target.value = '';
   };
   const clearAll = () => {
-    setState({ transactions: [], items: [], accounts: [], projects: [], categories: [], users: [], lastModified: new Date().toISOString() });
+    setState({ transactions: [], lastModified: new Date().toISOString() });
     setConfirm(false);
     pushToast('ลบข้อมูลทั้งหมดแล้ว');
   };
@@ -5270,223 +4358,191 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         )}
       </div>
 
-      {/* Manual Backup — admin only (v5.0) */}
-      {isAdmin && (
-        <div className="panel rise">
-          <div className="hd">
-            <div className="ico-wrap"><Ic.FileJson size={16}/></div>
-            <div>
-              <div className="tt">สำรอง/กู้คืนด้วยตนเอง</div>
-              <div className="sb">Export / Import ไฟล์ JSON</div>
-            </div>
-          </div>
-          <div className="two-col">
-            <button className="btn-primary" onClick={exportJSON}><Ic.Download size={14}/> Export</button>
-            <button className="btn-ghost" onClick={() => fileRef.current?.click()}><Ic.Upload size={14}/> Import</button>
-            <input ref={fileRef} type="file" accept="application/json,.json" onChange={onImport} style={{display:'none'}}/>
+      {/* Manual Backup */}
+      <div className="panel rise">
+        <div className="hd">
+          <div className="ico-wrap"><Ic.FileJson size={16}/></div>
+          <div>
+            <div className="tt">สำรอง/กู้คืนด้วยตนเอง</div>
+            <div className="sb">Export / Import ไฟล์ JSON</div>
           </div>
         </div>
-      )}
+        <div className="two-col">
+          <button className="btn-primary" onClick={exportJSON}><Ic.Download size={14}/> Export</button>
+          <button className="btn-ghost" onClick={() => fileRef.current?.click()}><Ic.Upload size={14}/> Import</button>
+          <input ref={fileRef} type="file" accept="application/json,.json" onChange={onImport} style={{display:'none'}}/>
+        </div>
+      </div>
 
-      {/* Install on other devices (v1.2) — admin only (v5.0) */}
-      {isAdmin && (
-        <div className="panel rise">
-          <div className="hd">
-            <div className="ico-wrap"><Ic.Phone size={16}/></div>
-            <div>
-              <div className="tt">การเปลี่ยน/เพิ่มมือถือ</div>
-              <div className="sb">ติดตั้งบนเครื่องอื่น · เครื่องหาย · แชร์ให้ครอบครัว</div>
-            </div>
+      {/* Install on other devices (v1.2) */}
+      <div className="panel rise">
+        <div className="hd">
+          <div className="ico-wrap"><Ic.Phone size={16}/></div>
+          <div>
+            <div className="tt">การเปลี่ยน/เพิ่มมือถือ</div>
+            <div className="sb">ติดตั้งบนเครื่องอื่น · เครื่องหาย · แชร์ให้ครอบครัว</div>
           </div>
+        </div>
 
-          <div className="qr-box">
-            <img
-              className="qr-img"
-              src={qrFailed ? qrFallbackUrl : qrApiUrl}
-              alt="QR Code"
-              onError={() => { if (!qrFailed) setQrFailed(true); }}
-            />
-            <div className="qr-url">{appUrl}</div>
+        <div className="qr-box">
+          <img
+            className="qr-img"
+            src={qrFailed ? qrFallbackUrl : qrApiUrl}
+            alt="QR Code"
+            onError={() => { if (!qrFailed) setQrFailed(true); }}
+          />
+          <div className="qr-url">{appUrl}</div>
+        </div>
+
+        <div className="two-col" style={{marginTop: 12}}>
+          <button className="btn-primary" onClick={shareUrl}>
+            <Ic.Share size={14}/> แชร์ลิงก์
+          </button>
+          <button className="btn-ghost" onClick={copyUrl}>
+            <Ic.Copy size={14}/> คัดลอก URL
+          </button>
+        </div>
+
+        <details className="readme-box">
+          <summary>
+            <Ic.Book size={14}/>
+            <span>วิธีติดตั้งบนเครื่องใหม่</span>
+            <Ic.ChevDown size={16} className="chev"/>
+          </summary>
+          <div className="readme-content">
+            <h4>📱 วิธีที่ 1: สแกน QR (ง่ายที่สุด)</h4>
+            <ol>
+              <li>เปิดกล้องบนมือถือเครื่องใหม่ (หรือ Chrome/Samsung Internet)</li>
+              <li>สแกน QR code ด้านบน หรือพิมพ์ URL</li>
+              <li>กด "เข้าสู่ระบบด้วย Microsoft"</li>
+              <li>Sign in ด้วยบัญชี Microsoft เดียวกัน</li>
+              <li>ข้อมูลจะซิงค์จาก OneDrive อัตโนมัติ!</li>
+            </ol>
+
+            <h4>📲 ติดตั้งเป็นไอคอนบนหน้าจอ</h4>
+            <p><strong>Chrome:</strong> เมนู ⋮ → "Install app" หรือ "Add to Home screen"</p>
+            <p><strong>Samsung Internet:</strong> เมนูด้านล่าง → "เพิ่มหน้าในหน้าจอโฮม"</p>
+
+            <h4>👨‍👩‍👧 ใช้ร่วมกับคนในครอบครัว</h4>
+            <p><strong>แบบที่ 1 — แยกข้อมูล:</strong> ให้แต่ละคน Sign in ด้วยบัญชี Microsoft ของตัวเอง แต่ละคนจะได้กระเป๋าเงินของตัวเอง ไม่เห็นกัน</p>
+            <p><strong>แบบที่ 2 — ใช้ร่วมกัน (สามี-ภรรยา):</strong> ทุกเครื่อง Sign in ด้วยบัญชีเดียวกัน จะเห็นและแก้ไขข้อมูลชุดเดียวกันแบบ real-time</p>
+
+            <h4>🔒 กรณีเครื่องหาย / เปลี่ยนเครื่อง</h4>
+            <p>ข้อมูลทั้งหมดอยู่บน <strong>OneDrive</strong> ไม่หายไปกับเครื่อง แค่เปิด URL บนเครื่องใหม่แล้ว Sign in = ได้ข้อมูลกลับคืนครบถ้วน</p>
+
+            <h4>💾 วิธีที่ 2: ใช้ไฟล์ติดตั้งเอง (สำหรับคนเทคนิค)</h4>
+            <p>ดาวน์โหลดไฟล์ HTML → อัปโหลดขึ้น hosting ของตัวเอง (Netlify, GitHub Pages) → เพิ่ม Redirect URI ใหม่ใน Azure</p>
           </div>
+        </details>
 
-          <div className="two-col" style={{marginTop: 12}}>
-            <button className="btn-primary" onClick={shareUrl}>
-              <Ic.Share size={14}/> แชร์ลิงก์
-            </button>
-            <button className="btn-ghost" onClick={copyUrl}>
-              <Ic.Copy size={14}/> คัดลอก URL
-            </button>
-          </div>
+        <div className="two-col" style={{marginTop: 12}}>
+          <button className="btn-ghost" onClick={downloadHtml}>
+            <Ic.Download size={14}/> ดาวน์โหลดไฟล์
+          </button>
+          <button className="btn-ghost" onClick={uploadInstaller} disabled={installerUploading || !account}>
+            {installerUploading
+              ? <><Ic.Refresh size={14} className="spin"/> กำลังอัปโหลด...</>
+              : <><Ic.Cloud size={14}/> เก็บบน OneDrive</>}
+          </button>
+        </div>
 
-          <details className="readme-box">
-            <summary>
-              <Ic.Book size={14}/>
-              <span>วิธีติดตั้งบนเครื่องใหม่</span>
-              <Ic.ChevDown size={16} className="chev"/>
-            </summary>
-            <div className="readme-content">
-              <h4>📱 วิธีที่ 1: สแกน QR (ง่ายที่สุด)</h4>
-              <ol>
-                <li>เปิดกล้องบนมือถือเครื่องใหม่ (หรือ Chrome/Samsung Internet)</li>
-                <li>สแกน QR code ด้านบน หรือพิมพ์ URL</li>
-                <li>กด "เข้าสู่ระบบด้วย Microsoft"</li>
-                <li>Sign in ด้วยบัญชี Microsoft เดียวกัน</li>
-                <li>ข้อมูลจะซิงค์จาก OneDrive อัตโนมัติ!</li>
-              </ol>
-
-              <h4>📲 ติดตั้งเป็นไอคอนบนหน้าจอ</h4>
-              <p><strong>Chrome:</strong> เมนู ⋮ → "Install app" หรือ "Add to Home screen"</p>
-              <p><strong>Samsung Internet:</strong> เมนูด้านล่าง → "เพิ่มหน้าในหน้าจอโฮม"</p>
-
-              <h4>👨‍👩‍👧 ใช้ร่วมกับคนในครอบครัว</h4>
-              <p><strong>แบบที่ 1 — แยกข้อมูล:</strong> ให้แต่ละคน Sign in ด้วยบัญชี Microsoft ของตัวเอง แต่ละคนจะได้กระเป๋าเงินของตัวเอง ไม่เห็นกัน</p>
-              <p><strong>แบบที่ 2 — ใช้ร่วมกัน (สามี-ภรรยา):</strong> ทุกเครื่อง Sign in ด้วยบัญชีเดียวกัน จะเห็นและแก้ไขข้อมูลชุดเดียวกันแบบ real-time</p>
-
-              <h4>🔒 กรณีเครื่องหาย / เปลี่ยนเครื่อง</h4>
-              <p>ข้อมูลทั้งหมดอยู่บน <strong>OneDrive</strong> ไม่หายไปกับเครื่อง แค่เปิด URL บนเครื่องใหม่แล้ว Sign in = ได้ข้อมูลกลับคืนครบถ้วน</p>
-
-              <h4>💾 วิธีที่ 2: ใช้ไฟล์ติดตั้งเอง (สำหรับคนเทคนิค)</h4>
-              <p>ดาวน์โหลดไฟล์ HTML → อัปโหลดขึ้น hosting ของตัวเอง (Netlify, GitHub Pages) → เพิ่ม Redirect URI ใหม่ใน Azure</p>
-            </div>
-          </details>
-
-          <div className="two-col" style={{marginTop: 12}}>
-            <button className="btn-ghost" onClick={downloadHtml}>
-              <Ic.Download size={14}/> ดาวน์โหลดไฟล์
-            </button>
-            <button className="btn-ghost" onClick={uploadInstaller} disabled={installerUploading || !account}>
-              {installerUploading
-                ? <><Ic.Refresh size={14} className="spin"/> กำลังอัปโหลด...</>
-                : <><Ic.Cloud size={14}/> เก็บบน OneDrive</>}
-            </button>
-          </div>
-
-          {lastInstallerUpload && (
-            <div className="installer-status ok">
-              <Ic.Check size={12}/>
-              <span>
-                เก็บไฟล์ติดตั้งบน OneDrive แล้ว · โฟลเดอร์ <strong style={{color: 'var(--gold)'}}>Apps/my money/installer/</strong>
-                <br/>
-                <span style={{fontSize: 10.5, color: 'var(--text-faint)'}}>
-                  ล่าสุด: {new Date(lastInstallerUpload).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                </span>
+        {lastInstallerUpload && (
+          <div className="installer-status ok">
+            <Ic.Check size={12}/>
+            <span>
+              เก็บไฟล์ติดตั้งบน OneDrive แล้ว · โฟลเดอร์ <strong style={{color: 'var(--gold)'}}>Apps/my money/installer/</strong>
+              <br/>
+              <span style={{fontSize: 10.5, color: 'var(--text-faint)'}}>
+                ล่าสุด: {new Date(lastInstallerUpload).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
               </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* v5.0: Users management panel — admin only */}
-      {isAdmin && (
-        <div className="panel rise">
-          <div className="hd">
-            <div className="ico-wrap"><Ic.Users size={16}/></div>
-            <div>
-              <div className="tt">จัดการผู้ใช้</div>
-              <div className="sb">เพิ่ม/แก้ไข/ลบผู้ใช้ · เปลี่ยน PIN</div>
-            </div>
+            </span>
           </div>
-          <p style={{fontSize: 12, color: 'var(--text-dim)', margin: '12px 0', lineHeight: 1.55}}>
-            ผู้ใช้ทั้งหมด {(state.users || []).length} คน · คุณเป็น <span className="admin-tag-inline">admin</span>
-          </p>
-          <button className="btn-ghost" style={{width: '100%'}} onClick={onOpenUsersManager}>
-            <Ic.Users size={14}/> เปิดหน้าจัดการ
+        )}
+      </div>
+
+      {/* v3.5: Offline storage / photo cache */}
+      <OfflineStoragePanel
+        account={account}
+        isOnline={isOnline}
+        cacheStatus={cacheStatus}
+        pendingCount={pendingCount}
+        pushToast={pushToast}
+      />
+
+      {/* v2.9: Lessons / Journal */}
+      <div className="panel rise">
+        <div className="hd">
+          <div className="ico-wrap"><Ic.Book size={16}/></div>
+          <div>
+            <div className="tt">บันทึกบทเรียน</div>
+            <div className="sb">เก็บความรู้ไว้ศึกษาภายหลัง · บน OneDrive</div>
+          </div>
+        </div>
+
+        <p style={{fontSize: 12, color: 'var(--text-dim)', margin: '12px 0', lineHeight: 1.55}}>
+          เปิด/แก้ไขสมุดบันทึก คัดลอกคำอธิบายดีๆ จาก Claude มาเก็บไว้
+          ทุกอย่างเซฟเป็น Markdown บน OneDrive โหลดดูจากเครื่องไหนก็ได้
+        </p>
+
+        <button className="btn-ghost" style={{width: '100%', marginBottom: 8}}
+                onClick={() => setShowLessonsEditor(true)} disabled={!account}>
+          <Ic.Pencil size={14}/> เปิด/แก้ไขสมุดบันทึก
+        </button>
+
+        <div className="two-col">
+          <button className="btn-ghost" onClick={downloadLessonsMd} disabled={!account}>
+            <Ic.Download size={14}/> ดาวน์โหลด .md
+          </button>
+          <button className="btn-ghost" onClick={openLessonsInOneDrive} disabled={!account}>
+            <Ic.Cloud size={14}/> เปิดบน OneDrive
           </button>
         </div>
-      )}
 
-      {/* v3.5: Offline storage / photo cache — admin only (v5.0) */}
-      {isAdmin && (
-        <OfflineStoragePanel
-          account={account}
-          isOnline={isOnline}
-          cacheStatus={cacheStatus}
-          pendingCount={pendingCount}
-          pushToast={pushToast}
-        />
-      )}
-
-      {/* v2.9: Lessons / Journal — admin only (v5.0) */}
-      {isAdmin && (
-        <div className="panel rise">
-          <div className="hd">
-            <div className="ico-wrap"><Ic.Book size={16}/></div>
-            <div>
-              <div className="tt">บันทึกบทเรียน</div>
-              <div className="sb">เก็บความรู้ไว้ศึกษาภายหลัง · บน OneDrive</div>
-            </div>
+        {!account && (
+          <div style={{marginTop: 10, fontSize: 11, color: 'var(--text-faint)', textAlign: 'center'}}>
+            ต้อง Sign in กับ Microsoft ก่อนใช้งานสมุดบันทึก
           </div>
+        )}
+      </div>
 
-          <p style={{fontSize: 12, color: 'var(--text-dim)', margin: '12px 0', lineHeight: 1.55}}>
-            เปิด/แก้ไขสมุดบันทึก คัดลอกคำอธิบายดีๆ จาก Claude มาเก็บไว้
-            ทุกอย่างเซฟเป็น Markdown บน OneDrive โหลดดูจากเครื่องไหนก็ได้
-          </p>
+      {/* Stats */}
+      <div className="panel rise">
+        <div className="hd">
+          <div className="ico-wrap"><Ic.Chart size={16}/></div>
+          <div>
+            <div className="tt">ข้อมูลของคุณ</div>
+            <div className="sb">สรุปภาพรวม</div>
+          </div>
+        </div>
+        <div className="info-grid">
+          <div className="info-cell"><div className="k">ทั้งหมด</div><div className="v">{state.transactions.length}</div></div>
+          <div className="info-cell"><div className="k">รายรับ</div><div className="v">{state.transactions.filter(t=>t.type==='income').length}</div></div>
+          <div className="info-cell"><div className="k">รายจ่าย</div><div className="v">{state.transactions.filter(t=>t.type==='expense').length}</div></div>
+        </div>
+      </div>
 
-          <button className="btn-ghost" style={{width: '100%', marginBottom: 8}}
-                  onClick={() => setShowLessonsEditor(true)} disabled={!account}>
-            <Ic.Pencil size={14}/> เปิด/แก้ไขสมุดบันทึก
+      {/* Danger */}
+      <div className="panel rise">
+        <div className="hd">
+          <div className="ico-wrap" style={{background: 'rgba(184,88,66,0.12)', color: 'var(--expense-soft)'}}><Ic.Trash size={16}/></div>
+          <div>
+            <div className="tt">เขตอันตราย</div>
+            <div className="sb">ลบข้อมูลทั้งหมดในเครื่อง</div>
+          </div>
+        </div>
+        {!confirm ? (
+          <button className="btn-danger" style={{width: '100%', marginTop: 14}} onClick={() => setConfirm(true)}>
+            ลบข้อมูลทั้งหมด
           </button>
-
+        ) : (
           <div className="two-col">
-            <button className="btn-ghost" onClick={downloadLessonsMd} disabled={!account}>
-              <Ic.Download size={14}/> ดาวน์โหลด .md
-            </button>
-            <button className="btn-ghost" onClick={openLessonsInOneDrive} disabled={!account}>
-              <Ic.Cloud size={14}/> เปิดบน OneDrive
-            </button>
+            <button className="btn-ghost" onClick={() => setConfirm(false)}>ยกเลิก</button>
+            <button className="btn-danger solid" onClick={clearAll}>ยืนยันลบ</button>
           </div>
+        )}
+      </div>
 
-          {!account && (
-            <div style={{marginTop: 10, fontSize: 11, color: 'var(--text-faint)', textAlign: 'center'}}>
-              ต้อง Sign in กับ Microsoft ก่อนใช้งานสมุดบันทึก
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Stats — admin only (v5.0) */}
-      {isAdmin && (
-        <div className="panel rise">
-          <div className="hd">
-            <div className="ico-wrap"><Ic.Chart size={16}/></div>
-            <div>
-              <div className="tt">ข้อมูลของคุณ</div>
-              <div className="sb">สรุปภาพรวม</div>
-            </div>
-          </div>
-          <div className="info-grid">
-            <div className="info-cell"><div className="k">ทั้งหมด</div><div className="v">{state.transactions.length}</div></div>
-            <div className="info-cell"><div className="k">รายรับ</div><div className="v">{state.transactions.filter(t=>t.type==='income').length}</div></div>
-            <div className="info-cell"><div className="k">รายจ่าย</div><div className="v">{state.transactions.filter(t=>t.type==='expense').length}</div></div>
-          </div>
-        </div>
-      )}
-
-      {/* Danger — admin only (v5.0) */}
-      {isAdmin && (
-        <div className="panel rise">
-          <div className="hd">
-            <div className="ico-wrap" style={{background: 'rgba(184,88,66,0.12)', color: 'var(--expense-soft)'}}><Ic.Trash size={16}/></div>
-            <div>
-              <div className="tt">เขตอันตราย</div>
-              <div className="sb">ลบข้อมูลทั้งหมดในเครื่อง</div>
-            </div>
-          </div>
-          {!confirm ? (
-            <button className="btn-danger" style={{width: '100%', marginTop: 14}} onClick={() => setConfirm(true)}>
-              ลบข้อมูลทั้งหมด
-            </button>
-          ) : (
-            <div className="two-col">
-              <button className="btn-ghost" onClick={() => setConfirm(false)}>ยกเลิก</button>
-              <button className="btn-danger solid" onClick={clearAll}>ยืนยันลบ</button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.9 · Search results มี thumbnail</div>
+      <div className="vstrip">my money · v3.7 · Hard lock โหมดดูร่วม</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -5518,33 +4574,6 @@ function MonthSelector({ value, onChange }) {
   );
 }
 
-//begin
-// v5.8: Inline thumbnail loader for the list view. Loads only the FIRST photo's
-// blob (saves bandwidth + decode time on long lists), revokes the object URL on
-// unmount, and silently shows nothing if the photo isn't available yet.
-function TxRowThumb({ photoId }) {
-  const [url, setUrl] = useState(null);
-  useEffect(() => {
-    let cancelled = false;
-    let createdUrl = null;
-    if (!photoId) return;
-    fetchPhotoUrl(photoId).then(u => {
-      if (cancelled) {
-        try { URL.revokeObjectURL(u); } catch {}
-        return;
-      }
-      createdUrl = u;
-      setUrl(u);
-    }).catch(() => { /* photo not available yet — silently hide */ });
-    return () => {
-      cancelled = true;
-      if (createdUrl) { try { URL.revokeObjectURL(createdUrl); } catch {} }
-    };
-  }, [photoId]);
-  if (!url) return null;
-  return <img className="tx-row-thumb" src={url} alt="" loading="lazy"/>;
-}
-
 function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
   const cat = getCat(t.type, t.category, customCats);
   const isIn = t.type === 'income';
@@ -5558,47 +4587,34 @@ function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
   if (t.project) subParts.push('📁 ' + t.project);
   if (t.accountName) subParts.push(t.accountName);
   const subText = subParts.join(' · ');
-  // v5.8: pull the first photo (if any) for the inline thumbnail. Older rows may
-  // use the legacy single-photoId field; both shapes are handled.
-  const firstPhotoId = Array.isArray(t.photos) && t.photos.length > 0
-    ? t.photos[0].id
-    : (t.photoId || null);
   const photoCount = Array.isArray(t.photos) ? t.photos.length : (t.photoId ? 1 : 0);
   // Build short DD/MM date for the badge
   const d = t.date ? new Date(t.date + 'T00:00:00') : null;
   const dd = d ? String(d.getDate()).padStart(2, '0') : '--';
   const mm = d ? String(d.getMonth() + 1).padStart(2, '0') : '--';
-  
   return (
-    <button className="tx-row rise" style={{animationDelay: `${delay}ms`, alignItems: 'flex-start'}} onClick={onClick}>
+    <button className="tx-row rise" style={{animationDelay: `${delay}ms`}} onClick={onClick}>
       <div className="date-badge">
         <div className="dd">{dd}/{mm}</div>
         <div className="tt">{timeStr || '--:--:--'}</div>
       </div>
-      <div className="mid" style={{display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1}}>
-        <div className="title-ln" style={{whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3}}>
+      <div className="mid">
+        <div className="title-ln">
           {title}
+          {photoCount > 0 && (
+            <span style={{marginLeft: 6, fontSize: 11, color: 'var(--gold)', verticalAlign: 'middle'}}>
+              📷{photoCount > 1 ? ` ${photoCount}` : ''}
+            </span>
+          )}
         </div>
-        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 6, gap: 10}}>
-          <div className="sub-ln" style={{marginTop: 0, textAlign: 'left'}}>{subText || ''}</div>
-          <div style={{display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0}}>
-            <div className={`amt ${isIn ? 'in' : 'out'}`}>
-              {fmtAmount(t.amount, isIn, t.accountName, accounts)}
-            </div>
-            {firstPhotoId && (
-              <div className="tx-row-thumb-wrap">
-                <TxRowThumb photoId={firstPhotoId}/>
-                {photoCount > 1 && <span className="tx-row-thumb-badge">{photoCount}</span>}
-              </div>
-            )}
-          </div>
-        </div>
+        {subText && <div className="sub-ln">{subText}</div>}
+      </div>
+      <div className={`amt ${isIn ? 'in' : 'out'}`}>
+        {isIn ? '+' : '−'}฿{fmtMoney(t.amount, getAccountDecimals(t.accountName, accounts))}
       </div>
     </button>
   );
 }
-
-//end 
 
 function EmptyState({ text = 'ยังไม่มีรายการในเดือนนี้' }) {
   return (
@@ -6072,8 +5088,6 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
 
   // Current account's decimals (affects amount precision + display)
   const currentDecimals = getAccountDecimals(accountName.trim(), masterAccounts || []);
-  // v5.6: unit symbol+position for the currently picked account (defaults ฿ before)
-  const currentUnit = getAccountUnit(accountName.trim(), masterAccounts || []);
 
   const handleAmount = (e) => {
     let v = e.target.value.replace(/[^\d.]/g, '');
@@ -6129,7 +5143,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
 
           <div className="amount-box">
             <div className="lbl">
-              {currentUnit.symbol && currentUnit.position === 'after' ? `จำนวน (${currentUnit.symbol})` : 'จำนวนเงิน'}
+              จำนวนเงิน
               {currentDecimals > 2 && accountName.trim() && (
                 <span style={{color: 'var(--gold)', marginLeft: 8, fontSize: 10, letterSpacing: '0.05em', textTransform: 'none'}}>
                   · ทศนิยม {currentDecimals} ตำแหน่ง
@@ -6137,14 +5151,9 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
               )}
             </div>
             <div className="row">
-              {currentUnit.symbol && currentUnit.position === 'before' && (
-                <span className="cur">{currentUnit.symbol}</span>
-              )}
+              <span className="cur">฿</span>
               <input inputMode="decimal" placeholder="0" value={amount} onChange={handleAmount}
                      style={{color: type === 'income' ? 'var(--income-soft)' : 'var(--text)'}}/>
-              {currentUnit.symbol && currentUnit.position === 'after' && (
-                <span className="cur after">{currentUnit.symbol}</span>
-              )}
             </div>
           </div>
 
@@ -6326,7 +5335,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
 
           {/* Photo gallery - up to 5 */}
           <div className="cat-head" style={{marginTop: 16, display: 'flex', alignItems: 'center', gap: 6}}>
-            <Ic.Image size={12}/> รูป
+            <Ic.Image size={12}/> รูปใบเสร็จ
             <span style={{marginLeft: 'auto', fontSize: 10.5, color: 'var(--text-faint)',
                           fontWeight: 400, letterSpacing: 0, textTransform: 'none'}}>
               สูงสุด 5 รูป
@@ -6385,89 +5394,21 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
           </div>
         </div>
       </div>
-    </div>
-  );
-}
 
-// ============ Photo Viewer with Zoom/Pan ============
-function ZoomableImage({ src, onClose }) {
-  const [scale, setScale] = useState(1);
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragRef = useRef({ startX: 0, startY: 0, lastX: 0, lastY: 0, startDist: 0, startScale: 1 });
-  const lastTapRef = useRef(0);
-
-  const getDist = (t1, t2) => Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-
-  const onTouchStart = (e) => {
-    if (e.touches.length === 2) {
-      setIsDragging(true);
-      dragRef.current.startDist = getDist(e.touches[0], e.touches[1]);
-      dragRef.current.startScale = scale;
-    } else if (e.touches.length === 1) {
-      setIsDragging(true);
-      dragRef.current.startX = e.touches[0].clientX;
-      dragRef.current.startY = e.touches[0].clientY;
-      dragRef.current.lastX = pos.x;
-      dragRef.current.lastY = pos.y;
-    }
-  };
-
-  const onTouchMove = (e) => {
-    if (!isDragging) return;
-    if (e.touches.length === 2) {
-      const dist = getDist(e.touches[0], e.touches[1]);
-      let s = dragRef.current.startScale * (dist / dragRef.current.startDist);
-      if (s < 0.5) s = 0.5;
-      if (s > 15) s = 15; // ขยายได้สูงสุด 15 เท่า
-      setScale(s);
-    } else if (e.touches.length === 1 && scale > 1) {
-      const dx = e.touches[0].clientX - dragRef.current.startX;
-      const dy = e.touches[0].clientY - dragRef.current.startY;
-      setPos({ x: dragRef.current.lastX + dx, y: dragRef.current.lastY + dy });
-    }
-  };
-
-  const onTouchEnd = (e) => {
-    if (e.touches.length === 0) setIsDragging(false);
-    if (scale < 1) { setScale(1); setPos({ x: 0, y: 0 }); }
-  };
-
-  const handleTap = () => {
-    const now = Date.now();
-    if (now - lastTapRef.current < 300) {
-      if (scale > 1) { setScale(1); setPos({ x: 0, y: 0 }); }
-      else { setScale(3); setPos({ x: 0, y: 0 }); } // เคาะ 2 ทีซูม 3 เท่า
-      lastTapRef.current = 0;
-    } else {
-      lastTapRef.current = now;
-    }
-  };
-
-  return (
-    <div className="photo-viewer fade"
-         onClick={(e) => { if (e.target === e.currentTarget && scale === 1) onClose(); }}>
-      <button className="close-btn" onClick={onClose} style={{ zIndex: 100 }}>
-        <Ic.X size={18}/>
-      </button>
-      <img
-        src={src} alt="receipt zoom"
-        onDragStart={(e) => e.preventDefault()}
-        onTouchStart={onTouchStart} onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd} onClick={handleTap}
-        style={{
-          transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale})`,
-          transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
-          touchAction: 'none', transformOrigin: 'center center',
-          userSelect: 'none', WebkitUserSelect: 'none'
-        }}
-      />
+      {viewerIdx >= 0 && photos[viewerIdx] && photoUrls[photos[viewerIdx].id] && (
+        <div className="photo-viewer fade" onClick={() => setViewerIdx(-1)}>
+          <button className="close-btn" onClick={() => setViewerIdx(-1)}>
+            <Ic.X size={18}/>
+          </button>
+          <img src={photoUrls[photos[viewerIdx].id]} alt="receipt"/>
+        </div>
+      )}
     </div>
   );
 }
 
 // ============ Row Action Menu (Edit/Duplicate/Delete) ============
-function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, customCats, txList, onNavigate, canEdit = true, canDuplicate = true }) {
+function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, customCats, txList, onNavigate }) {
   const cat = getCat(tx.type, tx.category, customCats);
   const timeStr = timeFromIso(tx.createdAt);
   const title = (tx.item || tx.payee || '').trim() || tx.note?.trim() || (tx.category ? cat.label : 'รายการ');
@@ -6486,17 +5427,14 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
   const [dragX, setDragX] = useState(0);   // current finger offset
   const [animX, setAnimX] = useState(null); // when set, sheet glides to this X then resets
   const dragRef = useRef({ startX: 0, startY: 0, active: false, locked: null });
-
   const SWIPE_THRESH = 70;  // px to trigger
   const onTouchStart = (e) => {
-    if (e.touches.length > 1) { dragRef.current.active = false; return; } // ปล่อยให้ใช้ 2 นิ้วซูม
     const t = e.touches[0];
     dragRef.current = { startX: t.clientX, startY: t.clientY, active: true, locked: null };
     setAnimX(null);
   };
   const onTouchMove = (e) => {
     if (!dragRef.current.active) return;
-    if (e.touches.length > 1) { dragRef.current.active = false; return; } // ปล่อยให้ใช้ 2 นิ้วซูม
     const t = e.touches[0];
     const dx = t.clientX - dragRef.current.startX;
     const dy = t.clientY - dragRef.current.startY;
@@ -6624,7 +5562,7 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
                   {isIn ? <><Ic.ArrowIn size={11}/> รายรับ</> : <><Ic.ArrowOut size={11}/> รายจ่าย</>}
                 </span>
                 <span className={`amt ${isIn ? 'in' : 'out'}`}>
-                  {fmtAmount(tx.amount, isIn, tx.accountName, accounts)}
+                  {isIn ? '+' : '−'}฿{fmtMoney(tx.amount, decimals)}
                 </span>
               </div>
 
@@ -6672,7 +5610,7 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
             {photoCount > 0 && (
               <div className="preview-thumbs">
                 <div className="preview-thumbs-head">
-                  <span>รูป</span>
+                  <span>รูปใบเสร็จ</span>
                   <span className="ct">{photoCount} รูป</span>
                 </div>
                 <div className="preview-thumbs-grid">
@@ -6692,21 +5630,15 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
             </div>{/* /swipe-area */}
 
             <div className="action-btn-list">
-              <button className="action-btn-row primary" onClick={onEdit} aria-label="แก้ไข"
-                      disabled={!canEdit}
-                      title={!canEdit ? 'ไม่มีสิทธิ์แก้ไขรายการนี้' : 'แก้ไข'}>
-                <div className="ico">{canEdit ? <Ic.Pencil size={20}/> : <Ic.Lock size={20}/>}</div>
-                <div className="lbl">{canEdit ? 'แก้ไข' : 'ดูอย่างเดียว'}</div>
+              <button className="action-btn-row primary" onClick={onEdit} aria-label="แก้ไข">
+                <div className="ico"><Ic.Pencil size={20}/></div>
+                <div className="lbl">แก้ไข</div>
               </button>
-              <button className="action-btn-row neutral" onClick={onDuplicate} aria-label="ทำซ้ำ"
-                      disabled={!canDuplicate}
-                      title={!canDuplicate ? 'ไม่มีสิทธิ์เพิ่มในบัญชีนี้' : 'ทำซ้ำรายการ (ยกเว้นรูปภาพ)'}>
+              <button className="action-btn-row neutral" onClick={onDuplicate} aria-label="คัดลอก">
                 <div className="ico"><Ic.Copy size={20}/></div>
-                <div className="lbl">ทำซ้ำ</div>
+                <div className="lbl">คัดลอก</div>
               </button>
-              <button className="action-btn-row danger" onClick={onDelete} aria-label="ลบ"
-                      disabled={!canEdit}
-                      title={!canEdit ? 'ไม่มีสิทธิ์ลบรายการนี้' : 'ลบ'}>
+              <button className="action-btn-row danger" onClick={onDelete} aria-label="ลบ">
                 <div className="ico"><Ic.Trash size={20}/></div>
                 <div className="lbl">ลบ</div>
               </button>
@@ -6719,12 +5651,14 @@ function TxActionMenu({ tx, onClose, onEdit, onDuplicate, onDelete, accounts, cu
         </div>
       </div>
 
-      {/* Full-screen photo viewer — opens when user taps a thumbnail */}
+      {/* Full-screen photo viewer */}
       {viewerIdx >= 0 && photoList[viewerIdx] && photoUrls[photoList[viewerIdx].id] && (
-        <ZoomableImage
-          src={photoUrls[photoList[viewerIdx].id]}
-          onClose={() => setViewerIdx(-1)}
-        />
+        <div className="photo-viewer fade" onClick={() => setViewerIdx(-1)}>
+          <button className="close-btn" onClick={() => setViewerIdx(-1)}>
+            <Ic.X size={18}/>
+          </button>
+          <img src={photoUrls[photoList[viewerIdx].id]} alt="receipt"/>
+        </div>
       )}
     </div>
   );
@@ -6742,7 +5676,7 @@ function ConfirmDeleteTx({ tx, onCancel, onConfirm, accounts }) {
         <div className="c-icon"><Ic.Trash size={22}/></div>
         <h3>ลบรายการนี้?</h3>
         <div className="c-desc">
-          <strong>{title}</strong> — {fmtAmount(tx.amount, null, tx.accountName, accounts)}
+          <strong>{title}</strong> — ฿{fmtMoney(tx.amount, decimals)}
           <br/>
           การลบนี้ถาวร ไม่สามารถกู้คืนได้
           {photoCount > 0 && (
@@ -6761,265 +5695,6 @@ function ConfirmDeleteTx({ tx, onCancel, onConfirm, accounts }) {
 }
 
 // ============ Items Manager Modal ============
-// ============ v5.0: Users Manager (admin only) ============
-// Lets the admin add/rename/remove users, change PINs, and toggle admin role.
-// Each user has: id (immutable, generated from label), label, icon, role, pinHash.
-// PIN changes are immediately hashed before storing.
-function UsersManager({ users, currentUserId, onClose, onAdd, onUpdate, onChangePin, onRemove, pushToast }) {
-  const [editingId, setEditingId] = useState(null);
-  const [editLabel, setEditLabel] = useState('');
-  const [editIcon, setEditIcon] = useState('👤');
-  const [editRole, setEditRole] = useState('member');
-  const [pinTarget, setPinTarget] = useState(null); // user being PIN-reset
-  const [pinValue, setPinValue] = useState('');
-  const [confirmDelId, setConfirmDelId] = useState(null);
-  // Add form state
-  const [adding, setAdding] = useState(false);
-  const [newLabel, setNewLabel] = useState('');
-  const [newIcon, setNewIcon] = useState('👤');
-  const [newRole, setNewRole] = useState('member');
-
-  const startEdit = (u) => {
-    setEditingId(u.id);
-    setEditLabel(u.label);
-    setEditIcon(u.icon || '👤');
-    setEditRole(u.role || 'member');
-  };
-  const cancelEdit = () => { setEditingId(null); };
-  const saveEdit = () => {
-    const n = editLabel.trim();
-    if (!n) { pushToast('ชื่อต้องไม่ว่าง'); return; }
-    onUpdate(editingId, { label: n, icon: editIcon, role: editRole });
-    pushToast('แก้ไขแล้ว');
-    setEditingId(null);
-  };
-
-  const startAdd = () => { setAdding(true); setNewLabel(''); setNewIcon('👤'); setNewRole('member'); };
-  const cancelAdd = () => setAdding(false);
-  const saveAdd = async () => {
-    const r = await onAdd(newLabel, newRole, newIcon);
-    if (r.ok) {
-      pushToast(`เพิ่ม ${newLabel} แล้ว · PIN เริ่มต้น 1234`);
-      setAdding(false);
-    } else if (r.reason === 'empty') {
-      pushToast('ชื่อต้องไม่ว่าง');
-    }
-  };
-
-  const startPinReset = (u) => { setPinTarget(u); setPinValue(''); };
-  const cancelPinReset = () => { setPinTarget(null); setPinValue(''); };
-  const savePinReset = async () => {
-    if (!/^\d{4}$/.test(pinValue)) { pushToast('PIN ต้องเป็นตัวเลข 4 หลัก'); return; }
-    const r = await onChangePin(pinTarget.id, pinValue);
-    if (r.ok) {
-      pushToast(`เปลี่ยน PIN ของ ${pinTarget.label} แล้ว`);
-      setPinTarget(null);
-      setPinValue('');
-    }
-  };
-
-  const ICONS = ['👤','👨','👩','👴','👵','👦','👧','👶','👑','🧑','👨‍🦱','👩‍🦱','🧔','👨‍🦳','👩‍🦳'];
-
-  // PIN reset overlay
-  if (pinTarget) {
-    return (
-      <div className="sheet-backdrop fade" onClick={cancelPinReset} style={{zIndex: 95}}>
-        <div className="sheet-wrap sheet-in" onClick={e => e.stopPropagation()}>
-          <div className="sheet">
-            <div className="sheet-handle"></div>
-            <div className="sheet-head">
-              <h2>🔑 ตั้ง PIN ใหม่</h2>
-              <button className="icon-btn-round" onClick={cancelPinReset}><Ic.X size={16}/></button>
-            </div>
-            <div style={{textAlign: 'center', padding: '14px 8px'}}>
-              <div style={{fontSize: 40, marginBottom: 8}}>{pinTarget.icon || '👤'}</div>
-              <div style={{fontSize: 16, color: 'var(--text)'}}>{pinTarget.label}</div>
-              <div style={{fontSize: 11, color: 'var(--text-faint)', marginTop: 4}}>
-                ใส่ PIN ใหม่ 4 หลัก
-              </div>
-            </div>
-            <input
-              type="tel"
-              maxLength={4}
-              pattern="\d{4}"
-              inputMode="numeric"
-              value={pinValue}
-              onChange={(e) => setPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
-              autoFocus
-              style={{
-                width: '100%',
-                fontSize: 28, textAlign: 'center', letterSpacing: '0.5em',
-                fontFamily: 'IBM Plex Mono, monospace',
-                padding: '14px 12px', borderRadius: 12,
-                background: 'var(--surface)', border: '1px solid var(--line)',
-                color: 'var(--text)',
-              }}
-            />
-            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16}}>
-              <button className="btn-ghost" onClick={cancelPinReset}>ยกเลิก</button>
-              <button className="btn-primary" onClick={savePinReset} disabled={pinValue.length !== 4}>
-                <Ic.Check size={14}/> บันทึก
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="sheet-backdrop fade" onClick={onClose}>
-      <div className="sheet-wrap sheet-in" onClick={e => e.stopPropagation()}>
-        <div className="sheet">
-          <div className="sheet-handle"></div>
-          <div className="sheet-head">
-            <h2>👥 จัดการผู้ใช้</h2>
-            <button className="icon-btn-round" onClick={onClose}><Ic.X size={16}/></button>
-          </div>
-          <div style={{fontSize: 11, color: 'var(--text-faint)', marginTop: 6, marginBottom: 12}}>
-            ผู้ใช้ทุกคนเริ่มต้นด้วย PIN <code style={{color: 'var(--gold)'}}>1234</code> · เปลี่ยนได้ที่ปุ่ม 🔑
-          </div>
-
-          {/* Add user form */}
-          {adding ? (
-            <div className="user-add-card">
-              <div className="user-add-row">
-                <select
-                  value={newIcon}
-                  onChange={(e) => setNewIcon(e.target.value)}
-                  className="user-icon-select">
-                  {ICONS.map(i => <option key={i} value={i}>{i}</option>)}
-                </select>
-                <input
-                  type="text"
-                  placeholder="ชื่อผู้ใช้ เช่น ลูกสาว"
-                  value={newLabel}
-                  onChange={(e) => setNewLabel(e.target.value)}
-                  className="user-name-input"
-                  autoFocus
-                />
-              </div>
-              <select
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value)}
-                className="vis-select"
-                style={{width: '100%', marginTop: 8}}>
-                <option value="member">👤 ผู้ใช้ทั่วไป</option>
-                <option value="admin">👑 ผู้ดูแลระบบ (admin)</option>
-              </select>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10}}>
-                <button className="btn-ghost" onClick={cancelAdd}>ยกเลิก</button>
-                <button className="btn-primary" onClick={saveAdd} disabled={!newLabel.trim()}>
-                  <Ic.Plus size={14}/> เพิ่ม
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button className="btn-ghost" style={{width: '100%', marginBottom: 14}} onClick={startAdd}>
-              <Ic.Plus size={14}/> เพิ่มผู้ใช้ใหม่
-            </button>
-          )}
-
-          {/* Users list */}
-          <div className="items-mgr-list">
-            {(users || []).map(u => {
-              const isMe = u.id === currentUserId;
-              return (
-                <div key={u.id} className={`mgr-row ${isMe ? 'me' : ''}`}>
-                  {editingId === u.id ? (
-                    <>
-                      <select
-                        value={editIcon}
-                        onChange={(e) => setEditIcon(e.target.value)}
-                        className="user-icon-select">
-                        {ICONS.map(i => <option key={i} value={i}>{i}</option>)}
-                      </select>
-                      <input
-                        className="user-name-input"
-                        value={editLabel}
-                        onChange={(e) => setEditLabel(e.target.value)}
-                      />
-                      <select
-                        value={editRole}
-                        onChange={(e) => setEditRole(e.target.value)}
-                        className="vis-select">
-                        <option value="member">👤 ทั่วไป</option>
-                        <option value="admin">👑 admin</option>
-                      </select>
-                      <div className="actions">
-                        <button className="edit-btn" onClick={saveEdit} title="บันทึก">
-                          <Ic.Check size={14}/>
-                        </button>
-                        <button className="del-btn" onClick={cancelEdit} title="ยกเลิก">
-                          <Ic.X size={14}/>
-                        </button>
-                      </div>
-                    </>
-                  ) : confirmDelId === u.id ? (
-                    <>
-                      <div className="name-wrap">
-                        <div className="name" style={{color: 'var(--expense-soft)'}}>
-                          ลบ "{u.label}" ?
-                        </div>
-                        <div className="meta">บัญชีเก่าจะคงอยู่ แต่ user หาย</div>
-                      </div>
-                      <div className="actions">
-                        <button className="del-btn-confirm" onClick={() => {
-                          const r = onRemove(u.id);
-                          if (r.ok) { pushToast(`ลบ ${u.label} แล้ว`); setConfirmDelId(null); }
-                          else if (r.reason === 'last-admin') pushToast('ลบไม่ได้ — เหลือ admin คนสุดท้าย');
-                        }}>
-                          <Ic.Check size={14}/>
-                        </button>
-                        <button className="del-btn" onClick={() => setConfirmDelId(null)}>
-                          <Ic.X size={14}/>
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="name-wrap">
-                        <div className="name">
-                          <span className="user-row-icon">{u.icon || '👤'}</span>
-                          {u.label}
-                          {isMe && <span className="me-tag">(คุณ)</span>}
-                          {u.role === 'admin' && <span className="admin-tag-inline">admin</span>}
-                        </div>
-                        <div className="meta">
-                          ID: <code style={{color: 'var(--gold)'}}>{u.id}</code>
-                        </div>
-                      </div>
-                      <div className="actions">
-                        <button className="perm-btn" onClick={() => startPinReset(u)} title="ตั้ง PIN ใหม่">
-                          🔑
-                        </button>
-                        <button className="edit-btn" onClick={() => startEdit(u)} title="แก้ไข">
-                          <Ic.Pencil size={14}/>
-                        </button>
-                        {!isMe && (
-                          <button className="del-btn" onClick={() => setConfirmDelId(u.id)} title="ลบ">
-                            <Ic.Trash size={14}/>
-                          </button>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div style={{marginTop: 20}}>
-            <button className="btn-primary" onClick={onClose} style={{width: '100%'}}>
-              เสร็จสิ้น
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove, pushToast }) {
   const [newName, setNewName] = useState('');
   const [editingId, setEditingId] = useState(null);
@@ -7201,40 +5876,13 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
 }
 
 // ============ Accounts Manager Modal ============
-function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpdate, onRemove, onSetPerm, isAdmin, pushToast }) {
+function AccountsManager({ accounts, transactions, onClose, onAdd, onUpdate, onRemove, onToggleShared, pushToast }) {
   const [newName, setNewName] = useState('');
   const [newDecimals, setNewDecimals] = useState(2);
-  // v5.6: unit symbol per account. '__custom' is a sentinel meaning "show custom input".
-  const [newUnitChoice, setNewUnitChoice] = useState('฿');
-  const [newUnitCustom, setNewUnitCustom] = useState('');
-  const [newUnitPosition, setNewUnitPosition] = useState('before');
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState('');
   const [editDecimals, setEditDecimals] = useState(2);
-  const [editUnitChoice, setEditUnitChoice] = useState('฿');
-  const [editUnitCustom, setEditUnitCustom] = useState('');
-  const [editUnitPosition, setEditUnitPosition] = useState('before');
   const [confirmDelId, setConfirmDelId] = useState(null);
-  const [permPanelId, setPermPanelId] = useState(null); // v5.0: which account's perm panel is open
-
-  // When user picks a preset, sync the position automatically.
-  // For '__custom' we leave position editable.
-  const onPickNewUnit = (choice) => {
-    setNewUnitChoice(choice);
-    if (choice !== '__custom') {
-      const preset = UNIT_PRESETS.find(p => p.symbol === choice);
-      if (preset) setNewUnitPosition(preset.position);
-    }
-  };
-  const onPickEditUnit = (choice) => {
-    setEditUnitChoice(choice);
-    if (choice !== '__custom') {
-      const preset = UNIT_PRESETS.find(p => p.symbol === choice);
-      if (preset) setEditUnitPosition(preset.position);
-    }
-  };
-  // Resolve actual symbol value to save: '__custom' → use custom textbox value.
-  const resolveSymbol = (choice, custom) => choice === '__custom' ? (custom || '') : choice;
 
   // Count usage of each account across transactions
   const usageMap = useMemo(() => {
@@ -7261,30 +5909,18 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
   const handleAdd = () => {
     const n = newName.trim();
     if (!n) return;
-    const sym = resolveSymbol(newUnitChoice, newUnitCustom);
-    const ok = onAdd(n, newDecimals, sym, newUnitPosition);
-    if (ok) {
-      setNewName(''); setNewDecimals(2);
-      setNewUnitChoice('฿'); setNewUnitCustom(''); setNewUnitPosition('before');
-    }
+    const ok = onAdd(n, newDecimals);
+    if (ok) { setNewName(''); setNewDecimals(2); }
   };
 
   const startEdit = (a) => {
     setEditingId(a.id);
     setEditName(a.name);
     setEditDecimals(Number.isFinite(a.decimals) ? a.decimals : 2);
-    // Resolve current symbol → preset id or '__custom'
-    const curSym = a.unitSymbol != null ? a.unitSymbol : '฿';
-    const curPos = a.unitPosition || guessUnitPosition(curSym);
-    const isPreset = UNIT_PRESETS.some(p => p.symbol === curSym);
-    setEditUnitChoice(isPreset ? curSym : '__custom');
-    setEditUnitCustom(isPreset ? '' : curSym);
-    setEditUnitPosition(curPos);
     setConfirmDelId(null);
   };
   const saveEdit = () => {
-    const sym = resolveSymbol(editUnitChoice, editUnitCustom);
-    const ok = onUpdate(editingId, editName, editDecimals, sym, editUnitPosition);
+    const ok = onUpdate(editingId, editName, editDecimals);
     if (ok) { setEditingId(null); setEditName(''); }
   };
   const cancelEdit = () => { setEditingId(null); setEditName(''); };
@@ -7324,34 +5960,8 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
               <Ic.Plus size={14}/>
             </button>
           </div>
-          <div className="unit-picker">
-            <label className="unit-picker-lbl">สัญลักษณ์หน่วย</label>
-            <select className="unit-select"
-                    value={newUnitChoice}
-                    onChange={e => onPickNewUnit(e.target.value)}>
-              {UNIT_PRESETS.map(p => (
-                <option key={p.label} value={p.symbol}>{p.label}</option>
-              ))}
-              <option value="__custom">⚙️ กำหนดเอง...</option>
-            </select>
-            {newUnitChoice === '__custom' && (
-              <div className="unit-custom-row">
-                <input type="text" maxLength="6"
-                       value={newUnitCustom}
-                       onChange={e => setNewUnitCustom(e.target.value)}
-                       placeholder="เช่น kg, ตัว, กล่อง"
-                       className="unit-custom-input"/>
-                <select className="unit-pos-select"
-                        value={newUnitPosition}
-                        onChange={e => setNewUnitPosition(e.target.value)}>
-                  <option value="before">ก่อนเลข ({newUnitCustom || '◌'}100)</option>
-                  <option value="after">หลังเลข (100 {newUnitCustom || '◌'})</option>
-                </select>
-              </div>
-            )}
-          </div>
           <div className="acct-mgr-hint">
-            💡 บัญชีปกติใช้ 2 ตำแหน่ง · คริปโต/ทองใช้ได้ถึง 10 ตำแหน่ง · เลือกหน่วยตามชนิดบัญชี
+            💡 บัญชีปกติใช้ 2 ตำแหน่ง · คริปโต/ทองใช้ได้ถึง 10 ตำแหน่ง
           </div>
 
           {/* List */}
@@ -7394,32 +6004,6 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
                                        else if (e.key === 'Escape') cancelEdit();
                                      }}/>
                             </div>
-                            <div className="unit-picker inline">
-                              <label className="unit-picker-lbl">สัญลักษณ์หน่วย</label>
-                              <select className="unit-select"
-                                      value={editUnitChoice}
-                                      onChange={e => onPickEditUnit(e.target.value)}>
-                                {UNIT_PRESETS.map(p => (
-                                  <option key={p.label} value={p.symbol}>{p.label}</option>
-                                ))}
-                                <option value="__custom">⚙️ กำหนดเอง...</option>
-                              </select>
-                              {editUnitChoice === '__custom' && (
-                                <div className="unit-custom-row">
-                                  <input type="text" maxLength="6"
-                                         value={editUnitCustom}
-                                         onChange={e => setEditUnitCustom(e.target.value)}
-                                         placeholder="เช่น kg, ตัว"
-                                         className="unit-custom-input"/>
-                                  <select className="unit-pos-select"
-                                          value={editUnitPosition}
-                                          onChange={e => setEditUnitPosition(e.target.value)}>
-                                    <option value="before">ก่อนเลข</option>
-                                    <option value="after">หลังเลข</option>
-                                  </select>
-                                </div>
-                              )}
-                            </div>
                           </div>
                           <div className="actions">
                             <button className="save-btn" onClick={saveEdit}
@@ -7460,18 +6044,7 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
                         <>
                           <div className="name-wrap">
                             <div className="name">
-                              {(() => {
-                                // Show small badges for each member that has any access
-                                const perms = a.permissions || {};
-                                const members = (users || []).filter(u => u.role !== 'admin');
-                                const granted = members.filter(u => (perms[u.id] || 'none') !== 'none');
-                                if (granted.length === 0) return null;
-                                return (
-                                  <span className="shared-badge" title={granted.map(u => u.label).join(', ')}>
-                                    {granted.map(u => u.icon || '👤').join('')}
-                                  </span>
-                                );
-                              })()}
+                              {a.shared && <span className="shared-badge" title="แชร์ในโหมดดูร่วม">👁️</span>}
                               {a.name}
                               <span className="dec-badge">·{dec}d</span>
                             </div>
@@ -7479,17 +6052,16 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
                               {usage > 0 ? `ใช้ ${usage} ครั้ง` : 'ยังไม่ถูกใช้'}
                               {' · '}
                               ทศนิยม {dec} ตำแหน่ง
+                              {a.shared && <span style={{color:'var(--income-soft)', marginLeft:6}}>· แชร์</span>}
                             </div>
                           </div>
                           <div className="actions">
-                            {isAdmin && (
-                              <button
-                                className="perm-btn"
-                                onClick={() => setPermPanelId(permPanelId === a.id ? null : a.id)}
-                                title="ตั้งสิทธิ์ผู้ใช้">
-                                <Ic.Users size={14}/>
-                              </button>
-                            )}
+                            <button
+                              className={`share-btn ${a.shared ? 'on' : ''}`}
+                              onClick={() => onToggleShared(a.id)}
+                              title={a.shared ? 'เลิกแชร์' : 'แชร์ให้โหมดดูร่วม'}>
+                              <Ic.Share size={14}/>
+                            </button>
                             <button className="edit-btn" onClick={() => startEdit(a)}
                                     title="แก้ไข">
                               <Ic.Pencil size={14}/>
@@ -7500,34 +6072,6 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
                             </button>
                           </div>
                         </>
-                      )}
-                      {/* v5.0: per-user permission panel — admin-only, expands inline */}
-                      {permPanelId === a.id && isAdmin && (
-                        <div className="perm-panel">
-                          <div className="perm-panel-hd">สิทธิ์ของแต่ละผู้ใช้</div>
-                          {(users || []).filter(u => u.role !== 'admin').map(u => {
-                            const cur = (a.permissions || {})[u.id] || 'none';
-                            return (
-                              <div key={u.id} className="perm-row">
-                                <span className="perm-user">
-                                  <span className="perm-user-icon">{u.icon || '👤'}</span>
-                                  {u.label}
-                                </span>
-                                <select
-                                  className="vis-select"
-                                  value={cur}
-                                  onChange={(e) => onSetPerm(a.id, u.id, e.target.value)}>
-                                  {PERM_OPTS.map(p => (
-                                    <option key={p.id} value={p.id}>{p.label}</option>
-                                  ))}
-                                </select>
-                              </div>
-                            );
-                          })}
-                          {(users || []).filter(u => u.role !== 'admin').length === 0 && (
-                            <div className="perm-empty">ยังไม่มีผู้ใช้คนอื่น — เพิ่มได้ในตั้งค่า</div>
-                          )}
-                        </div>
                       )}
                     </div>
                   );
@@ -8031,192 +6575,6 @@ function OfflineStoragePanel({ account, isOnline, cacheStatus, pendingCount, pus
     </div>
   );
 }
-
-// ============ v5.5: Advanced Search ============
-// User can enter up to 3 keyword fragments (AND-combined), filter by project,
-// account, and date range. Each non-empty keyword must appear (substring,
-// case-insensitive, whitespace-trimmed) somewhere in any field of the transaction.
-// Results are tappable — opens TxActionMenu like the regular list.
-function SearchSheet({ allTransactions, accounts, projects, categories, onClose, onPickTx }) {
-  const [k1, setK1] = useState('');
-  const [k2, setK2] = useState('');
-  const [k3, setK3] = useState('');
-  const [project, setProject] = useState('');
-  const [accountName, setAccountName] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [submitted, setSubmitted] = useState(false); // run search after first click
-
-  // Build a flat searchable string for a transaction across every meaningful field.
-  // We deliberately include numbers (amount), dates, ids — same as the user expects
-  // for "search every field".
-  const searchableText = (t) => {
-    const parts = [
-      t.type, t.category, t.accountName, t.project, t.item, t.payee,
-      t.note, t.date, t.createdAt,
-      t.amount != null ? String(t.amount) : '',
-      // photo names too (in case user remembers a receipt filename)
-      ...(Array.isArray(t.photos) ? t.photos.map(p => p?.name || '') : []),
-    ];
-    return parts.filter(Boolean).join(' ').toLowerCase();
-  };
-
-  const results = useMemo(() => {
-    if (!submitted) return null;
-    const keywords = [k1, k2, k3].map(s => (s || '').trim().toLowerCase()).filter(Boolean);
-    const projF = (project || '').trim();
-    const accF = (accountName || '').trim();
-    return (allTransactions || []).filter(t => {
-      // Date range (inclusive). Skip if date doesn't parse.
-      if (dateFrom && t.date && t.date < dateFrom) return false;
-      if (dateTo && t.date && t.date > dateTo) return false;
-      // Project / account filters (exact match, optional)
-      if (projF && (t.project || '').trim() !== projF) return false;
-      if (accF && (t.accountName || '').trim() !== accF) return false;
-      // Keyword AND across every field
-      if (keywords.length > 0) {
-        const hay = searchableText(t);
-        for (const kw of keywords) {
-          if (!hay.includes(kw)) return false;
-        }
-      }
-      return true;
-    }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  }, [submitted, k1, k2, k3, project, accountName, dateFrom, dateTo, allTransactions]);
-
-  const reset = () => {
-    setK1(''); setK2(''); setK3('');
-    setProject(''); setAccountName('');
-    setDateFrom(''); setDateTo('');
-    setSubmitted(false);
-  };
-
-  const onSubmit = () => {
-    setSubmitted(true);
-  };
-
-  // No results yet & not yet submitted → show only the form
-  // Submitted → show results list below the form
-  return (
-    <div className="sheet-backdrop fade" onClick={onClose} style={{zIndex: 90}}>
-      <div className="sheet-wrap sheet-in" onClick={e => e.stopPropagation()}>
-        <div className="sheet">
-          <div className="sheet-handle"></div>
-          <div className="sheet-head">
-            <h2>🔍 ค้นหารายการ</h2>
-            <button className="icon-btn-round" onClick={onClose}><Ic.X size={16}/></button>
-          </div>
-
-          {/* Keyword inputs — all optional, AND-combined */}
-          <div className="search-form">
-            <label className="search-label">คำค้นหา (ใส่อย่างน้อย 1 ช่อง)</label>
-            <input
-              type="text"
-              className="search-input"
-              placeholder="ข้อความที่ 1 (เช่น ค่าน้ำ)"
-              value={k1}
-              onChange={(e) => setK1(e.target.value)}
-            />
-            <input
-              type="text"
-              className="search-input"
-              placeholder="ข้อความที่ 2 (เช่น เมษ — เพิ่มเงื่อนไข)"
-              value={k2}
-              onChange={(e) => setK2(e.target.value)}
-            />
-            <input
-              type="text"
-              className="search-input"
-              placeholder="ข้อความที่ 3 (optional)"
-              value={k3}
-              onChange={(e) => setK3(e.target.value)}
-            />
-
-            <div className="search-divider"></div>
-
-            <label className="search-label">เลือก (optional)</label>
-            <select
-              className="search-input"
-              value={project}
-              onChange={(e) => setProject(e.target.value)}>
-              <option value="">— ทุกโครงการ —</option>
-              {(projects || []).map(p => (
-                <option key={p.id} value={p.name}>{p.name}</option>
-              ))}
-            </select>
-            <select
-              className="search-input"
-              value={accountName}
-              onChange={(e) => setAccountName(e.target.value)}>
-              <option value="">— ทุกบัญชี —</option>
-              {(accounts || []).map(a => (
-                <option key={a.id} value={a.name}>{a.name}</option>
-              ))}
-            </select>
-
-            <div className="search-divider"></div>
-
-            <label className="search-label">ช่วงเวลา (optional)</label>
-            <div className="search-date-row">
-              <div className="search-date-cell">
-                <span className="search-date-lbl">จาก</span>
-                <input
-                  type="date"
-                  className="search-input"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                />
-              </div>
-              <div className="search-date-cell">
-                <span className="search-date-lbl">ถึง</span>
-                <input
-                  type="date"
-                  className="search-input"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="search-actions">
-              <button className="btn-ghost" onClick={reset} type="button">
-                ล้าง
-              </button>
-              <button className="btn-primary" onClick={onSubmit} type="button">
-                <Ic.Search size={14}/> ค้นหา
-              </button>
-            </div>
-          </div>
-
-          {/* Results list — v5.9: reuse TxRow so search results show thumbnails too */}
-          {submitted && results !== null && (
-            <div className="search-results">
-              <div className="search-results-hd">
-                {results.length === 0
-                  ? '— ไม่พบรายการที่ตรง —'
-                  : `พบ ${results.length} รายการ`}
-              </div>
-              <div className="tx-list" style={{marginTop: 8}}>
-                {results.map((t, i) => (
-                  <TxRow key={t.id}
-                         t={t}
-                         delay={Math.min(i * 20, 200)}
-                         accounts={accounts}
-                         customCats={categories || []}
-                         onClick={() => onPickTx(t)}/>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Note: v5.9 removed the dedicated SearchResultRow component — search results
-// now reuse the same TxRow used in the main list, so they get thumbnails and
-// consistent styling for free.
 
 function LessonsEditor({ onClose, pushToast }) {
   const [content, setContent] = useState('');
