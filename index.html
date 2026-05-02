@@ -576,84 +576,16 @@ body:has(.sheet-backdrop) nav.tabbar {
   font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-faint);
 }
 .amount-box .row {
-  display: flex; align-items: baseline; justify-content: center; gap: 8px; margin-top: 0;
+  display: flex; align-items: baseline; justify-content: center; gap: 8px; margin-top: 8px;
 }
 .amount-box .cur {
   font-family: 'IBM Plex Mono', monospace; font-size: 20px; color: var(--text-dim);
 }
 .amount-box .cur.after { font-size: 16px; }
 .amount-box input {
-  /* v5.13: use monospace so each digit takes a fixed width (26px @ font-size 38px),
-     letting us line up the spinner buttons above/below each digit precisely. */
-  font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums;
-  font-size: 38px; line-height: 1.2; background: transparent; outline: none; border: none;
-  text-align: center; width: auto; min-width: 60px; caret-color: var(--gold);
-  font-weight: 600;
-  padding: 0;
-  letter-spacing: 0;
-}
-
-/* v5.12 (revised v5.13): Per-digit spinner — each ^/v button is 26px wide,
-   matching the IBM Plex Mono character width at 38px font-size, so the
-   buttons sit directly above/below the matching digit in the input. */
-.amount-spinner-stack {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-top: 8px;
-}
-.amount-spinner-row {
-  display: flex; gap: 0;
-  font-family: 'IBM Plex Mono', monospace;
-  user-select: none;
-  height: 24px;
-  align-items: center;
-  /* width is intrinsic — depends on number of step cells inside */
-}
-.amount-spinner-row .step {
-  width: 26px; height: 24px;
-  display: inline-flex; align-items: center; justify-content: center;
-  color: var(--text-faint);
-  font-size: 16px; font-weight: 600;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background .15s, color .15s, transform .1s;
-  flex-shrink: 0;
-  padding: 0;
-}
-.amount-spinner-row .step.up:hover, .amount-spinner-row .step.up:active {
-  background: rgba(139,179,139,0.18);
-  color: var(--income-soft);
-}
-.amount-spinner-row .step.down:hover, .amount-spinner-row .step.down:active {
-  background: rgba(184,88,66,0.18);
-  color: var(--expense-soft);
-}
-.amount-spinner-row .step:active { transform: scale(0.85); }
-.amount-spinner-row .gap {
-  /* matches the visual width of "." at IBM Plex Mono 38px (~14px wide) */
-  width: 14px; height: 24px;
-  display: inline-flex; align-items: center; justify-content: center;
-  color: transparent;
-  font-size: 22px; font-weight: 600;
-  flex-shrink: 0;
-}
-.amount-spinner-row.dot-row .gap { color: var(--text-dim); }
-/* The middle row (input) needs to share the same intrinsic width. We render
-   a wrapper that sizes itself to match the spinner row widths. */
-.amount-input-track {
-  display: flex; align-items: baseline; justify-content: center;
-  gap: 8px;
-  margin: 2px 0;
-}
-.amount-input-track .digit-input-shell {
-  display: inline-flex; align-items: center; justify-content: center;
-  /* Each character ≈ 26px wide in IBM Plex Mono @ 38px. Width is set inline
-     based on (intLen * 26) + (hasDot ? 14 : 0) + (decimals * 26). */
-}
-.amount-input-track .digit-input-shell input {
-  width: 100%;
+  font-family: 'Noto Serif Thai', serif; font-variant-numeric: tabular-nums;
+  font-size: 44px; line-height: 1; background: transparent; outline: none; border: none;
+  text-align: center; width: 65%; caret-color: var(--gold);
 }
 
 /* Category grid */
@@ -682,43 +614,17 @@ body:has(.sheet-backdrop) nav.tabbar {
 .form-rows { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 .form-row {
   background: var(--surface2); border: 1px solid var(--line); border-radius: 16px;
-  padding: 12px 16px; display: flex; align-items: flex-start; gap: 10px;
-  min-height: 48px;
+  padding: 12px 16px; display: flex; align-items: center; gap: 12px;
 }
 .form-row .lbl {
   font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--text-faint);
-  width: 56px; flex-shrink: 0;
-  padding-top: 4px; /* visually align with first line of input text */
+  color: var(--text-faint); width: 56px; flex-shrink: 0;
 }
-.form-row input,
-.form-row textarea {
-  flex: 1; min-width: 0;
-  background: transparent; outline: none; border: none;
-  font-size: 14px;
+.form-row input {
+  flex: 1; background: transparent; outline: none; border: none; font-size: 14px;
   color: var(--text); color-scheme: dark;
-  font-family: inherit;
-  resize: none; /* user-resize off; we auto-grow via JS */
-  line-height: 1.45;
-  padding: 4px 0;
 }
-.form-row textarea { word-break: break-word; }
 .form-row input.mono { font-family: 'IBM Plex Mono', monospace; }
-/* v5.11: action buttons (✕ clear, ⚙ manage) hug the right edge so the input
-   gets all the horizontal room it can. Buttons stay top-aligned so a wrapping
-   textarea grows down without pushing them around. */
-.form-row .field-actions {
-  display: flex; align-items: flex-start; gap: 4px;
-  flex-shrink: 0;
-  margin-top: 0;
-}
-.form-row .field-actions .clearable-btn {
-  position: static;
-  transform: none;
-}
-.form-row .field-actions .clearable-btn:active {
-  transform: scale(0.9);
-}
 
 /* Sheet actions */
 .sheet-actions { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -798,18 +704,6 @@ body:has(.sheet-backdrop) nav.tabbar {
 .signin .skip {
   margin-top: 14px; font-size: 12px; color: var(--text-dim);
   text-decoration: underline; text-underline-offset: 3px;
-}
-/* v5.12: explicit redirect fallback link */
-.signin .signin-alt {
-  margin-top: 16px;
-  font-size: 11px;
-  color: var(--text-faint);
-  text-decoration: underline; text-underline-offset: 3px;
-  padding: 4px 8px;
-  border-radius: 8px;
-}
-.signin .signin-alt:active {
-  background: var(--surface2);
 }
 .signin .hint {
   margin-top: 32px; font-size: 11px; color: var(--text-faint); max-width: 300px; line-height: 1.6;
@@ -1562,47 +1456,6 @@ body:has(.sheet-backdrop) nav.tabbar {
   transition: all .15s;
 }
 .field-manage-btn:active { transform: scale(0.9); }
-
-/* v5.10: ClearableInput — ✕ to clear, ↩ to restore last cleared text */
-.clearable-wrap {
-  position: relative;
-  display: block;
-  flex: 1;
-  min-width: 0;
-}
-.clearable-wrap > input {
-  width: 100%;
-  padding-right: 32px; /* leave room for the ✕/↩ button */
-}
-.clearable-btn {
-  position: absolute;
-  top: 50%;
-  right: 6px;
-  transform: translateY(-50%);
-  width: 22px; height: 22px;
-  border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--surface2);
-  border: 1px solid var(--line);
-  color: var(--text-faint);
-  cursor: pointer;
-  padding: 0;
-  transition: background .15s, color .15s, transform .15s;
-}
-.clearable-btn:active { transform: translateY(-50%) scale(0.9); }
-.clearable-btn.clear:hover, .clearable-btn.clear:active {
-  background: rgba(184,88,66,0.15);
-  color: var(--expense-soft);
-  border-color: var(--expense-soft);
-}
-.clearable-btn.restore {
-  background: rgba(106,134,108,0.15);
-  color: var(--income-soft);
-  border-color: var(--income-soft);
-}
-.clearable-btn.restore:active {
-  background: rgba(106,134,108,0.25);
-}
 .field-manage-btn:hover { background: rgba(106,134,108,0.15); }
 
 /* v2.5: Full-width transaction preview card */
@@ -2634,59 +2487,40 @@ function isInAppBrowser() {
     const ua = navigator.userAgent || '';
     // Common in-app browser markers — covers Messenger, FB, Instagram, LINE,
     // KakaoTalk, WeChat, TikTok, etc.
-    // v5.12: Removed the `window.opener !== null` check because Chrome on Android
-    // sometimes has a non-null opener even when running as a normal tab (e.g. when
-    // the user followed a link from Messenger → opened in Chrome). That false
-    // positive made us route to redirect prematurely, but worse, we still tried
-    // popup first when the user clicked the button explicitly, leading to a
-    // visible block_nested_popups error before the redirect fallback kicked in.
     if (/FBAN|FBAV|Messenger|Instagram|Line\/|KAKAOTALK|MicroMessenger|Twitter|TikTok|Snapchat/i.test(ua)) {
       return true;
     }
+    // Detect "is this window itself a popup" — works for any in-app browser even if
+    // the user-agent doesn't list itself. window.opener !== null means another window
+    // opened us (which is what in-app browsers do).
+    if (window.opener && window.opener !== window) return true;
   } catch {}
   return false;
 }
 
 async function signIn() {
   const inst = await initMsal();
-  // to redirect — popup will only fail with block_nested_popups.
+  // v5.2: If we're already inside an in-app browser, skip popup and go straight to
+  // redirect — popup will only fail with block_nested_popups.
   if (isInAppBrowser()) {
     await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
     return null; // navigation happens; nothing more to do
   }
-  // v5.12: Try popup first (works in regular Chrome desktop and most mobile
-  // Chrome). On any popup-related failure we silently fall through to redirect
-  // so the user never sees the raw "block_nested_popups" error in the UI.
+  // Try popup first (works in regular Chrome).
+  // If MSAL throws ANY popup-related error, fall back to redirect.
   try {
     const res = await inst.loginPopup({ scopes: CFG.scopes, prompt: 'select_account' });
     return res.account;
   } catch (e) {
     const code = String(e?.errorCode || e?.errorMessage || e?.message || '');
-    const isPopupBlocked =
-      /block_nested_popups|popup_window_error|empty_window_error|popup_blocked|user_cancelled/i.test(code)
+    const isPopupBlocked = /block_nested_popups|popup_window_error|empty_window_error|popup_blocked/i.test(code)
       || (e?.name === 'BrowserAuthError' && /popup/i.test(code));
     if (isPopupBlocked) {
-      // Silent transition — user will be redirected to Microsoft, not see an error.
-      try {
-        await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
-      } catch (redirErr) {
-        // If even redirect fails (very rare — bad config etc.) re-throw the
-        // original popup error so the user gets some feedback rather than a
-        // silent dead end.
-        throw e;
-      }
+      await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
       return null;
     }
     throw e;
   }
-}
-
-// v5.12: Explicit redirect-based sign-in for users where popup doesn't work.
-// Triggered by the "ลองวิธีอื่น" link on the sign-in screen. This always
-// navigates away from the page, so the function never returns normally.
-async function signInRedirect() {
-  const inst = await initMsal();
-  await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
 }
 
 async function signOut() {
@@ -2746,89 +2580,12 @@ async function remoteFetch() {
   return await res.json();
 }
 
-// v5.14: Wrap the save with two safety nets that didn't exist in v5.13:
-//
-// 1. Empty state guard — refuse to upload an obviously-blank state if the
-//    remote file is non-trivial. This is the failure mode that nuked the
-//    vault on May 2: a stale tab on a different device booted with default
-//    empty state, then sync'd that empty state up over the real data.
-//
-// 2. Optimistic locking — before writing, fetch the remote file's lastModified
-//    and compare to the timestamp this client started from. If the remote has
-//    moved forward (another device saved while we were editing), abort and
-//    let the caller decide how to merge.
-//
-// Both checks can be bypassed with the {force:true} option for cases where
-// we DO want to overwrite (e.g. user explicitly chose "use my version" in a
-// conflict prompt, or the very first save that creates the file).
-async function remoteSave(data, options = {}) {
-  const { force = false, expectedLastModified = null, allowEmpty = false } = options;
-
-  // ----- Empty-state guard -----
-  // We define "empty-looking" as: zero transactions AND zero accounts AND
-  // zero items. A brand-new vault with just {users:[], categories:[]} fits
-  // this; so does a state object that was reset to defaults before sync
-  // finished. Either way, if the REMOTE file currently has real data, we
-  // refuse to overwrite without explicit caller consent.
-  if (!force && !allowEmpty) {
-    const looksEmpty =
-      (!Array.isArray(data?.transactions) || data.transactions.length === 0) &&
-      (!Array.isArray(data?.accounts)     || data.accounts.length === 0) &&
-      (!Array.isArray(data?.items)        || data.items.length === 0);
-    if (looksEmpty) {
-      try {
-        const remote = await remoteFetch();
-        const remoteHasData =
-          (Array.isArray(remote?.transactions) && remote.transactions.length > 0) ||
-          (Array.isArray(remote?.accounts)     && remote.accounts.length > 0)     ||
-          (Array.isArray(remote?.items)        && remote.items.length > 0);
-        if (remoteHasData) {
-          const err = new Error('REFUSED_EMPTY_OVERWRITE');
-          err.code = 'EMPTY_OVERWRITE_REFUSED';
-          err.remote = remote;
-          throw err;
-        }
-      } catch (e) {
-        if (e && e.code === 'EMPTY_OVERWRITE_REFUSED') throw e;
-        // Couldn't fetch remote (network issue) — fail closed: don't risk it.
-        const err = new Error('REFUSED_EMPTY_NO_REMOTE_CHECK');
-        err.code = 'EMPTY_OVERWRITE_REFUSED';
-        throw err;
-      }
-    }
-  }
-
-  // ----- Optimistic locking -----
-  // If caller passed an expectedLastModified, fetch the remote and abort if
-  // someone else wrote since we last loaded. This catches the multi-device
-  // race where two phones save back-to-back and the second one would silently
-  // erase the first one's edits.
-  if (!force && expectedLastModified) {
-    try {
-      const remote = await remoteFetch();
-      const remoteTs = remote?.lastModified || null;
-      if (remoteTs && remoteTs !== expectedLastModified) {
-        const err = new Error('REMOTE_MOVED_FORWARD');
-        err.code = 'REMOTE_NEWER';
-        err.remote = remote;
-        err.remoteLastModified = remoteTs;
-        err.expectedLastModified = expectedLastModified;
-        throw err;
-      }
-    } catch (e) {
-      if (e && e.code === 'REMOTE_NEWER') throw e;
-      // Couldn't check (e.g. 404 = file doesn't exist yet). Allow save.
-    }
-  }
-
-  // ----- Stamp + write -----
-  // Always set lastModified so subsequent loads can use it for the OL check.
-  const stamped = { ...data, lastModified: new Date().toISOString() };
+async function remoteSave(data) {
   const token = await getToken();
   const res = await fetch(GRAPH_URL(FILE_PATH), {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(stamped),
+    body: JSON.stringify(data),
   });
   if (!res.ok) { const t = await res.text(); throw new Error(`Save ${res.status}: ${t.slice(0,120)}`); }
   return await res.json();
@@ -3151,8 +2908,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.14.1';
-const APP_VERSION_TAG = 'แก้ typo remoteLoad → remoteFetch';
+const APP_VERSION = 'v5.9';
+const APP_VERSION_TAG = 'Search results ใช้ TxRow (มี thumbnail)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -3285,19 +3042,6 @@ function useSync(state, setState, isOnline) {
   const timerRef = useRef(null);
   const syncingRef = useRef(false);
 
-  // v5.14: Track the last lastModified value we received from OneDrive.
-  // This is the "expected" timestamp we send back during save — if the remote
-  // file's timestamp has changed (someone else wrote), the save aborts so we
-  // can pull-and-merge instead of clobbering. Lives in a ref so changes don't
-  // re-trigger our debounce effects.
-  const remoteBaselineRef = useRef(null);
-
-  // v5.14: Until the very first pullOnce() resolves, we MUST NOT push our
-  // local state up — at boot, local state is the empty default, and pushing
-  // it would erase the remote vault on every fresh tab open. This was the
-  // exact mechanism behind the May 2 data loss.
-  const initialSyncDoneRef = useRef(false);
-
   // Build the full payload sent to OneDrive. Centralised so we don't forget any
   // top-level field (e.g. v5.0 added `users`).
   const buildPayload = (s) => ({
@@ -3321,9 +3065,6 @@ function useSync(state, setState, isOnline) {
       if (remote && remote.transactions) {
         const remoteTime = remote.lastModified || '';
         const localTime = state.lastModified || '';
-        // Update baseline regardless of which way we're going to sync —
-        // it represents what we know the remote file's lastModified is.
-        remoteBaselineRef.current = remoteTime || null;
         if (!localTime || remoteTime > localTime) {
           setState({
             transactions: remote.transactions,
@@ -3335,26 +3076,16 @@ function useSync(state, setState, isOnline) {
             lastModified: remoteTime,
           });
         } else if (localTime > remoteTime) {
-          // push local up — this is the rare case where the user edited
-          // offline and we're now reconnected. Pass the remote's timestamp
-          // as the optimistic-lock baseline so we don't clobber a write
-          // that landed in between.
-          const result = await remoteSave(buildPayload(state), {
-            expectedLastModified: remoteTime || null,
-          });
-          remoteBaselineRef.current = result?.lastModifiedDateTime || new Date().toISOString();
+          // push local up
+          await remoteSave(buildPayload(state));
         }
       } else if (state.transactions.length > 0 || (state.items || []).length > 0 || (state.accounts || []).length > 0 || (state.projects || []).length > 0 || (state.categories || []).length > 0 || (state.users || []).length > 0) {
-        // remote is empty but we have local data → push it. This is the
-        // first-ever save for this account, so allow the empty-state guard
-        // to be lenient (there's nothing to overwrite).
-        const result = await remoteSave(buildPayload(state), { force: true });
-        remoteBaselineRef.current = result?.lastModifiedDateTime || new Date().toISOString();
+        // remote is empty but we have local data → push it
+        await remoteSave(buildPayload(state));
       }
       setStatus('ok');
       setLastSync(new Date());
       setErrMsg(null);
-      initialSyncDoneRef.current = true;
     } catch (e) {
       console.error(e);
       setStatus('error');
@@ -3365,43 +3096,20 @@ function useSync(state, setState, isOnline) {
   // Scheduled push (debounced on state change)
   const schedulePush = useCallback(() => {
     if (!isOnline) return;
-    // v5.14: hold all pushes until the first pull has confirmed what's on the
-    // server. Pushing a fresh empty state on top of a real vault is exactly
-    // how data got nuked — the first tab to load on a slow network would
-    // overwrite everything before the pull finished.
-    if (!initialSyncDoneRef.current) return;
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
       if (syncingRef.current) return;
       syncingRef.current = true;
       setStatus('syncing');
       try {
-        const result = await remoteSave(buildPayload(state), {
-          expectedLastModified: remoteBaselineRef.current,
-        });
-        // Update our baseline so subsequent saves don't false-positive on the
-        // optimistic-lock check. We use our own stamp because Graph's response
-        // lastModifiedDateTime occasionally lags the body we just wrote.
-        remoteBaselineRef.current = new Date().toISOString();
+        await remoteSave(buildPayload(state));
         setStatus('ok');
         setLastSync(new Date());
         setErrMsg(null);
       } catch (e) {
         console.error(e);
-        // Translate the new v5.14 error codes into user-readable status
-        // messages. The full conflict UX (let user pick local vs remote)
-        // is still TODO — for now we surface the situation honestly so the
-        // user can decide whether to keep editing or refresh.
-        if (e && e.code === 'EMPTY_OVERWRITE_REFUSED') {
-          setStatus('error');
-          setErrMsg('ปลอดภัย: ปฏิเสธการเขียนข้อมูลว่างทับ — กรุณารีเฟรช');
-        } else if (e && e.code === 'REMOTE_NEWER') {
-          setStatus('error');
-          setErrMsg('มีอุปกรณ์อื่นแก้ไขก่อน — กรุณารีเฟรชเพื่อดึงข้อมูลล่าสุด');
-        } else {
-          setStatus('error');
-          setErrMsg(String(e.message || e));
-        }
+        setStatus('error');
+        setErrMsg(String(e.message || e));
       } finally {
         syncingRef.current = false;
       }
@@ -3415,130 +3123,6 @@ function useSync(state, setState, isOnline) {
 // ============ v5.0: PIN-based profile gate (uses runtime user list) ============
 // User picks profile after Microsoft login → enters 4-digit PIN → enters app.
 // Profile stored in sessionStorage so closing the tab/Chrome auto-locks.
-// v5.10: text input with clear (✕) and restore (↩) buttons.
-// - Empty value → no buttons
-// - Has text → show ✕ to clear (saves the text in a stash)
-// - Just cleared → show ↩ to restore the stashed text
-// Stash is reset whenever the user types again, so restore only works
-// immediately after the most recent clear.
-// Spreads any extra props onto the inner <input> (placeholder, type, onFocus, …).
-function ClearableInput({ value, onChange, ...rest }) {
-  const stashRef = useRef('');
-  const [justCleared, setJustCleared] = useState(false);
-  const handleChange = (e) => {
-    setJustCleared(false);
-    onChange?.(e);
-  };
-  const clear = () => {
-    if (!value) return;
-    stashRef.current = value;
-    setJustCleared(true);
-    // Synthesize an event so the parent's onChange handler treats this as a
-    // normal text edit (no special "clear" callback needed in callers).
-    onChange?.({ target: { value: '' } });
-  };
-  const restore = () => {
-    if (!stashRef.current) return;
-    onChange?.({ target: { value: stashRef.current } });
-    setJustCleared(false);
-  };
-  const showClear = !justCleared && (value || '').length > 0;
-  const showRestore = justCleared && stashRef.current.length > 0;
-  return (
-    <span className="clearable-wrap">
-      <input {...rest} value={value} onChange={handleChange}/>
-      {showClear && (
-        <button type="button" className="clearable-btn clear"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={clear}
-                aria-label="ล้างข้อความ"
-                title="ล้างข้อความ">
-          <Ic.X size={12}/>
-        </button>
-      )}
-      {showRestore && (
-        <button type="button" className="clearable-btn restore"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={restore}
-                aria-label="คืนค่าข้อความ"
-                title="คืนค่าข้อความ">
-          <Ic.Refresh size={12}/>
-        </button>
-      )}
-    </span>
-  );
-}
-
-// v5.11: textarea variant of ClearableInput — auto-grows up to a max number of
-// rows so long item names / notes wrap onto a second line instead of being
-// truncated. Clear/restore behaviour is identical to ClearableInput.
-function ClearableTextarea({ value, onChange, minRows = 1, maxRows = 4, ...rest }) {
-  const stashRef = useRef('');
-  const taRef = useRef(null);
-  const [justCleared, setJustCleared] = useState(false);
-
-  // Resize the textarea to fit its content, capped between minRows and maxRows.
-  // We measure with scrollHeight on the live element, then clamp.
-  const autosize = () => {
-    const el = taRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    const cs = window.getComputedStyle(el);
-    const lh = parseFloat(cs.lineHeight) || 20;
-    const padTop = parseFloat(cs.paddingTop) || 0;
-    const padBot = parseFloat(cs.paddingBottom) || 0;
-    const minH = lh * minRows + padTop + padBot;
-    const maxH = lh * maxRows + padTop + padBot;
-    const next = Math.max(minH, Math.min(maxH, el.scrollHeight));
-    el.style.height = next + 'px';
-    el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden';
-  };
-  useEffect(() => { autosize(); }, [value]);
-
-  const handleChange = (e) => {
-    setJustCleared(false);
-    onChange?.(e);
-  };
-  const clear = () => {
-    if (!value) return;
-    stashRef.current = value;
-    setJustCleared(true);
-    onChange?.({ target: { value: '' } });
-  };
-  const restore = () => {
-    if (!stashRef.current) return;
-    onChange?.({ target: { value: stashRef.current } });
-    setJustCleared(false);
-  };
-  const showClear = !justCleared && (value || '').length > 0;
-  const showRestore = justCleared && stashRef.current.length > 0;
-  return (
-    <>
-      <textarea ref={taRef} rows={minRows} {...rest} value={value} onChange={handleChange}/>
-      {(showClear || showRestore) && (
-        <span className="field-actions">
-          {showClear && (
-            <button type="button" className="clearable-btn clear"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={clear}
-                    aria-label="ล้างข้อความ" title="ล้างข้อความ">
-              <Ic.X size={12}/>
-            </button>
-          )}
-          {showRestore && (
-            <button type="button" className="clearable-btn restore"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={restore}
-                    aria-label="คืนค่าข้อความ" title="คืนค่าข้อความ">
-              <Ic.Refresh size={12}/>
-            </button>
-          )}
-        </span>
-      )}
-    </>
-  );
-}
-
 function ProfilePicker({ users, onPick }) {
   // Filter out users without a PIN set (shouldn't happen, but safe)
   const visible = users || [];
@@ -4135,24 +3719,12 @@ function App() {
     const trimmed = (label || '').trim();
     if (!trimmed) return { ok: false, reason: 'empty' };
     const users = state.users || [];
-    // v5.14: use crypto.randomUUID() for guaranteed uniqueness — the previous
-    // approach of slugifying the label silently dropped non-ASCII characters
-    // (Thai script), so every Thai name collapsed to "user" and got serialised
-    // to "user-2", "user-3"… When the array order shifted (e.g. after a sync
-    // race), those positional IDs could point to different humans than expected,
-    // which is how a member could end up acting under an admin's id. UUIDs are
-    // opaque, fixed, and never collide.
-    let id;
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      id = `u_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
-    } else {
-      // Fallback for very old browsers without randomUUID — use timestamp+random.
-      id = `u_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-    }
-    // Extra safety: in case of cosmic collision, retry with longer suffix
-    while (users.some(u => u.id === id)) {
-      id = `u_${crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : Date.now().toString(36) + Math.random().toString(36).slice(2)}`;
-    }
+    // Generate id from label (transliterated to ASCII isn't trivial in the browser without
+    // libs; we just slugify whitespace + fallback to random suffix to avoid collisions).
+    const baseId = trimmed.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'user';
+    let id = baseId;
+    let n = 2;
+    while (users.some(u => u.id === id)) { id = `${baseId}-${n++}`; }
     const pinHash = await hashPin(pin);
     mutate(prev => ({
       ...prev,
@@ -4286,27 +3858,8 @@ function App() {
       setAccount(acc);
     } catch (e) {
       console.error(e);
-      // v5.12: Don't display popup-related errors — they're handled internally
-      // (we always fall back to redirect). If we're here it's a genuine config
-      // or network error worth showing.
-      const msg = String(e?.errorCode || e?.message || e || '');
-      if (!/popup|block_nested|user_cancelled/i.test(msg)) {
-        setAuthError(msg);
-      }
+      setAuthError(String(e.message || e));
     } finally { setAuthLoading(false); }
-  };
-  // v5.12: Explicit redirect path. Used by the "ลองวิธีอื่น" link when popup
-  // sign-in doesn't work for the user (e.g. opened from another app).
-  const doSignInRedirect = async () => {
-    setAuthLoading(true); setAuthError(null);
-    try {
-      await signInRedirect();
-      // navigation happens — page unloads; no further code runs here
-    } catch (e) {
-      console.error(e);
-      setAuthError(String(e?.errorCode || e?.message || e || ''));
-      setAuthLoading(false);
-    }
   };
   const doSignOut = async () => {
     try { await signOut(); } catch (e) { console.error(e); }
@@ -4384,7 +3937,6 @@ function App() {
         loading={authLoading}
         error={authError}
         onSignIn={doSignIn}
-        onSignInRedirect={doSignInRedirect}
         onSkip={() => setSkipSync(true)}
       />
     );
@@ -4808,7 +4360,7 @@ function SetupNeeded() {
 }
 
 // ============ Sign In ============
-function SignIn({ loading, error, onSignIn, onSignInRedirect, onSkip }) {
+function SignIn({ loading, error, onSignIn, onSkip }) {
   // v5.2: warn users opening from Messenger/LINE in-app browsers — login still works
   // (we use redirect fallback) but it's smoother in real Chrome.
   const inApp = isInAppBrowser();
@@ -4832,13 +4384,6 @@ function SignIn({ loading, error, onSignIn, onSignInRedirect, onSkip }) {
       </button>
       <button className="skip" onClick={onSkip}>ใช้งานแบบออฟไลน์ก่อน</button>
       {error && <div className="err">⚠️ {error}</div>}
-      {/* v5.12: explicit redirect option for users where the popup approach
-          has trouble (common on Android Chrome when opened from another app) */}
-      {onSignInRedirect && !loading && (
-        <button className="signin-alt" onClick={onSignInRedirect}>
-          ⚠️ เข้าสู่ระบบไม่ได้? ลองวิธีอื่น (redirect)
-        </button>
-      )}
       <div className="hint">
         ข้อมูลจะถูกเก็บในโฟลเดอร์ <strong style={{color: 'var(--gold)'}}>/Apps/</strong> บน OneDrive ของคุณเท่านั้น แอปเข้าถึงไฟล์อื่นไม่ได้
       </div>
@@ -5221,16 +4766,36 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
 
       <MonthSelector value={viewMonth} onChange={setViewMonth}/>
 
-      {/* v5.10: simplified summary — only the all-time balance "รวมทั้งหมด" remains.
-          Monthly stats (A) and rายรับ/รายจ่าย breakdowns were removed at user
-          request — they duplicated info already visible in the chart and the
-          day-group chips below. */}
+      {/* --- ส่วนแสดงผล A และ B แบบใหม่ --- */}
       <div className="card hero rise" style={{marginTop: 20}}>
-        <div className="label">สรุปยอด</div>
-        <div className="amount" style={{marginTop: 8}}>
-          <span className="value font-mono-n" style={{fontSize: '32px', color: grandBal >= 0 ? 'var(--gold)' : 'var(--expense-soft)'}}>
-            {fmtSel(grandBal)}
-          </span>
+        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px'}}>
+          <div>
+            <div className="label">รวมทั้งหมด (B)</div>
+            <div className="amount" style={{marginTop: 8}}>
+              <span className="value font-mono-n" style={{fontSize: '24px', color: grandBal >= 0 ? 'var(--gold)' : 'var(--expense-soft)'}}>
+                {fmtMoney(grandBal)}
+              </span>
+            </div>
+          </div>
+          <div style={{borderLeft: '1px solid var(--line)', paddingLeft: '16px'}}>
+            <div className="label">เดือนนี้ (A)</div>
+            <div className="amount" style={{marginTop: 8}}>
+              <span className="value font-mono-n" style={{fontSize: '24px', color: totals.bal >= 0 ? 'var(--text)' : 'var(--expense-soft)'}}>
+                {fmtMoney(totals.bal)}
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="stat-grid" style={{marginTop: 20, borderTop: '1px solid var(--line)', paddingTop: '16px'}}>
+          <div className="stat-mini">
+            <div className="lbl"><Ic.ArrowIn size={12} color="var(--income-soft)"/> รายรับเดือนนี้</div>
+            <div className="val" style={{color: 'var(--income-soft)', fontSize: '16px'}}>{fmtSel(totals.inc)}</div>
+          </div>
+          <div className="stat-mini">
+            <div className="lbl"><Ic.ArrowOut size={12} color="var(--expense-soft)"/> รายจ่ายเดือนนี้</div>
+            <div className="val" style={{color: 'var(--expense-soft)', fontSize: '16px'}}>{fmtSel(totals.exp)}</div>
+          </div>
         </div>
       </div>
 
@@ -5921,7 +5486,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.14.1 · Safe Sync (typo fix)</div>
+      <div className="vstrip">my money · v5.9 · Search results มี thumbnail</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -6421,52 +5986,24 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
   const canSave = parseFloat(amount) > 0 && !itemMissing && !accountMissing;
 
   // --- Photo handlers ---
-  // v5.10: handle multiple photos in one pick. Uploads sequentially so we don't
-  // overwhelm the network (mobile data, OneDrive throttling) and so the user
-  // sees progress one photo at a time. Each photo failure is reported but doesn't
-  // abort the rest.
   const onPhotoPick = async (e) => {
-    const files = Array.from(e.target.files || []);
+    const file = e.target.files?.[0];
     e.target.value = '';
-    if (files.length === 0) return;
+    if (!file) return;
     if (!isOnline) { pushToast?.('ต้องเข้าสู่ระบบก่อน'); return; }
-
-    // Filter out non-image files first
-    const images = files.filter(f => f.type.startsWith('image/'));
-    if (images.length === 0) { pushToast?.('ไฟล์ต้องเป็นรูปภาพ'); return; }
-    if (images.length < files.length) pushToast?.('ข้ามไฟล์ที่ไม่ใช่รูป');
-
-    // Cap at remaining slots (5 total per transaction)
-    const remaining = 5 - photos.length;
-    if (remaining <= 0) { pushToast?.('รูปได้สูงสุด 5 รูปต่อรายการ'); return; }
-    const toUpload = images.slice(0, remaining);
-    if (toUpload.length < images.length) {
-      pushToast?.(`อัปได้อีก ${remaining} รูป (จำกัด 5 รูปต่อรายการ)`);
-    }
-
+    if (!file.type.startsWith('image/')) { pushToast?.('ไฟล์ต้องเป็นรูปภาพ'); return; }
+    if (photos.length >= 5) { pushToast?.('รูปได้สูงสุด 5 รูปต่อรายการ'); return; }
     setUploadingPhoto(true);
-    let successCount = 0;
     try {
       const txId = initial?.id || uid();
-      for (let i = 0; i < toUpload.length; i++) {
-        const file = toUpload[i];
-        try {
-          const result = await uploadPhoto(file, txId);
-          const localUrl = URL.createObjectURL(file);
-          setPhotos(prev => [...prev, { id: result.id, name: result.name }]);
-          setPhotoUrls(prev => ({ ...prev, [result.id]: localUrl }));
-          successCount++;
-        } catch (err) {
-          console.error('photo upload failed', err);
-        }
-      }
-      if (successCount === toUpload.length) {
-        pushToast?.(successCount > 1 ? `อัปโหลด ${successCount} รูปแล้ว` : 'อัปโหลดรูปแล้ว');
-      } else if (successCount > 0) {
-        pushToast?.(`อัปโหลด ${successCount}/${toUpload.length} รูป`);
-      } else {
-        pushToast?.('อัปโหลดรูปไม่สำเร็จ');
-      }
+      const result = await uploadPhoto(file, txId);
+      const localUrl = URL.createObjectURL(file);
+      setPhotos(prev => [...prev, { id: result.id, name: result.name }]);
+      setPhotoUrls(prev => ({ ...prev, [result.id]: localUrl }));
+      pushToast?.('อัปโหลดรูปแล้ว');
+    } catch (err) {
+      console.error(err);
+      pushToast?.('อัปโหลดรูปไม่สำเร็จ');
     } finally {
       setUploadingPhoto(false);
     }
@@ -6538,21 +6075,6 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
   // v5.6: unit symbol+position for the currently picked account (defaults ฿ before)
   const currentUnit = getAccountUnit(accountName.trim(), masterAccounts || []);
 
-  // v5.12: when the edit sheet first opens for an existing transaction, format
-  // the amount with the account's decimal precision (e.g. "2" → "2.00") so it
-  // visually matches the on-list display. Skip while the input is focused so
-  // we don't fight the user mid-typing.
-  const didInitialFormatRef = useRef(false);
-  useEffect(() => {
-    if (didInitialFormatRef.current) return;
-    if (!initial?.amount) return;
-    if (!accountName.trim()) return; // wait until decimals are known via account
-    const n = parseFloat(amount);
-    if (isNaN(n)) return;
-    setAmount(n.toFixed(currentDecimals));
-    didInitialFormatRef.current = true;
-  }, [accountName, currentDecimals, initial, amount]);
-
   const handleAmount = (e) => {
     let v = e.target.value.replace(/[^\d.]/g, '');
     const parts = v.split('.');
@@ -6565,48 +6087,10 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
     setAmount(v);
   };
 
-  // v5.12: Per-digit spinner — adjust the amount by ±1, ±0.1, ±0.01, etc.
-  // `delta` is a signed power-of-10 magnitude (e.g. +1, -1, +0.1, -0.01).
-  // We do the math with rounding on the integer scale to avoid float drift,
-  // then re-format using the account's decimals so the displayed value
-  // always shows trailing zeros (e.g. "2.00" instead of "2").
-  const stepAmount = (delta) => {
-    const cur = parseFloat(amount) || 0;
-    const next = cur + delta;
-    if (next < 0) return; // never go negative
-    // Round to current account precision, then format with that many decimals.
-    const factor = Math.pow(10, currentDecimals);
-    const rounded = Math.round(next * factor) / factor;
-    setAmount(rounded.toFixed(currentDecimals));
-  };
-
-  // Build the layout for the spinner rows. The "shape" is:
-  //   - integer part: at least 1 digit (more if amount is large) → each gets a step button
-  //   - decimal point separator (if decimals > 0)
-  //   - decimal part: `currentDecimals` digits, each with its own step button
-  // Step magnitudes:
-  //   - integer place i (rightmost = 0) → 10^i
-  //   - decimal place i (1-indexed from the dot) → 10^(-i)
-  const spinnerLayout = useMemo(() => {
-    const intLen = Math.max(1, String(Math.floor(parseFloat(amount) || 0)).length);
-    const ints = [];
-    for (let i = intLen - 1; i >= 0; i--) ints.push(Math.pow(10, i));
-    const decs = [];
-    for (let i = 1; i <= currentDecimals; i++) decs.push(Math.pow(10, -i));
-    return { ints, decs, hasDot: currentDecimals > 0 };
-  }, [amount, currentDecimals]);
-
   const openFilePicker = (useCamera) => {
     if (photoInputRef.current) {
-      if (useCamera) {
-        // Camera mode: one shot at a time, with rear camera by default.
-        photoInputRef.current.setAttribute('capture', 'environment');
-        photoInputRef.current.removeAttribute('multiple');
-      } else {
-        // Gallery mode: allow selecting many at once via long-press to multi-select.
-        photoInputRef.current.removeAttribute('capture');
-        photoInputRef.current.setAttribute('multiple', 'multiple');
-      }
+      if (useCamera) photoInputRef.current.setAttribute('capture', 'environment');
+      else photoInputRef.current.removeAttribute('capture');
       photoInputRef.current.click();
     }
   };
@@ -6652,74 +6136,16 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
                 </span>
               )}
             </div>
-
-            {/* v5.13 revised: stack the up-row, input track, and down-row using
-                identical intrinsic widths. Each digit cell is 26px wide and
-                the dot gap is 14px, matching the IBM Plex Mono font we use in
-                the input below. */}
-            {(() => {
-              const STEP_W = 26;
-              const DOT_W = 14;
-              const trackWidth = (spinnerLayout.ints.length * STEP_W)
-                + (spinnerLayout.hasDot ? DOT_W : 0)
-                + (spinnerLayout.decs.length * STEP_W);
-              return (
-                <div className="amount-spinner-stack">
-                  {/* ^ row */}
-                  <div className="amount-spinner-row" aria-hidden="true" style={{width: trackWidth}}>
-                    {spinnerLayout.ints.map((mag, i) => (
-                      <button key={`up-i-${i}`} type="button" className="step up"
-                              onClick={() => stepAmount(mag)} tabIndex={-1}
-                              title={`+${mag}`}>^</button>
-                    ))}
-                    {spinnerLayout.hasDot && <span className="gap"></span>}
-                    {spinnerLayout.decs.map((mag, i) => (
-                      <button key={`up-d-${i}`} type="button" className="step up"
-                              onClick={() => stepAmount(mag)} tabIndex={-1}
-                              title={`+${mag}`}>^</button>
-                    ))}
-                  </div>
-
-                  {/* Input track — matches spinner row width so the digits
-                      appear directly under the buttons. The currency symbol
-                      sits beside the track, not inside it. */}
-                  <div className="amount-input-track">
-                    {currentUnit.symbol && currentUnit.position === 'before' && (
-                      <span className="cur">{currentUnit.symbol}</span>
-                    )}
-                    <span className="digit-input-shell" style={{width: trackWidth}}>
-                      <input inputMode="decimal" placeholder="0" value={amount} onChange={handleAmount}
-                             onBlur={() => {
-                               if (amount !== '' && !isNaN(parseFloat(amount))) {
-                                 setAmount(parseFloat(amount).toFixed(currentDecimals));
-                               }
-                             }}
-                             style={{color: type === 'income' ? 'var(--income-soft)' : 'var(--text)'}}/>
-                    </span>
-                    {currentUnit.symbol && currentUnit.position === 'after' && (
-                      <span className="cur after">{currentUnit.symbol}</span>
-                    )}
-                  </div>
-
-                  {/* v row */}
-                  <div className="amount-spinner-row dot-row" aria-hidden="true" style={{width: trackWidth}}>
-                    {spinnerLayout.ints.map((mag, i) => (
-                      <button key={`dn-i-${i}`} type="button" className="step down"
-                              onClick={() => stepAmount(-mag)} tabIndex={-1}
-                              title={`−${mag}`}
-                              style={{transform:'rotate(180deg)'}}>^</button>
-                    ))}
-                    {spinnerLayout.hasDot && <span className="gap"></span>}
-                    {spinnerLayout.decs.map((mag, i) => (
-                      <button key={`dn-d-${i}`} type="button" className="step down"
-                              onClick={() => stepAmount(-mag)} tabIndex={-1}
-                              title={`−${mag}`}
-                              style={{transform:'rotate(180deg)'}}>^</button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
+            <div className="row">
+              {currentUnit.symbol && currentUnit.position === 'before' && (
+                <span className="cur">{currentUnit.symbol}</span>
+              )}
+              <input inputMode="decimal" placeholder="0" value={amount} onChange={handleAmount}
+                     style={{color: type === 'income' ? 'var(--income-soft)' : 'var(--text)'}}/>
+              {currentUnit.symbol && currentUnit.position === 'after' && (
+                <span className="cur after">{currentUnit.symbol}</span>
+              )}
+            </div>
           </div>
 
           {/* Category - dropdown */}
@@ -6747,12 +6173,11 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
           <div className="autocomplete-wrap" style={{marginTop: 12}}>
             <label className={`form-row ${attemptedSave && accountMissing ? 'has-error' : ''}`}>
               <span className="lbl">บัญชี<span className="req">*</span></span>
-              <ClearableTextarea value={accountName}
+              <input type="text" value={accountName}
                      onChange={e => setAccountName(e.target.value)}
                      onFocus={() => setAccountFocused(true)}
                      onBlur={() => setTimeout(() => setAccountFocused(false), 180)}
-                     placeholder="เช่น เงินสด, ธนาคารกสิกร, บัตรเครดิต KTC"
-                     minRows={1} maxRows={3}/>
+                     placeholder="เช่น เงินสด, ธนาคารกสิกร, บัตรเครดิต KTC"/>
             </label>
             {accountFocused && (accountMatches.length > 0 || accountName.trim()) && (
               <div className="autocomplete-list">
@@ -6804,7 +6229,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
             </div>
             {showNewProject && (
               <div className="project-input-row fade">
-                <ClearableInput type="text" value={newProjectName}
+                <input type="text" value={newProjectName}
                        onChange={e => setNewProjectName(e.target.value)}
                        placeholder="ชื่อโครงการใหม่"
                        autoFocus
@@ -6838,20 +6263,17 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
             <div className="autocomplete-wrap">
               <label className={`form-row ${attemptedSave && itemMissing ? 'has-error' : ''}`}>
                 <span className="lbl">ชื่อรายการ<span className="req">*</span></span>
-                <ClearableTextarea value={item}
+                <input type="text" value={item}
                        onChange={e => setItem(e.target.value)}
                        onFocus={() => setItemFocused(true)}
                        onBlur={() => setTimeout(() => setItemFocused(false), 180)}
-                       placeholder="เช่น กาแฟ, ข้าวมันไก่, ค่าแท็กซี่"
-                       minRows={1} maxRows={4}/>
-                <span className="field-actions">
-                  <button type="button" className="field-manage-btn"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => { onOpenItemsManager?.(); }}
-                          title="จัดการรายการ">
-                    <Ic.Settings size={14}/>
-                  </button>
-                </span>
+                       placeholder="เช่น กาแฟ, ข้าวมันไก่, ค่าแท็กซี่"/>
+                <button type="button" className="field-manage-btn"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => { onOpenItemsManager?.(); }}
+                        title="จัดการรายการ">
+                  <Ic.Settings size={14}/>
+                </button>
               </label>
               {itemFocused && itemMatches.length > 0 && (
                 <div className="autocomplete-list">
@@ -6881,12 +6303,11 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
             <div className="autocomplete-wrap">
               <label className="form-row">
                 <span className="lbl">บันทึก</span>
-                <ClearableTextarea value={note}
+                <input type="text" value={note}
                        onChange={e => setNote(e.target.value)}
                        onFocus={() => setNoteFocused(true)}
                        onBlur={() => setTimeout(() => setNoteFocused(false), 180)}
-                       placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)"
-                       minRows={1} maxRows={4}/>
+                       placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)"/>
               </label>
               {noteFocused && noteMatches.length > 0 && (
                 <div className="autocomplete-list">
@@ -7615,26 +7036,17 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
     return m;
   }, [transactions]);
 
-  // Sort: when the user is typing in the "เพิ่มรายการใหม่" box, push items
-  // that contain that substring to the top so they can spot existing entries
-  // and avoid duplicates. Otherwise: most-used first, then alphabetical.
+  // Sort: most-used first, then alphabetical
   const sortedItems = useMemo(() => {
     const list = [...(items || [])];
-    const q = newName.trim().toLowerCase();
     list.sort((a, b) => {
-      // When typing, items matching the query come first
-      if (q) {
-        const aMatch = (a.name || '').toLowerCase().includes(q);
-        const bMatch = (b.name || '').toLowerCase().includes(q);
-        if (aMatch !== bMatch) return aMatch ? -1 : 1;
-      }
       const ca = usageMap.get(a.name) || 0;
       const cb = usageMap.get(b.name) || 0;
       if (ca !== cb) return cb - ca;
       return a.name.localeCompare(b.name, 'th');
     });
     return list;
-  }, [items, usageMap, newName]);
+  }, [items, usageMap]);
 
   const handleAdd = () => {
     const n = newName.trim();
@@ -7837,20 +7249,14 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
   // Sort: most-used first, then alphabetical
   const sortedAccounts = useMemo(() => {
     const list = [...(accounts || [])];
-    const q = newName.trim().toLowerCase();
     list.sort((a, b) => {
-      if (q) {
-        const aMatch = (a.name || '').toLowerCase().includes(q);
-        const bMatch = (b.name || '').toLowerCase().includes(q);
-        if (aMatch !== bMatch) return aMatch ? -1 : 1;
-      }
       const ca = usageMap.get(a.name) || 0;
       const cb = usageMap.get(b.name) || 0;
       if (ca !== cb) return cb - ca;
       return a.name.localeCompare(b.name, 'th');
     });
     return list;
-  }, [accounts, usageMap, newName]);
+  }, [accounts, usageMap]);
 
   const handleAdd = () => {
     const n = newName.trim();
@@ -8162,20 +7568,14 @@ function ProjectsManager({ projects, transactions, onClose, onAdd, onUpdate, onR
 
   const sortedProjects = useMemo(() => {
     const list = [...(projects || [])];
-    const q = newName.trim().toLowerCase();
     list.sort((a, b) => {
-      if (q) {
-        const aMatch = (a.name || '').toLowerCase().includes(q);
-        const bMatch = (b.name || '').toLowerCase().includes(q);
-        if (aMatch !== bMatch) return aMatch ? -1 : 1;
-      }
       const ca = usageMap.get(a.name) || 0;
       const cb = usageMap.get(b.name) || 0;
       if (ca !== cb) return cb - ca;
       return a.name.localeCompare(b.name, 'th');
     });
     return list;
-  }, [projects, usageMap, newName]);
+  }, [projects, usageMap]);
 
   const handleAdd = () => {
     const n = newName.trim();
@@ -8710,21 +8110,21 @@ function SearchSheet({ allTransactions, accounts, projects, categories, onClose,
           {/* Keyword inputs — all optional, AND-combined */}
           <div className="search-form">
             <label className="search-label">คำค้นหา (ใส่อย่างน้อย 1 ช่อง)</label>
-            <ClearableInput
+            <input
               type="text"
               className="search-input"
               placeholder="ข้อความที่ 1 (เช่น ค่าน้ำ)"
               value={k1}
               onChange={(e) => setK1(e.target.value)}
             />
-            <ClearableInput
+            <input
               type="text"
               className="search-input"
               placeholder="ข้อความที่ 2 (เช่น เมษ — เพิ่มเงื่อนไข)"
               value={k2}
               onChange={(e) => setK2(e.target.value)}
             />
-            <ClearableInput
+            <input
               type="text"
               className="search-input"
               placeholder="ข้อความที่ 3 (optional)"
