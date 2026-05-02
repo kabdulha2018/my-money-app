@@ -576,16 +576,84 @@ body:has(.sheet-backdrop) nav.tabbar {
   font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-faint);
 }
 .amount-box .row {
-  display: flex; align-items: baseline; justify-content: center; gap: 8px; margin-top: 8px;
+  display: flex; align-items: baseline; justify-content: center; gap: 8px; margin-top: 0;
 }
 .amount-box .cur {
   font-family: 'IBM Plex Mono', monospace; font-size: 20px; color: var(--text-dim);
 }
 .amount-box .cur.after { font-size: 16px; }
 .amount-box input {
-  font-family: 'Noto Serif Thai', serif; font-variant-numeric: tabular-nums;
-  font-size: 44px; line-height: 1; background: transparent; outline: none; border: none;
-  text-align: center; width: 65%; caret-color: var(--gold);
+  /* v5.13: use monospace so each digit takes a fixed width (26px @ font-size 38px),
+     letting us line up the spinner buttons above/below each digit precisely. */
+  font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums;
+  font-size: 38px; line-height: 1.2; background: transparent; outline: none; border: none;
+  text-align: center; width: auto; min-width: 60px; caret-color: var(--gold);
+  font-weight: 600;
+  padding: 0;
+  letter-spacing: 0;
+}
+
+/* v5.12 (revised v5.13): Per-digit spinner — each ^/v button is 26px wide,
+   matching the IBM Plex Mono character width at 38px font-size, so the
+   buttons sit directly above/below the matching digit in the input. */
+.amount-spinner-stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 8px;
+}
+.amount-spinner-row {
+  display: flex; gap: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  user-select: none;
+  height: 24px;
+  align-items: center;
+  /* width is intrinsic — depends on number of step cells inside */
+}
+.amount-spinner-row .step {
+  width: 26px; height: 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-faint);
+  font-size: 16px; font-weight: 600;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background .15s, color .15s, transform .1s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.amount-spinner-row .step.up:hover, .amount-spinner-row .step.up:active {
+  background: rgba(139,179,139,0.18);
+  color: var(--income-soft);
+}
+.amount-spinner-row .step.down:hover, .amount-spinner-row .step.down:active {
+  background: rgba(184,88,66,0.18);
+  color: var(--expense-soft);
+}
+.amount-spinner-row .step:active { transform: scale(0.85); }
+.amount-spinner-row .gap {
+  /* matches the visual width of "." at IBM Plex Mono 38px (~14px wide) */
+  width: 14px; height: 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: transparent;
+  font-size: 22px; font-weight: 600;
+  flex-shrink: 0;
+}
+.amount-spinner-row.dot-row .gap { color: var(--text-dim); }
+/* The middle row (input) needs to share the same intrinsic width. We render
+   a wrapper that sizes itself to match the spinner row widths. */
+.amount-input-track {
+  display: flex; align-items: baseline; justify-content: center;
+  gap: 8px;
+  margin: 2px 0;
+}
+.amount-input-track .digit-input-shell {
+  display: inline-flex; align-items: center; justify-content: center;
+  /* Each character ≈ 26px wide in IBM Plex Mono @ 38px. Width is set inline
+     based on (intLen * 26) + (hasDot ? 14 : 0) + (decimals * 26). */
+}
+.amount-input-track .digit-input-shell input {
+  width: 100%;
 }
 
 /* Category grid */
@@ -730,6 +798,18 @@ body:has(.sheet-backdrop) nav.tabbar {
 .signin .skip {
   margin-top: 14px; font-size: 12px; color: var(--text-dim);
   text-decoration: underline; text-underline-offset: 3px;
+}
+/* v5.12: explicit redirect fallback link */
+.signin .signin-alt {
+  margin-top: 16px;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-decoration: underline; text-underline-offset: 3px;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.signin .signin-alt:active {
+  background: var(--surface2);
 }
 .signin .hint {
   margin-top: 32px; font-size: 11px; color: var(--text-faint); max-width: 300px; line-height: 1.6;
@@ -2554,40 +2634,59 @@ function isInAppBrowser() {
     const ua = navigator.userAgent || '';
     // Common in-app browser markers — covers Messenger, FB, Instagram, LINE,
     // KakaoTalk, WeChat, TikTok, etc.
+    // v5.12: Removed the `window.opener !== null` check because Chrome on Android
+    // sometimes has a non-null opener even when running as a normal tab (e.g. when
+    // the user followed a link from Messenger → opened in Chrome). That false
+    // positive made us route to redirect prematurely, but worse, we still tried
+    // popup first when the user clicked the button explicitly, leading to a
+    // visible block_nested_popups error before the redirect fallback kicked in.
     if (/FBAN|FBAV|Messenger|Instagram|Line\/|KAKAOTALK|MicroMessenger|Twitter|TikTok|Snapchat/i.test(ua)) {
       return true;
     }
-    // Detect "is this window itself a popup" — works for any in-app browser even if
-    // the user-agent doesn't list itself. window.opener !== null means another window
-    // opened us (which is what in-app browsers do).
-    if (window.opener && window.opener !== window) return true;
   } catch {}
   return false;
 }
 
 async function signIn() {
   const inst = await initMsal();
-  // v5.2: If we're already inside an in-app browser, skip popup and go straight to
-  // redirect — popup will only fail with block_nested_popups.
+  // to redirect — popup will only fail with block_nested_popups.
   if (isInAppBrowser()) {
     await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
     return null; // navigation happens; nothing more to do
   }
-  // Try popup first (works in regular Chrome).
-  // If MSAL throws ANY popup-related error, fall back to redirect.
+  // v5.12: Try popup first (works in regular Chrome desktop and most mobile
+  // Chrome). On any popup-related failure we silently fall through to redirect
+  // so the user never sees the raw "block_nested_popups" error in the UI.
   try {
     const res = await inst.loginPopup({ scopes: CFG.scopes, prompt: 'select_account' });
     return res.account;
   } catch (e) {
     const code = String(e?.errorCode || e?.errorMessage || e?.message || '');
-    const isPopupBlocked = /block_nested_popups|popup_window_error|empty_window_error|popup_blocked/i.test(code)
+    const isPopupBlocked =
+      /block_nested_popups|popup_window_error|empty_window_error|popup_blocked|user_cancelled/i.test(code)
       || (e?.name === 'BrowserAuthError' && /popup/i.test(code));
     if (isPopupBlocked) {
-      await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
+      // Silent transition — user will be redirected to Microsoft, not see an error.
+      try {
+        await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
+      } catch (redirErr) {
+        // If even redirect fails (very rare — bad config etc.) re-throw the
+        // original popup error so the user gets some feedback rather than a
+        // silent dead end.
+        throw e;
+      }
       return null;
     }
     throw e;
   }
+}
+
+// v5.12: Explicit redirect-based sign-in for users where popup doesn't work.
+// Triggered by the "ลองวิธีอื่น" link on the sign-in screen. This always
+// navigates away from the page, so the function never returns normally.
+async function signInRedirect() {
+  const inst = await initMsal();
+  await inst.loginRedirect({ scopes: CFG.scopes, prompt: 'select_account' });
 }
 
 async function signOut() {
@@ -2647,12 +2746,89 @@ async function remoteFetch() {
   return await res.json();
 }
 
-async function remoteSave(data) {
+// v5.14: Wrap the save with two safety nets that didn't exist in v5.13:
+//
+// 1. Empty state guard — refuse to upload an obviously-blank state if the
+//    remote file is non-trivial. This is the failure mode that nuked the
+//    vault on May 2: a stale tab on a different device booted with default
+//    empty state, then sync'd that empty state up over the real data.
+//
+// 2. Optimistic locking — before writing, fetch the remote file's lastModified
+//    and compare to the timestamp this client started from. If the remote has
+//    moved forward (another device saved while we were editing), abort and
+//    let the caller decide how to merge.
+//
+// Both checks can be bypassed with the {force:true} option for cases where
+// we DO want to overwrite (e.g. user explicitly chose "use my version" in a
+// conflict prompt, or the very first save that creates the file).
+async function remoteSave(data, options = {}) {
+  const { force = false, expectedLastModified = null, allowEmpty = false } = options;
+
+  // ----- Empty-state guard -----
+  // We define "empty-looking" as: zero transactions AND zero accounts AND
+  // zero items. A brand-new vault with just {users:[], categories:[]} fits
+  // this; so does a state object that was reset to defaults before sync
+  // finished. Either way, if the REMOTE file currently has real data, we
+  // refuse to overwrite without explicit caller consent.
+  if (!force && !allowEmpty) {
+    const looksEmpty =
+      (!Array.isArray(data?.transactions) || data.transactions.length === 0) &&
+      (!Array.isArray(data?.accounts)     || data.accounts.length === 0) &&
+      (!Array.isArray(data?.items)        || data.items.length === 0);
+    if (looksEmpty) {
+      try {
+        const remote = await remoteLoad();
+        const remoteHasData =
+          (Array.isArray(remote?.transactions) && remote.transactions.length > 0) ||
+          (Array.isArray(remote?.accounts)     && remote.accounts.length > 0)     ||
+          (Array.isArray(remote?.items)        && remote.items.length > 0);
+        if (remoteHasData) {
+          const err = new Error('REFUSED_EMPTY_OVERWRITE');
+          err.code = 'EMPTY_OVERWRITE_REFUSED';
+          err.remote = remote;
+          throw err;
+        }
+      } catch (e) {
+        if (e && e.code === 'EMPTY_OVERWRITE_REFUSED') throw e;
+        // Couldn't fetch remote (network issue) — fail closed: don't risk it.
+        const err = new Error('REFUSED_EMPTY_NO_REMOTE_CHECK');
+        err.code = 'EMPTY_OVERWRITE_REFUSED';
+        throw err;
+      }
+    }
+  }
+
+  // ----- Optimistic locking -----
+  // If caller passed an expectedLastModified, fetch the remote and abort if
+  // someone else wrote since we last loaded. This catches the multi-device
+  // race where two phones save back-to-back and the second one would silently
+  // erase the first one's edits.
+  if (!force && expectedLastModified) {
+    try {
+      const remote = await remoteLoad();
+      const remoteTs = remote?.lastModified || null;
+      if (remoteTs && remoteTs !== expectedLastModified) {
+        const err = new Error('REMOTE_MOVED_FORWARD');
+        err.code = 'REMOTE_NEWER';
+        err.remote = remote;
+        err.remoteLastModified = remoteTs;
+        err.expectedLastModified = expectedLastModified;
+        throw err;
+      }
+    } catch (e) {
+      if (e && e.code === 'REMOTE_NEWER') throw e;
+      // Couldn't check (e.g. 404 = file doesn't exist yet). Allow save.
+    }
+  }
+
+  // ----- Stamp + write -----
+  // Always set lastModified so subsequent loads can use it for the OL check.
+  const stamped = { ...data, lastModified: new Date().toISOString() };
   const token = await getToken();
   const res = await fetch(GRAPH_URL(FILE_PATH), {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    body: JSON.stringify(stamped),
   });
   if (!res.ok) { const t = await res.text(); throw new Error(`Save ${res.status}: ${t.slice(0,120)}`); }
   return await res.json();
@@ -2975,8 +3151,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.11';
-const APP_VERSION_TAG = 'Auto-grow input + filter sort + edge-aligned actions';
+const APP_VERSION = 'v5.14';
+const APP_VERSION_TAG = 'แก้บั๊กข้อมูลหาย: ID ไทย + Empty guard + Optimistic lock';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -3109,6 +3285,19 @@ function useSync(state, setState, isOnline) {
   const timerRef = useRef(null);
   const syncingRef = useRef(false);
 
+  // v5.14: Track the last lastModified value we received from OneDrive.
+  // This is the "expected" timestamp we send back during save — if the remote
+  // file's timestamp has changed (someone else wrote), the save aborts so we
+  // can pull-and-merge instead of clobbering. Lives in a ref so changes don't
+  // re-trigger our debounce effects.
+  const remoteBaselineRef = useRef(null);
+
+  // v5.14: Until the very first pullOnce() resolves, we MUST NOT push our
+  // local state up — at boot, local state is the empty default, and pushing
+  // it would erase the remote vault on every fresh tab open. This was the
+  // exact mechanism behind the May 2 data loss.
+  const initialSyncDoneRef = useRef(false);
+
   // Build the full payload sent to OneDrive. Centralised so we don't forget any
   // top-level field (e.g. v5.0 added `users`).
   const buildPayload = (s) => ({
@@ -3132,6 +3321,9 @@ function useSync(state, setState, isOnline) {
       if (remote && remote.transactions) {
         const remoteTime = remote.lastModified || '';
         const localTime = state.lastModified || '';
+        // Update baseline regardless of which way we're going to sync —
+        // it represents what we know the remote file's lastModified is.
+        remoteBaselineRef.current = remoteTime || null;
         if (!localTime || remoteTime > localTime) {
           setState({
             transactions: remote.transactions,
@@ -3143,16 +3335,26 @@ function useSync(state, setState, isOnline) {
             lastModified: remoteTime,
           });
         } else if (localTime > remoteTime) {
-          // push local up
-          await remoteSave(buildPayload(state));
+          // push local up — this is the rare case where the user edited
+          // offline and we're now reconnected. Pass the remote's timestamp
+          // as the optimistic-lock baseline so we don't clobber a write
+          // that landed in between.
+          const result = await remoteSave(buildPayload(state), {
+            expectedLastModified: remoteTime || null,
+          });
+          remoteBaselineRef.current = result?.lastModifiedDateTime || new Date().toISOString();
         }
       } else if (state.transactions.length > 0 || (state.items || []).length > 0 || (state.accounts || []).length > 0 || (state.projects || []).length > 0 || (state.categories || []).length > 0 || (state.users || []).length > 0) {
-        // remote is empty but we have local data → push it
-        await remoteSave(buildPayload(state));
+        // remote is empty but we have local data → push it. This is the
+        // first-ever save for this account, so allow the empty-state guard
+        // to be lenient (there's nothing to overwrite).
+        const result = await remoteSave(buildPayload(state), { force: true });
+        remoteBaselineRef.current = result?.lastModifiedDateTime || new Date().toISOString();
       }
       setStatus('ok');
       setLastSync(new Date());
       setErrMsg(null);
+      initialSyncDoneRef.current = true;
     } catch (e) {
       console.error(e);
       setStatus('error');
@@ -3163,20 +3365,43 @@ function useSync(state, setState, isOnline) {
   // Scheduled push (debounced on state change)
   const schedulePush = useCallback(() => {
     if (!isOnline) return;
+    // v5.14: hold all pushes until the first pull has confirmed what's on the
+    // server. Pushing a fresh empty state on top of a real vault is exactly
+    // how data got nuked — the first tab to load on a slow network would
+    // overwrite everything before the pull finished.
+    if (!initialSyncDoneRef.current) return;
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
       if (syncingRef.current) return;
       syncingRef.current = true;
       setStatus('syncing');
       try {
-        await remoteSave(buildPayload(state));
+        const result = await remoteSave(buildPayload(state), {
+          expectedLastModified: remoteBaselineRef.current,
+        });
+        // Update our baseline so subsequent saves don't false-positive on the
+        // optimistic-lock check. We use our own stamp because Graph's response
+        // lastModifiedDateTime occasionally lags the body we just wrote.
+        remoteBaselineRef.current = new Date().toISOString();
         setStatus('ok');
         setLastSync(new Date());
         setErrMsg(null);
       } catch (e) {
         console.error(e);
-        setStatus('error');
-        setErrMsg(String(e.message || e));
+        // Translate the new v5.14 error codes into user-readable status
+        // messages. The full conflict UX (let user pick local vs remote)
+        // is still TODO — for now we surface the situation honestly so the
+        // user can decide whether to keep editing or refresh.
+        if (e && e.code === 'EMPTY_OVERWRITE_REFUSED') {
+          setStatus('error');
+          setErrMsg('ปลอดภัย: ปฏิเสธการเขียนข้อมูลว่างทับ — กรุณารีเฟรช');
+        } else if (e && e.code === 'REMOTE_NEWER') {
+          setStatus('error');
+          setErrMsg('มีอุปกรณ์อื่นแก้ไขก่อน — กรุณารีเฟรชเพื่อดึงข้อมูลล่าสุด');
+        } else {
+          setStatus('error');
+          setErrMsg(String(e.message || e));
+        }
       } finally {
         syncingRef.current = false;
       }
@@ -3910,12 +4135,24 @@ function App() {
     const trimmed = (label || '').trim();
     if (!trimmed) return { ok: false, reason: 'empty' };
     const users = state.users || [];
-    // Generate id from label (transliterated to ASCII isn't trivial in the browser without
-    // libs; we just slugify whitespace + fallback to random suffix to avoid collisions).
-    const baseId = trimmed.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'user';
-    let id = baseId;
-    let n = 2;
-    while (users.some(u => u.id === id)) { id = `${baseId}-${n++}`; }
+    // v5.14: use crypto.randomUUID() for guaranteed uniqueness — the previous
+    // approach of slugifying the label silently dropped non-ASCII characters
+    // (Thai script), so every Thai name collapsed to "user" and got serialised
+    // to "user-2", "user-3"… When the array order shifted (e.g. after a sync
+    // race), those positional IDs could point to different humans than expected,
+    // which is how a member could end up acting under an admin's id. UUIDs are
+    // opaque, fixed, and never collide.
+    let id;
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      id = `u_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
+    } else {
+      // Fallback for very old browsers without randomUUID — use timestamp+random.
+      id = `u_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    }
+    // Extra safety: in case of cosmic collision, retry with longer suffix
+    while (users.some(u => u.id === id)) {
+      id = `u_${crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : Date.now().toString(36) + Math.random().toString(36).slice(2)}`;
+    }
     const pinHash = await hashPin(pin);
     mutate(prev => ({
       ...prev,
@@ -4049,8 +4286,27 @@ function App() {
       setAccount(acc);
     } catch (e) {
       console.error(e);
-      setAuthError(String(e.message || e));
+      // v5.12: Don't display popup-related errors — they're handled internally
+      // (we always fall back to redirect). If we're here it's a genuine config
+      // or network error worth showing.
+      const msg = String(e?.errorCode || e?.message || e || '');
+      if (!/popup|block_nested|user_cancelled/i.test(msg)) {
+        setAuthError(msg);
+      }
     } finally { setAuthLoading(false); }
+  };
+  // v5.12: Explicit redirect path. Used by the "ลองวิธีอื่น" link when popup
+  // sign-in doesn't work for the user (e.g. opened from another app).
+  const doSignInRedirect = async () => {
+    setAuthLoading(true); setAuthError(null);
+    try {
+      await signInRedirect();
+      // navigation happens — page unloads; no further code runs here
+    } catch (e) {
+      console.error(e);
+      setAuthError(String(e?.errorCode || e?.message || e || ''));
+      setAuthLoading(false);
+    }
   };
   const doSignOut = async () => {
     try { await signOut(); } catch (e) { console.error(e); }
@@ -4128,6 +4384,7 @@ function App() {
         loading={authLoading}
         error={authError}
         onSignIn={doSignIn}
+        onSignInRedirect={doSignInRedirect}
         onSkip={() => setSkipSync(true)}
       />
     );
@@ -4551,7 +4808,7 @@ function SetupNeeded() {
 }
 
 // ============ Sign In ============
-function SignIn({ loading, error, onSignIn, onSkip }) {
+function SignIn({ loading, error, onSignIn, onSignInRedirect, onSkip }) {
   // v5.2: warn users opening from Messenger/LINE in-app browsers — login still works
   // (we use redirect fallback) but it's smoother in real Chrome.
   const inApp = isInAppBrowser();
@@ -4575,6 +4832,13 @@ function SignIn({ loading, error, onSignIn, onSkip }) {
       </button>
       <button className="skip" onClick={onSkip}>ใช้งานแบบออฟไลน์ก่อน</button>
       {error && <div className="err">⚠️ {error}</div>}
+      {/* v5.12: explicit redirect option for users where the popup approach
+          has trouble (common on Android Chrome when opened from another app) */}
+      {onSignInRedirect && !loading && (
+        <button className="signin-alt" onClick={onSignInRedirect}>
+          ⚠️ เข้าสู่ระบบไม่ได้? ลองวิธีอื่น (redirect)
+        </button>
+      )}
       <div className="hint">
         ข้อมูลจะถูกเก็บในโฟลเดอร์ <strong style={{color: 'var(--gold)'}}>/Apps/</strong> บน OneDrive ของคุณเท่านั้น แอปเข้าถึงไฟล์อื่นไม่ได้
       </div>
@@ -5657,7 +5921,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.11 · Input wrap หลายบรรทัด + filter sort</div>
+      <div className="vstrip">my money · v5.14 · แก้บั๊กข้อมูลหาย — Safe Sync</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -6274,6 +6538,21 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
   // v5.6: unit symbol+position for the currently picked account (defaults ฿ before)
   const currentUnit = getAccountUnit(accountName.trim(), masterAccounts || []);
 
+  // v5.12: when the edit sheet first opens for an existing transaction, format
+  // the amount with the account's decimal precision (e.g. "2" → "2.00") so it
+  // visually matches the on-list display. Skip while the input is focused so
+  // we don't fight the user mid-typing.
+  const didInitialFormatRef = useRef(false);
+  useEffect(() => {
+    if (didInitialFormatRef.current) return;
+    if (!initial?.amount) return;
+    if (!accountName.trim()) return; // wait until decimals are known via account
+    const n = parseFloat(amount);
+    if (isNaN(n)) return;
+    setAmount(n.toFixed(currentDecimals));
+    didInitialFormatRef.current = true;
+  }, [accountName, currentDecimals, initial, amount]);
+
   const handleAmount = (e) => {
     let v = e.target.value.replace(/[^\d.]/g, '');
     const parts = v.split('.');
@@ -6285,6 +6564,37 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
     }
     setAmount(v);
   };
+
+  // v5.12: Per-digit spinner — adjust the amount by ±1, ±0.1, ±0.01, etc.
+  // `delta` is a signed power-of-10 magnitude (e.g. +1, -1, +0.1, -0.01).
+  // We do the math with rounding on the integer scale to avoid float drift,
+  // then re-format using the account's decimals so the displayed value
+  // always shows trailing zeros (e.g. "2.00" instead of "2").
+  const stepAmount = (delta) => {
+    const cur = parseFloat(amount) || 0;
+    const next = cur + delta;
+    if (next < 0) return; // never go negative
+    // Round to current account precision, then format with that many decimals.
+    const factor = Math.pow(10, currentDecimals);
+    const rounded = Math.round(next * factor) / factor;
+    setAmount(rounded.toFixed(currentDecimals));
+  };
+
+  // Build the layout for the spinner rows. The "shape" is:
+  //   - integer part: at least 1 digit (more if amount is large) → each gets a step button
+  //   - decimal point separator (if decimals > 0)
+  //   - decimal part: `currentDecimals` digits, each with its own step button
+  // Step magnitudes:
+  //   - integer place i (rightmost = 0) → 10^i
+  //   - decimal place i (1-indexed from the dot) → 10^(-i)
+  const spinnerLayout = useMemo(() => {
+    const intLen = Math.max(1, String(Math.floor(parseFloat(amount) || 0)).length);
+    const ints = [];
+    for (let i = intLen - 1; i >= 0; i--) ints.push(Math.pow(10, i));
+    const decs = [];
+    for (let i = 1; i <= currentDecimals; i++) decs.push(Math.pow(10, -i));
+    return { ints, decs, hasDot: currentDecimals > 0 };
+  }, [amount, currentDecimals]);
 
   const openFilePicker = (useCamera) => {
     if (photoInputRef.current) {
@@ -6342,16 +6652,74 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
                 </span>
               )}
             </div>
-            <div className="row">
-              {currentUnit.symbol && currentUnit.position === 'before' && (
-                <span className="cur">{currentUnit.symbol}</span>
-              )}
-              <input inputMode="decimal" placeholder="0" value={amount} onChange={handleAmount}
-                     style={{color: type === 'income' ? 'var(--income-soft)' : 'var(--text)'}}/>
-              {currentUnit.symbol && currentUnit.position === 'after' && (
-                <span className="cur after">{currentUnit.symbol}</span>
-              )}
-            </div>
+
+            {/* v5.13 revised: stack the up-row, input track, and down-row using
+                identical intrinsic widths. Each digit cell is 26px wide and
+                the dot gap is 14px, matching the IBM Plex Mono font we use in
+                the input below. */}
+            {(() => {
+              const STEP_W = 26;
+              const DOT_W = 14;
+              const trackWidth = (spinnerLayout.ints.length * STEP_W)
+                + (spinnerLayout.hasDot ? DOT_W : 0)
+                + (spinnerLayout.decs.length * STEP_W);
+              return (
+                <div className="amount-spinner-stack">
+                  {/* ^ row */}
+                  <div className="amount-spinner-row" aria-hidden="true" style={{width: trackWidth}}>
+                    {spinnerLayout.ints.map((mag, i) => (
+                      <button key={`up-i-${i}`} type="button" className="step up"
+                              onClick={() => stepAmount(mag)} tabIndex={-1}
+                              title={`+${mag}`}>^</button>
+                    ))}
+                    {spinnerLayout.hasDot && <span className="gap"></span>}
+                    {spinnerLayout.decs.map((mag, i) => (
+                      <button key={`up-d-${i}`} type="button" className="step up"
+                              onClick={() => stepAmount(mag)} tabIndex={-1}
+                              title={`+${mag}`}>^</button>
+                    ))}
+                  </div>
+
+                  {/* Input track — matches spinner row width so the digits
+                      appear directly under the buttons. The currency symbol
+                      sits beside the track, not inside it. */}
+                  <div className="amount-input-track">
+                    {currentUnit.symbol && currentUnit.position === 'before' && (
+                      <span className="cur">{currentUnit.symbol}</span>
+                    )}
+                    <span className="digit-input-shell" style={{width: trackWidth}}>
+                      <input inputMode="decimal" placeholder="0" value={amount} onChange={handleAmount}
+                             onBlur={() => {
+                               if (amount !== '' && !isNaN(parseFloat(amount))) {
+                                 setAmount(parseFloat(amount).toFixed(currentDecimals));
+                               }
+                             }}
+                             style={{color: type === 'income' ? 'var(--income-soft)' : 'var(--text)'}}/>
+                    </span>
+                    {currentUnit.symbol && currentUnit.position === 'after' && (
+                      <span className="cur after">{currentUnit.symbol}</span>
+                    )}
+                  </div>
+
+                  {/* v row */}
+                  <div className="amount-spinner-row dot-row" aria-hidden="true" style={{width: trackWidth}}>
+                    {spinnerLayout.ints.map((mag, i) => (
+                      <button key={`dn-i-${i}`} type="button" className="step down"
+                              onClick={() => stepAmount(-mag)} tabIndex={-1}
+                              title={`−${mag}`}
+                              style={{transform:'rotate(180deg)'}}>^</button>
+                    ))}
+                    {spinnerLayout.hasDot && <span className="gap"></span>}
+                    {spinnerLayout.decs.map((mag, i) => (
+                      <button key={`dn-d-${i}`} type="button" className="step down"
+                              onClick={() => stepAmount(-mag)} tabIndex={-1}
+                              title={`−${mag}`}
+                              style={{transform:'rotate(180deg)'}}>^</button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Category - dropdown */}
