@@ -2746,12 +2746,89 @@ async function remoteFetch() {
   return await res.json();
 }
 
-async function remoteSave(data) {
+// v5.14: Wrap the save with two safety nets that didn't exist in v5.13:
+//
+// 1. Empty state guard — refuse to upload an obviously-blank state if the
+//    remote file is non-trivial. This is the failure mode that nuked the
+//    vault on May 2: a stale tab on a different device booted with default
+//    empty state, then sync'd that empty state up over the real data.
+//
+// 2. Optimistic locking — before writing, fetch the remote file's lastModified
+//    and compare to the timestamp this client started from. If the remote has
+//    moved forward (another device saved while we were editing), abort and
+//    let the caller decide how to merge.
+//
+// Both checks can be bypassed with the {force:true} option for cases where
+// we DO want to overwrite (e.g. user explicitly chose "use my version" in a
+// conflict prompt, or the very first save that creates the file).
+async function remoteSave(data, options = {}) {
+  const { force = false, expectedLastModified = null, allowEmpty = false } = options;
+
+  // ----- Empty-state guard -----
+  // We define "empty-looking" as: zero transactions AND zero accounts AND
+  // zero items. A brand-new vault with just {users:[], categories:[]} fits
+  // this; so does a state object that was reset to defaults before sync
+  // finished. Either way, if the REMOTE file currently has real data, we
+  // refuse to overwrite without explicit caller consent.
+  if (!force && !allowEmpty) {
+    const looksEmpty =
+      (!Array.isArray(data?.transactions) || data.transactions.length === 0) &&
+      (!Array.isArray(data?.accounts)     || data.accounts.length === 0) &&
+      (!Array.isArray(data?.items)        || data.items.length === 0);
+    if (looksEmpty) {
+      try {
+        const remote = await remoteLoad();
+        const remoteHasData =
+          (Array.isArray(remote?.transactions) && remote.transactions.length > 0) ||
+          (Array.isArray(remote?.accounts)     && remote.accounts.length > 0)     ||
+          (Array.isArray(remote?.items)        && remote.items.length > 0);
+        if (remoteHasData) {
+          const err = new Error('REFUSED_EMPTY_OVERWRITE');
+          err.code = 'EMPTY_OVERWRITE_REFUSED';
+          err.remote = remote;
+          throw err;
+        }
+      } catch (e) {
+        if (e && e.code === 'EMPTY_OVERWRITE_REFUSED') throw e;
+        // Couldn't fetch remote (network issue) — fail closed: don't risk it.
+        const err = new Error('REFUSED_EMPTY_NO_REMOTE_CHECK');
+        err.code = 'EMPTY_OVERWRITE_REFUSED';
+        throw err;
+      }
+    }
+  }
+
+  // ----- Optimistic locking -----
+  // If caller passed an expectedLastModified, fetch the remote and abort if
+  // someone else wrote since we last loaded. This catches the multi-device
+  // race where two phones save back-to-back and the second one would silently
+  // erase the first one's edits.
+  if (!force && expectedLastModified) {
+    try {
+      const remote = await remoteLoad();
+      const remoteTs = remote?.lastModified || null;
+      if (remoteTs && remoteTs !== expectedLastModified) {
+        const err = new Error('REMOTE_MOVED_FORWARD');
+        err.code = 'REMOTE_NEWER';
+        err.remote = remote;
+        err.remoteLastModified = remoteTs;
+        err.expectedLastModified = expectedLastModified;
+        throw err;
+      }
+    } catch (e) {
+      if (e && e.code === 'REMOTE_NEWER') throw e;
+      // Couldn't check (e.g. 404 = file doesn't exist yet). Allow save.
+    }
+  }
+
+  // ----- Stamp + write -----
+  // Always set lastModified so subsequent loads can use it for the OL check.
+  const stamped = { ...data, lastModified: new Date().toISOString() };
   const token = await getToken();
   const res = await fetch(GRAPH_URL(FILE_PATH), {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    body: JSON.stringify(stamped),
   });
   if (!res.ok) { const t = await res.text(); throw new Error(`Save ${res.status}: ${t.slice(0,120)}`); }
   return await res.json();
@@ -3074,8 +3151,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.13.1';
-const APP_VERSION_TAG = 'แก้ alignment ของ spinner ให้ตรงตัวเลข';
+const APP_VERSION = 'v5.14';
+const APP_VERSION_TAG = 'แก้บั๊กข้อมูลหาย: ID ไทย + Empty guard + Optimistic lock';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -3208,6 +3285,19 @@ function useSync(state, setState, isOnline) {
   const timerRef = useRef(null);
   const syncingRef = useRef(false);
 
+  // v5.14: Track the last lastModified value we received from OneDrive.
+  // This is the "expected" timestamp we send back during save — if the remote
+  // file's timestamp has changed (someone else wrote), the save aborts so we
+  // can pull-and-merge instead of clobbering. Lives in a ref so changes don't
+  // re-trigger our debounce effects.
+  const remoteBaselineRef = useRef(null);
+
+  // v5.14: Until the very first pullOnce() resolves, we MUST NOT push our
+  // local state up — at boot, local state is the empty default, and pushing
+  // it would erase the remote vault on every fresh tab open. This was the
+  // exact mechanism behind the May 2 data loss.
+  const initialSyncDoneRef = useRef(false);
+
   // Build the full payload sent to OneDrive. Centralised so we don't forget any
   // top-level field (e.g. v5.0 added `users`).
   const buildPayload = (s) => ({
@@ -3231,6 +3321,9 @@ function useSync(state, setState, isOnline) {
       if (remote && remote.transactions) {
         const remoteTime = remote.lastModified || '';
         const localTime = state.lastModified || '';
+        // Update baseline regardless of which way we're going to sync —
+        // it represents what we know the remote file's lastModified is.
+        remoteBaselineRef.current = remoteTime || null;
         if (!localTime || remoteTime > localTime) {
           setState({
             transactions: remote.transactions,
@@ -3242,16 +3335,26 @@ function useSync(state, setState, isOnline) {
             lastModified: remoteTime,
           });
         } else if (localTime > remoteTime) {
-          // push local up
-          await remoteSave(buildPayload(state));
+          // push local up — this is the rare case where the user edited
+          // offline and we're now reconnected. Pass the remote's timestamp
+          // as the optimistic-lock baseline so we don't clobber a write
+          // that landed in between.
+          const result = await remoteSave(buildPayload(state), {
+            expectedLastModified: remoteTime || null,
+          });
+          remoteBaselineRef.current = result?.lastModifiedDateTime || new Date().toISOString();
         }
       } else if (state.transactions.length > 0 || (state.items || []).length > 0 || (state.accounts || []).length > 0 || (state.projects || []).length > 0 || (state.categories || []).length > 0 || (state.users || []).length > 0) {
-        // remote is empty but we have local data → push it
-        await remoteSave(buildPayload(state));
+        // remote is empty but we have local data → push it. This is the
+        // first-ever save for this account, so allow the empty-state guard
+        // to be lenient (there's nothing to overwrite).
+        const result = await remoteSave(buildPayload(state), { force: true });
+        remoteBaselineRef.current = result?.lastModifiedDateTime || new Date().toISOString();
       }
       setStatus('ok');
       setLastSync(new Date());
       setErrMsg(null);
+      initialSyncDoneRef.current = true;
     } catch (e) {
       console.error(e);
       setStatus('error');
@@ -3262,20 +3365,43 @@ function useSync(state, setState, isOnline) {
   // Scheduled push (debounced on state change)
   const schedulePush = useCallback(() => {
     if (!isOnline) return;
+    // v5.14: hold all pushes until the first pull has confirmed what's on the
+    // server. Pushing a fresh empty state on top of a real vault is exactly
+    // how data got nuked — the first tab to load on a slow network would
+    // overwrite everything before the pull finished.
+    if (!initialSyncDoneRef.current) return;
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
       if (syncingRef.current) return;
       syncingRef.current = true;
       setStatus('syncing');
       try {
-        await remoteSave(buildPayload(state));
+        const result = await remoteSave(buildPayload(state), {
+          expectedLastModified: remoteBaselineRef.current,
+        });
+        // Update our baseline so subsequent saves don't false-positive on the
+        // optimistic-lock check. We use our own stamp because Graph's response
+        // lastModifiedDateTime occasionally lags the body we just wrote.
+        remoteBaselineRef.current = new Date().toISOString();
         setStatus('ok');
         setLastSync(new Date());
         setErrMsg(null);
       } catch (e) {
         console.error(e);
-        setStatus('error');
-        setErrMsg(String(e.message || e));
+        // Translate the new v5.14 error codes into user-readable status
+        // messages. The full conflict UX (let user pick local vs remote)
+        // is still TODO — for now we surface the situation honestly so the
+        // user can decide whether to keep editing or refresh.
+        if (e && e.code === 'EMPTY_OVERWRITE_REFUSED') {
+          setStatus('error');
+          setErrMsg('ปลอดภัย: ปฏิเสธการเขียนข้อมูลว่างทับ — กรุณารีเฟรช');
+        } else if (e && e.code === 'REMOTE_NEWER') {
+          setStatus('error');
+          setErrMsg('มีอุปกรณ์อื่นแก้ไขก่อน — กรุณารีเฟรชเพื่อดึงข้อมูลล่าสุด');
+        } else {
+          setStatus('error');
+          setErrMsg(String(e.message || e));
+        }
       } finally {
         syncingRef.current = false;
       }
@@ -4009,12 +4135,24 @@ function App() {
     const trimmed = (label || '').trim();
     if (!trimmed) return { ok: false, reason: 'empty' };
     const users = state.users || [];
-    // Generate id from label (transliterated to ASCII isn't trivial in the browser without
-    // libs; we just slugify whitespace + fallback to random suffix to avoid collisions).
-    const baseId = trimmed.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'user';
-    let id = baseId;
-    let n = 2;
-    while (users.some(u => u.id === id)) { id = `${baseId}-${n++}`; }
+    // v5.14: use crypto.randomUUID() for guaranteed uniqueness — the previous
+    // approach of slugifying the label silently dropped non-ASCII characters
+    // (Thai script), so every Thai name collapsed to "user" and got serialised
+    // to "user-2", "user-3"… When the array order shifted (e.g. after a sync
+    // race), those positional IDs could point to different humans than expected,
+    // which is how a member could end up acting under an admin's id. UUIDs are
+    // opaque, fixed, and never collide.
+    let id;
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      id = `u_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
+    } else {
+      // Fallback for very old browsers without randomUUID — use timestamp+random.
+      id = `u_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    }
+    // Extra safety: in case of cosmic collision, retry with longer suffix
+    while (users.some(u => u.id === id)) {
+      id = `u_${crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : Date.now().toString(36) + Math.random().toString(36).slice(2)}`;
+    }
     const pinHash = await hashPin(pin);
     mutate(prev => ({
       ...prev,
@@ -5783,7 +5921,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.13.1 · แก้ alignment spinner ให้ตรงตัวเลข</div>
+      <div className="vstrip">my money · v5.14 · แก้บั๊กข้อมูลหาย — Safe Sync</div>
 
       {showLessonsEditor && (
         <LessonsEditor
