@@ -3198,8 +3198,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.16';
-const APP_VERSION_TAG = 'TxRow: ย้ายชื่อบัญชีเข้า badge + แสดงบันทึกใต้ชื่อ';
+const APP_VERSION = 'v5.17';
+const APP_VERSION_TAG = 'อุดช่องโหว่บัญชีลับ + เช็กชื่อสด + แก้ sync ลวงตา';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -3411,7 +3411,16 @@ function useSync(state, setState, isOnline) {
         const result = await remoteSave(buildPayload(state), { force: true });
         remoteBaselineRef.current = result?.lastModifiedDateTime || new Date().toISOString();
       }
-      setStatus('ok');
+      // v5.17: avoid the false-green race Gemini flagged. If a debounced push
+      // is currently mid-flight (syncingRef is true), claiming 'ok' here would
+      // briefly turn the indicator green even though the user's most recent
+      // edit hasn't been confirmed yet. The pending push's own success/error
+      // handler will set the final status — we just refrain from stomping on
+      // it. lastSync still updates because the read itself is genuinely a
+      // successful sync touch.
+      if (!syncingRef.current) {
+        setStatus('ok');
+      }
       setLastSync(new Date());
       setErrMsg(null);
       initialSyncDoneRef.current = true;
@@ -4794,7 +4803,14 @@ function App() {
           initial={editing}
           allTx={isAdmin ? state.transactions : visibleState.transactions}
           masterItems={visibleItemSet || state.items || []}
-          masterAccounts={state.accounts || []}
+          /* v5.17 (Gemini-flagged privacy leak): non-admin members previously
+             saw ALL accounts via autocomplete — including admin's private
+             ones — and could even file a transaction under one by typing the
+             exact name. Pass the permission-filtered list instead. Admin
+             still sees everything. The same filter is also applied below in
+             onSave so a member can't bypass the UI by editing the field
+             directly with a hidden account name. */
+          masterAccounts={isAdmin ? (state.accounts || []) : (visibleState.accounts || [])}
           masterProjects={state.projects || []}
           masterCategories={state.categories || []}
           account={account}
@@ -4814,8 +4830,20 @@ function App() {
             // Auto-add account to master list if new (default 2 decimals)
             const accName = (e.accountName || '').trim();
             if (accName) {
-              const accExists = (state.accounts || []).some(a => (a.name || '').toLowerCase() === accName.toLowerCase());
-              if (!accExists) addMasterAccount(accName, 2);
+              // v5.17: defence in depth. Even though the autocomplete only
+              // shows visible accounts to a member (see masterAccounts above),
+              // a sufficiently determined member could still type the exact
+              // name of an admin's private account. Refuse the save in that
+              // case — they can create a legitimately new account with their
+              // own name, but they can't file under someone else's.
+              const accExistsGlobal = (state.accounts || []).some(a => (a.name || '').toLowerCase() === accName.toLowerCase());
+              const accVisibleToUser = ((isAdmin ? state.accounts : visibleState.accounts) || [])
+                .some(a => (a.name || '').toLowerCase() === accName.toLowerCase());
+              if (accExistsGlobal && !accVisibleToUser && !isAdmin) {
+                pushToast('ไม่อนุญาต: ชื่อบัญชีนี้ทับซ้อนกับบัญชีของผู้ใช้อื่น');
+                return; // block the save entirely
+              }
+              if (!accExistsGlobal) addMasterAccount(accName, 2);
             }
             // Auto-add project to master list if new
             const projName = (e.project || '').trim();
@@ -6296,7 +6324,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.16 · TxRow: ย้ายชื่อบัญชี + เพิ่มแสดงบันทึก</div>
+      <div className="vstrip">my money · v5.17 · อุดบัญชีลับ + เช็กชื่อสด + sync truth</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -7849,7 +7877,36 @@ function UsersManager({ users, currentUserId, onClose, onAdd, onUpdate, onChange
           </div>
 
           {/* Add user form */}
-          {adding ? (
+          {adding ? (() => {
+            // v5.17: Real-time validation, per Gemini's suggestion. Compute the
+            // validity state once per render so the input border, the helper
+            // line, and the disabled prop on the submit button all stay in
+            // sync. Threshold is 1 char (not 3) — short Thai nicknames like
+            // "นิ่ม" or even "ก" should be allowed; this is a personal app,
+            // not a corporate user directory. Uses the app's CSS variables
+            // (--income-soft / --expense-soft / --sync-warn) instead of raw
+            // hex codes so it follows the sage-green light theme + dark mode.
+            const trimmed = newLabel.trim();
+            const isDup = trimmed && (users || []).some(
+              u => u.label.toLowerCase() === trimmed.toLowerCase()
+            );
+            const tooShort = trimmed.length > 0 && trimmed.length < 1; // currently always false; kept as a hook for future tightening
+            let validState = 'neutral';   // 'neutral' | 'ok' | 'dup' | 'short'
+            let validMsg = '';
+            if (trimmed) {
+              if (isDup) { validState = 'dup'; validMsg = '❌ ชื่อนี้มีในระบบแล้ว'; }
+              else if (tooShort) { validState = 'short'; validMsg = '⚠️ ชื่อสั้นเกินไป'; }
+              else { validState = 'ok'; validMsg = '✅ ใช้ชื่อนี้ได้'; }
+            }
+            const borderColor = (
+              validState === 'ok'    ? 'var(--income-soft)'  :
+              validState === 'dup'   ? 'var(--expense-soft)' :
+              validState === 'short' ? 'var(--sync-warn)'    :
+              'var(--line)'
+            );
+            const msgColor = borderColor;
+            const canSubmit = trimmed.length > 0 && !isDup && !tooShort;
+            return (
             <div className="user-add-card">
               <div className="user-add-row">
                 <select
@@ -7864,9 +7921,15 @@ function UsersManager({ users, currentUserId, onClose, onAdd, onUpdate, onChange
                   value={newLabel}
                   onChange={(e) => setNewLabel(e.target.value)}
                   className="user-name-input"
+                  style={{ borderColor, outlineColor: borderColor }}
                   autoFocus
                 />
               </div>
+              {validMsg && (
+                <div style={{fontSize: 11, marginTop: 6, fontWeight: 600, color: msgColor}}>
+                  {validMsg}
+                </div>
+              )}
               <select
                 value={newRole}
                 onChange={(e) => setNewRole(e.target.value)}
@@ -7877,12 +7940,13 @@ function UsersManager({ users, currentUserId, onClose, onAdd, onUpdate, onChange
               </select>
               <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10}}>
                 <button className="btn-ghost" onClick={cancelAdd}>ยกเลิก</button>
-                <button className="btn-primary" onClick={saveAdd} disabled={!newLabel.trim()}>
+                <button className="btn-primary" onClick={saveAdd} disabled={!canSubmit}>
                   <Ic.Plus size={14}/> เพิ่ม
                 </button>
               </div>
             </div>
-          ) : (
+            );
+          })() : (
             <button className="btn-ghost" style={{width: '100%', marginBottom: 14}} onClick={startAdd}>
               <Ic.Plus size={14}/> เพิ่มผู้ใช้ใหม่
             </button>
@@ -8295,22 +8359,54 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
 
           {/* Add new */}
           <div className="cat-head" style={{marginTop: 16}}>เพิ่มบัญชีใหม่</div>
-          <div className="acct-mgr-addbox">
-            <input type="text" value={newName}
-                   onChange={e => setNewName(e.target.value)}
-                   onKeyDown={e => { if (e.key === 'Enter' && newName.trim()) handleAdd(); }}
-                   placeholder="เช่น เงินสด, Bitcoin, ทอง"/>
-            <div className="decimals-input-wrap">
-              <label className="dec-lbl">ทศนิยม</label>
-              <input type="number" min="0" max="10" step="1"
-                     value={newDecimals}
-                     onChange={e => setNewDecimals(clampDecimals(e.target.value))}
-                     className="dec-input"/>
-            </div>
-            <button onClick={handleAdd} disabled={!newName.trim()} className="add-btn-gold">
-              <Ic.Plus size={14}/>
-            </button>
-          </div>
+          {(() => {
+            // v5.17: Real-time validation, same pattern as the user-add card.
+            // We compute validity once per render and mirror the result into
+            // the input border, the helper text, and the +button's disabled
+            // state. Threshold matches the existing tolerance — 1 char min.
+            const trimmed = newName.trim();
+            const isDup = trimmed && sortedAccounts.some(
+              a => (a.name || '').toLowerCase() === trimmed.toLowerCase()
+            );
+            let validState = 'neutral';
+            let validMsg = '';
+            if (trimmed) {
+              if (isDup) { validState = 'dup'; validMsg = '❌ มีบัญชีนี้ในระบบแล้ว'; }
+              else { validState = 'ok'; validMsg = '✅ ใช้ชื่อนี้ได้'; }
+            }
+            const borderColor = (
+              validState === 'ok'  ? 'var(--income-soft)'  :
+              validState === 'dup' ? 'var(--expense-soft)' :
+              'var(--line)'
+            );
+            const canSubmit = trimmed.length > 0 && !isDup;
+            return (
+              <>
+                <div className="acct-mgr-addbox">
+                  <input type="text" value={newName}
+                         onChange={e => setNewName(e.target.value)}
+                         onKeyDown={e => { if (e.key === 'Enter' && canSubmit) handleAdd(); }}
+                         placeholder="เช่น เงินสด, Bitcoin, ทอง"
+                         style={{borderColor}}/>
+                  <div className="decimals-input-wrap">
+                    <label className="dec-lbl">ทศนิยม</label>
+                    <input type="number" min="0" max="10" step="1"
+                           value={newDecimals}
+                           onChange={e => setNewDecimals(clampDecimals(e.target.value))}
+                           className="dec-input"/>
+                  </div>
+                  <button onClick={handleAdd} disabled={!canSubmit} className="add-btn-gold">
+                    <Ic.Plus size={14}/>
+                  </button>
+                </div>
+                {validMsg && (
+                  <div style={{fontSize: 11, marginTop: 6, marginBottom: 4, fontWeight: 600, color: borderColor}}>
+                    {validMsg}
+                  </div>
+                )}
+              </>
+            );
+          })()}
           <div className="unit-picker">
             <label className="unit-picker-lbl">สัญลักษณ์หน่วย</label>
             <select className="unit-select"
