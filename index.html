@@ -461,18 +461,16 @@ h1.page-title {
 /* v5.16: dedicated row below title for the optional note. We render it on its
    own line because notes can be long, and it sits visually under both the
    title and the date-badge so the user can scan it without competing with the
-   amount on the right. */
+   amount on the right. Per user spec: show the FULL note, no truncation —
+   long notes simply make the row taller, which is fine since notes commonly
+   carry location/path breadcrumbs (e.g. "ป้าแย→ชั้น1→..."). */
 .tx-row .note-ln {
   font-size: 11px;
   color: var(--text-dim);
   font-style: italic;
   margin-top: 4px;
   line-height: 1.4;
-  /* Show up to 2 lines, then truncate. */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  white-space: pre-wrap;  /* keep manual line breaks the user typed */
   word-break: break-word;
 }
 .tx-row .amt {
