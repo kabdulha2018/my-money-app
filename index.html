@@ -761,6 +761,17 @@ body:has(.sheet-backdrop) nav.tabbar {
   background: var(--surface); border: 1px solid var(--line);
   letter-spacing: 0.06em;
 }
+/* v5.15: when the pill is also a clickable button (the sync-pill-btn class
+   is added by JS only when there's actually a save to trigger), give it a
+   subtle hover/active treatment so users can tell it's tappable. The pill
+   stays the same shape and colour because we don't want it to look like
+   a primary CTA — it's still primarily an indicator. */
+button.sync-pill {
+  font-family: inherit;
+}
+.sync-pill-btn:hover { background: var(--surface-2, var(--surface)); border-color: var(--line-strong, var(--line)); }
+.sync-pill-btn:active { transform: scale(0.97); }
+.sync-pill[disabled] { opacity: 1; }
 .sync-dot {
   width: 6px; height: 6px; border-radius: 50%;
 }
@@ -2581,12 +2592,20 @@ function canViewAccount(user, account) {
 }
 // True if user can edit/delete this specific transaction
 function canEditTx(user, account, tx) {
+  // v5.15 (rule 1ง): non-admin members CANNOT edit or delete transactions —
+  // not even ones they created themselves. The user's reasoning is that an
+  // edit could ripple into another account's balance (e.g. a transfer between
+  // their own account and a shared account would touch the shared one). The
+  // safe rule is: members write-once-only. If they need to fix a typo they
+  // must ask the admin. The previous v5.0 rule of "edit-own = your own
+  // transactions on accounts you can edit" is removed.
   const p = getAccountPerm(user, account);
-  if (p === 'admin') return true;       // admin can edit anything
-  if (p === 'edit-own') return tx.createdBy === user.id;
-  return false;                         // 'view' or 'none'
+  if (p === 'admin') return true;
+  return false;
 }
-// True if user can ADD new transactions to this account
+// True if user can ADD new transactions to this account.
+// v5.15: Members keep the ability to ADD even though they can't edit/delete —
+// adding is the primary use case for shared books (mom logs grocery spend).
 function canAddToAccount(user, account) {
   const p = getAccountPerm(user, account);
   return p === 'admin' || p === 'edit-own';
@@ -3151,8 +3170,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.14.1';
-const APP_VERSION_TAG = 'แก้ typo remoteLoad → remoteFetch';
+const APP_VERSION = 'v5.15';
+const APP_VERSION_TAG = 'Safe sync, status truth, member permissions, force-sync';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -3278,7 +3297,20 @@ function resizeImage(file, maxDim, quality) {
 
 // ========== Sync Hook ==========
 function useSync(state, setState, isOnline) {
-  // status: 'idle' | 'syncing' | 'ok' | 'offline' | 'error'
+  // v5.15: expanded the status state machine to fix Gemini's diagnosis that
+  // the old indicator could lie — it would show 'ok' (green) for the 2.5s
+  // debounce window before the upload even started, so a user who closed
+  // their tab during that window thought their data was safe when in fact
+  // nothing had been sent yet. The new states make the contract explicit:
+  //
+  //   'idle'    — no pending change AND last save confirmed by Graph
+  //   'pending' — local change exists but PUT hasn't gone out yet (debouncing,
+  //               or sitting in a frozen tab); GREEN MUST NOT BE SHOWN HERE
+  //   'syncing' — PUT in flight; awaiting Graph response
+  //   'ok'      — Graph returned 200 for the most recent payload (the only
+  //               state where green is honest)
+  //   'offline' — navigator says we're offline
+  //   'error'   — last attempt failed (errMsg has the reason)
   const [status, setStatus] = useState('idle');
   const [lastSync, setLastSync] = useState(null);
   const [errMsg, setErrMsg] = useState(null);
@@ -3370,6 +3402,12 @@ function useSync(state, setState, isOnline) {
     // how data got nuked — the first tab to load on a slow network would
     // overwrite everything before the pull finished.
     if (!initialSyncDoneRef.current) return;
+
+    // v5.15: Mark the indicator as 'pending' the instant a save is queued so
+    // the green "ok" badge can never linger over an unsaved edit. The badge
+    // only flips back to green after Graph confirms the PUT (see below).
+    setStatus('pending');
+
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
       if (syncingRef.current) return;
@@ -3383,15 +3421,14 @@ function useSync(state, setState, isOnline) {
         // optimistic-lock check. We use our own stamp because Graph's response
         // lastModifiedDateTime occasionally lags the body we just wrote.
         remoteBaselineRef.current = new Date().toISOString();
+        // v5.15: Only set 'ok' AFTER Graph returned 200. The contract: a
+        // green light means the server has the data, not "we plan to send it".
         setStatus('ok');
         setLastSync(new Date());
         setErrMsg(null);
       } catch (e) {
         console.error(e);
-        // Translate the new v5.14 error codes into user-readable status
-        // messages. The full conflict UX (let user pick local vs remote)
-        // is still TODO — for now we surface the situation honestly so the
-        // user can decide whether to keep editing or refresh.
+        // Translate the v5.14 error codes into user-readable status messages.
         if (e && e.code === 'EMPTY_OVERWRITE_REFUSED') {
           setStatus('error');
           setErrMsg('ปลอดภัย: ปฏิเสธการเขียนข้อมูลว่างทับ — กรุณารีเฟรช');
@@ -3408,7 +3445,56 @@ function useSync(state, setState, isOnline) {
     }, 2500);
   }, [isOnline, state]);
 
-  return { status, lastSync, errMsg, pullOnce, schedulePush, setStatus };
+  // v5.15: Manual immediate sync, bypassing the 2.5s debounce. Powers the
+  // tap-to-sync behaviour on the SyncPill and any explicit "ซิงค์ตอนนี้"
+  // button. This is the user's escape hatch for the Chrome-tab-freeze issue
+  // Gemini diagnosed: if the OS suspended a queued setTimeout, the user can
+  // press the pill while the tab is foregrounded to fire the PUT immediately.
+  // All the v5.14 guards (empty-state, optimistic-lock) still apply.
+  const forcePush = useCallback(async () => {
+    if (!isOnline) {
+      setStatus('offline');
+      return { ok: false, reason: 'offline' };
+    }
+    if (!initialSyncDoneRef.current) {
+      // No initial pull yet → safest is to do that first so we don't overwrite
+      // remote data with our default empty state.
+      return { ok: false, reason: 'not-ready' };
+    }
+    if (syncingRef.current) return { ok: false, reason: 'busy' };
+
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+
+    syncingRef.current = true;
+    setStatus('syncing');
+    try {
+      await remoteSave(buildPayload(state), {
+        expectedLastModified: remoteBaselineRef.current,
+      });
+      remoteBaselineRef.current = new Date().toISOString();
+      setStatus('ok');
+      setLastSync(new Date());
+      setErrMsg(null);
+      return { ok: true };
+    } catch (e) {
+      console.error(e);
+      if (e && e.code === 'EMPTY_OVERWRITE_REFUSED') {
+        setStatus('error');
+        setErrMsg('ปลอดภัย: ปฏิเสธการเขียนข้อมูลว่างทับ — กรุณารีเฟรช');
+      } else if (e && e.code === 'REMOTE_NEWER') {
+        setStatus('error');
+        setErrMsg('มีอุปกรณ์อื่นแก้ไขก่อน — กรุณารีเฟรชเพื่อดึงข้อมูลล่าสุด');
+      } else {
+        setStatus('error');
+        setErrMsg(String(e.message || e));
+      }
+      return { ok: false, reason: 'error', error: e };
+    } finally {
+      syncingRef.current = false;
+    }
+  }, [isOnline, state]);
+
+  return { status, lastSync, errMsg, pullOnce, schedulePush, forcePush, setStatus };
 }
 
 // ========== App ==========
@@ -3629,7 +3715,7 @@ function App() {
   const [skipSync, setSkipSync] = useState(false);
   const [state, setState] = useState({ transactions: [], items: [], accounts: [], projects: [], categories: [], users: [], lastModified: null });
   const isOnline = !!account && HAS_CONFIG && !skipSync;
-  const { status, lastSync, errMsg, pullOnce, schedulePush } = useSync(state, setState, isOnline);
+  const { status, lastSync, errMsg, pullOnce, schedulePush, forcePush, setStatus } = useSync(state, setState, isOnline);
 
   // v5.0: PIN-based profile gate (replaces v3.7 role+lock and v4.0 hardcoded profiles)
   //
@@ -3735,6 +3821,69 @@ function App() {
       pullOnce();
     }
   }, [account, booting, pullOnce]);
+
+  // v5.15: Smart wake-up + close-tab guard (per Gemini's diagnosis of the
+  // May 2 data loss). Two effects in one useEffect to keep them sharing the
+  // same hidden-timestamp ref since they observe related browser events.
+  //
+  // (a) visibilitychange — Chrome on Android freezes timers and JS heaps in
+  //     hidden tabs to save battery. If the user pulls the app to the back-
+  //     ground while a 2.5s debounce is pending, the timer can be paused or
+  //     killed entirely; the user comes back next morning to find the
+  //     "ซิงค์แล้ว" badge from yesterday over data that never uploaded. To
+  //     handle this we record the moment the tab went hidden, and on return
+  //     — if it's been long enough that the OS likely killed the JS heap —
+  //     we re-pull from OneDrive before letting any further edits propagate.
+  //     5 minutes is a heuristic: short enough to catch real freezes, long
+  //     enough to ignore quick app switches.
+  //
+  // (b) beforeunload — if the user tries to close the tab while we still
+  //     have unsaved local edits (status === 'pending' or 'syncing'), the
+  //     browser shows its generic "leave site?" prompt. This catches the
+  //     scenario where the user finishes typing, sees the green dot from a
+  //     previous save, and closes Chrome before the new debounce fires.
+  const lastHiddenAtRef = useRef(null);
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        lastHiddenAtRef.current = Date.now();
+      } else if (document.visibilityState === 'visible') {
+        const hiddenSince = lastHiddenAtRef.current;
+        lastHiddenAtRef.current = null;
+        if (!hiddenSince) return;
+        const minutesAway = (Date.now() - hiddenSince) / 60000;
+        // v5.15: If there's a pending push that may have been frozen by the
+        // browser while the tab was hidden, fire it now while we're in the
+        // foreground. This covers the scenario the user described: "auto-
+        // sync ไม่เคยสำเร็จ ต้องกดซิงค์เอง" — the debounced setTimeout was
+        // killed when the OS suspended the tab. forcePush() respects the
+        // same guards as schedulePush, so it's safe to call even if the
+        // pending save was already flushed elsewhere.
+        if (status === 'pending' && account && !booting && !skipSync) {
+          forcePush();
+        }
+        if (minutesAway > 5 && account && !booting && !skipSync) {
+          // Tab was hidden long enough that the OS likely froze us — re-pull
+          // before the user starts editing on top of stale state.
+          pullOnce();
+        }
+      }
+    };
+    const onBeforeUnload = (e) => {
+      // Only block close if there is actually unsaved work in flight.
+      if (status === 'pending' || status === 'syncing') {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, [account, booting, skipSync, pullOnce, forcePush, status]);
 
   // v2.9: Archive this index.html into OneDrive once per version, after login
   const didArchiveRef = useRef(false);
@@ -3920,6 +4069,13 @@ function App() {
 
   // Actions
   const mutate = (mutator) => {
+    // v5.15 (per Gemini's diagnosis): the moment local state changes, mark
+    // the indicator pending. The 2.5s debounce in schedulePush already does
+    // this when it runs, but doing it here too closes the small gap where
+    // the UI was still showing 'ok' between the state change and the
+    // schedulePush callback firing. The green dot can never appear over an
+    // unsaved edit, even for one render.
+    if (isOnline) setStatus('pending');
     setState(prev => {
       const next = mutator(prev);
       return { ...next, lastModified: new Date().toISOString() };
@@ -4071,12 +4227,23 @@ function App() {
     // unitSymbol can be empty string ('') — keep as-is. Only fall back to '฿' when undefined/null.
     const sym = unitSymbol == null ? '฿' : String(unitSymbol);
     const pos = unitPosition === 'after' ? 'after' : 'before';
+    // v5.15: When a non-admin creates an account, auto-grant them edit-own
+    // permission AND record them as the creator. Admin always has implicit
+    // access (the visibleAccounts filter short-circuits for admin role), so
+    // we don't need to add admin to permissions explicitly. Recording the
+    // creator id lets us enforce "only the creator can delete the account
+    // they created" later (rule 1จ from the user's spec).
+    const initialPerms = {};
+    if (currentUser && currentUser.role !== 'admin') {
+      initialPerms[currentUser.id] = 'edit-own';
+    }
     mutate(prev => ({
       ...prev,
       accounts: [...(prev.accounts || []), {
         id: uid(), name: n, decimals: d,
         unitSymbol: sym, unitPosition: pos,
-        permissions: {},
+        permissions: initialPerms,
+        createdBy: currentUser?.id || null,
         createdAt: new Date().toISOString()
       }],
     }));
@@ -4112,7 +4279,18 @@ function App() {
     return { ok: true, affectedTx: affected };
   };
   const removeMasterAccount = (id) => {
+    // v5.15 (rule 1จ): non-admin can only delete accounts they themselves
+    // created. Admin can always delete anything. We return a result object so
+    // the caller can show a clear toast — silent failure would be confusing
+    // when the delete button works for admins but not for members.
+    const target = (state.accounts || []).find(a => a.id === id);
+    if (!target) return { ok: false, reason: 'notfound' };
+    if (currentUser && currentUser.role !== 'admin') {
+      const isCreator = target.createdBy && target.createdBy === currentUser.id;
+      if (!isCreator) return { ok: false, reason: 'not-creator' };
+    }
     mutate(prev => ({ ...prev, accounts: (prev.accounts || []).filter(a => a.id !== id) }));
+    return { ok: true };
   };
   // v5.0: set per-user permission on an account (admin only).
   // perm ∈ { 'none', 'view', 'edit-own' }
@@ -4465,12 +4643,14 @@ function App() {
             onManageCategories={() => setShowCategoriesManager(true)}
             zoomLevel={zoomLevel}
             onZoom={cycleZoom}
+            isAdmin={isAdmin}
           />
         )}
         {tab === 'home' && homeView === 'summary' && (
           <HomeView
             account={account} skipSync={skipSync}
             status={status} lastSync={lastSync}
+            onForceSync={forcePush}
             viewMonth={viewMonth} setViewMonth={setViewMonth}
             totals={totals} monthTx={monthTx}
             
@@ -4488,13 +4668,15 @@ function App() {
             zoomLevel={zoomLevel}
             onZoom={cycleZoom}
             onBack={() => setHomeView('overview')}
+            isAdmin={isAdmin}
           />
         )}
         {tab === 'list' && (
           <ListView
             viewMonth={viewMonth} setViewMonth={setViewMonth}
             monthTx={monthTx}
-            
+            account={account} skipSync={skipSync}
+            status={status} onForceSync={forcePush}
             grandBal={grandBal}
             
             onTap={setActionTx}
@@ -4510,12 +4692,15 @@ function App() {
             onOpenSearch={() => setShowSearch(true)}
             zoomLevel={zoomLevel}
             onZoom={cycleZoom}
+            isAdmin={isAdmin}
           />
         )}
         {tab === 'chart' && (
           <ChartView
             viewMonth={viewMonth} setViewMonth={setViewMonth}
             monthTx={monthTx}
+            account={account} skipSync={skipSync}
+            status={status} onForceSync={forcePush}
             accountList={accountList}
             selectedAccount={selectedAccount}
             onSelectAccount={setSelectedAccount}
@@ -4527,6 +4712,7 @@ function App() {
             onManageCategories={() => setShowCategoriesManager(true)}
             zoomLevel={zoomLevel}
             onZoom={cycleZoom}
+            isAdmin={isAdmin}
           />
         )}
         {tab === 'settings' && (
@@ -4538,6 +4724,7 @@ function App() {
             onSignIn={doSignIn}
             onSignOut={doSignOut}
             onSyncNow={pullOnce}
+            onForceSync={forcePush}
             onEnableSync={() => setSkipSync(false)}
             authLoading={authLoading}
             cacheStatus={cacheStatus}
@@ -4552,11 +4739,33 @@ function App() {
 
       <TabBar tab={tab} setTab={setTab} onAdd={() => setShowAdd(true)} />
 
-      {(showAdd || editing) && (
+      {(showAdd || editing) && (() => {
+        // v5.15 (rule 1ข): for non-admin members, the item dropdown should
+        // only suggest items they've actually been able to interact with —
+        // i.e. items used in transactions on accounts they have permission
+        // to see. Items associated only with accounts they can't see stay
+        // hidden, but the master list still contains them, so if a member
+        // happens to type the exact same name, they can still create that
+        // entry (there's no enforcement preventing that, and it would be
+        // weird to silently swallow the name). Admin sees everything.
+        let visibleItemSet = null; // null = no filtering
+        if (!isAdmin) {
+          const seen = new Set();
+          (visibleState.transactions || []).forEach(t => {
+            const k = (t.item || t.payee || '').trim().toLowerCase();
+            if (k) seen.add(k);
+          });
+          // Master items: only keep entries that show up in member-visible txs
+          visibleItemSet = (state.items || []).filter(it => {
+            const k = (it.name || '').trim().toLowerCase();
+            return k && seen.has(k);
+          });
+        }
+        return (
         <TxSheet
           initial={editing}
-          allTx={state.transactions}
-          masterItems={state.items || []}
+          allTx={isAdmin ? state.transactions : visibleState.transactions}
+          masterItems={visibleItemSet || state.items || []}
           masterAccounts={state.accounts || []}
           masterProjects={state.projects || []}
           masterCategories={state.categories || []}
@@ -4592,13 +4801,15 @@ function App() {
           }}
           onDelete={id => { removeTx(id); setShowAdd(false); setEditing(null); }}
         />
-      )}
+        );
+      })()}
 
       {showItemsManager && (
         <ItemsManager
           items={state.items || []}
           transactions={state.transactions}
           onClose={() => setShowItemsManager(false)}
+          isAdmin={isAdmin}
           onAdd={(name) => {
             const ok = addMasterItem(name);
             if (!ok) pushToast('มีชื่อนี้อยู่แล้ว');
@@ -4606,6 +4817,8 @@ function App() {
             return ok;
           }}
           onUpdate={(id, name) => {
+            // v5.15: enforce server-side too — non-admin can't edit master items
+            if (!isAdmin) { pushToast('ผู้ใช้ทั่วไปไม่สามารถแก้ไขรายการได้'); return false; }
             const r = updateMasterItem(id, name);
             if (r.ok) {
               pushToast(r.affectedTx > 0
@@ -4616,6 +4829,7 @@ function App() {
             return r.ok;
           }}
           onRemove={(id) => {
+            if (!isAdmin) { pushToast('ผู้ใช้ทั่วไปไม่สามารถลบรายการได้'); return; }
             removeMasterItem(id);
             pushToast('ลบจากรายการแนะนำแล้ว');
           }}
@@ -4645,8 +4859,11 @@ function App() {
             return r.ok;
           }}
           onRemove={(id) => {
-            removeMasterAccount(id);
-            pushToast('ลบบัญชีแล้ว');
+            const r = removeMasterAccount(id);
+            if (r.ok) pushToast('ลบบัญชีแล้ว');
+            else if (r.reason === 'not-creator') pushToast('ลบได้เฉพาะบัญชีที่ตัวเองสร้างเท่านั้น');
+            else pushToast('ลบไม่สำเร็จ');
+            return r.ok;
           }}
           onSetPerm={(accId, userId, perm) => {
             setAccountPerm(accId, userId, perm);
@@ -4655,6 +4872,7 @@ function App() {
           }}
           users={state.users || []}
           isAdmin={isAdmin}
+          currentUserId={currentUser?.id}
           pushToast={pushToast}
         />
       )}
@@ -4847,7 +5065,12 @@ function SignIn({ loading, error, onSignIn, onSignInRedirect, onSkip }) {
 }
 
 // ============ Views ============
-function SyncPill({ status, account, skipSync, compact = false }) {
+// v5.15: SyncPill is now both an indicator AND a button — tapping it forces
+// an immediate sync, bypassing the 2.5s debounce. This is the user's escape
+// hatch for the Chrome-tab-freeze problem (Gemini's diagnosis): if the OS
+// suspended a queued setTimeout, the user can press the pill while the tab
+// is foregrounded to fire the PUT right now.
+function SyncPill({ status, account, skipSync, onForceSync, compact = false }) {
   if (!account || skipSync) {
     return (
       <span className="sync-pill">
@@ -4856,19 +5079,41 @@ function SyncPill({ status, account, skipSync, compact = false }) {
       </span>
     );
   }
+  // 'pending' is the new state from v5.15: local change exists but PUT
+  // hasn't been confirmed yet, so green CANNOT show here. We render it in
+  // the same amber colour as 'idle' to keep the visual contract simple:
+  // green = saved on server, anything else = not yet.
   const map = {
-    syncing: { cls: 'sync', text: 'กำลังซิงค์' },
-    ok:      { cls: 'ok', text: 'ซิงค์แล้ว' },
-    error:   { cls: 'err', text: 'ซิงค์ล้มเหลว' },
-    idle:    { cls: 'warn', text: 'พร้อมซิงค์' },
-    offline: { cls: 'off', text: 'ออฟไลน์' },
+    pending: { cls: 'warn',  text: 'มีข้อมูลค้าง' },
+    syncing: { cls: 'sync',  text: 'กำลังซิงค์' },
+    ok:      { cls: 'ok',    text: 'ซิงค์แล้ว' },
+    error:   { cls: 'err',   text: 'ซิงค์ล้มเหลว' },
+    idle:    { cls: 'warn',  text: 'พร้อมซิงค์' },
+    offline: { cls: 'off',   text: 'ออฟไลน์' },
   };
   const s = map[status] || map.idle;
+  // Only allow tap-to-sync when there's actually something to do or the
+  // previous attempt errored. Already-OK and currently-syncing pills are
+  // display-only.
+  const clickable = onForceSync && (status === 'pending' || status === 'idle' || status === 'error');
   return (
-    <span className="sync-pill">
+    <button type="button"
+            className={`sync-pill ${clickable ? 'sync-pill-btn' : ''}`}
+            onClick={clickable ? onForceSync : undefined}
+            aria-label={clickable ? 'ซิงค์ตอนนี้' : s.text}
+            title={clickable ? 'แตะเพื่อซิงค์ทันที' : s.text}
+            disabled={!clickable}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '4px 8px',
+              cursor: clickable ? 'pointer' : 'default',
+              font: 'inherit',
+              color: 'inherit',
+            }}>
       <span className={`sync-dot ${s.cls}`}></span>
       {s.text}
-    </span>
+    </button>
   );
 }
 
@@ -4889,7 +5134,7 @@ function ZoomBtn({ level, onCycle }) {
   );
 }
 
-function KebabMenu({ onOpenAccounts, onOpenProjects, onOpenItems, onOpenCategories }) {
+function KebabMenu({ onOpenAccounts, onOpenProjects, onOpenItems, onOpenCategories, isAdmin = true }) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(null); // 'accounts' | 'projects' | 'items' | 'categories' | null
   const wrapRef = useRef(null);
@@ -4921,7 +5166,16 @@ function KebabMenu({ onOpenAccounts, onOpenProjects, onOpenItems, onOpenCategori
     setTimeout(() => manager(action), 50);
   };
 
-  const sections = [
+  // v5.15 (rule 1ก-จ): non-admin sees a reduced action set.
+  //   - Accounts: can add new ones, can delete ONES THEY CREATED, but cannot
+  //     bulk-edit other people's account names/decimals/units. The "delete"
+  //     entry here opens the manager in delete mode; the per-row enforcement
+  //     in AccountsManager already restricts which accounts get a working
+  //     trash button.
+  //   - Items: can add (rule 1ค) but not edit/delete (rule 1ง).
+  //   - Projects / Categories: same — add only.
+  // Admins see everything as before.
+  const sections = isAdmin ? [
     { key: 'accounts', icon: '💰', label: 'บัญชี', manager: onOpenAccounts,
       actions: [
         { id: 'add', label: 'เพิ่มบัญชี' },
@@ -4948,6 +5202,19 @@ function KebabMenu({ onOpenAccounts, onOpenProjects, onOpenItems, onOpenCategori
         { id: 'add', label: 'เพิ่มหมวดหมู่' },
         { id: 'edit', label: 'แก้ไขหมวดหมู่' },
         { id: 'delete', label: 'ลบหมวดหมู่' },
+      ]
+    },
+  ] : [
+    // Non-admin menu — reduced
+    { key: 'accounts', icon: '💰', label: 'บัญชี', manager: onOpenAccounts,
+      actions: [
+        { id: 'add', label: 'เพิ่มบัญชี' },
+        { id: 'delete', label: 'ลบบัญชีของตัวเอง' },
+      ]
+    },
+    { key: 'items', icon: '🏷️', label: 'รายการ', manager: onOpenItems,
+      actions: [
+        { id: 'add', label: 'เพิ่มรายการ' },
       ]
     },
   ];
@@ -5070,7 +5337,7 @@ function AccountFilter({ accountList, selected, onSelect, onManage }) {
 }
 
 // ============ Accounts Overview (Home tab default view) ============
-function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom }) {
+function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom, isAdmin }) {
   // Aggregate per-account stats (cumulative, all-time)
   const accountsList = useMemo(() => {
     const stats = new Map(); // key: name.toLowerCase()
@@ -5118,6 +5385,7 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
             onOpenProjects={onManageProjects}
             onOpenItems={onManageItems}
             onOpenCategories={onManageCategories}
+            isAdmin={isAdmin}
           />
         </div>
         <h1 className="page-title">my money</h1>
@@ -5170,7 +5438,7 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
 }
 
 
-function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth, totals, monthTx, grandBal, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, onBack, zoomLevel, onZoom }) {
+function HomeView({ account, skipSync, status, lastSync, onForceSync, viewMonth, setViewMonth, totals, monthTx, grandBal, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, onBack, zoomLevel, onZoom, isAdmin }) {
   const [sortDir, setSortDir] = useState('desc');
   const sortedTx = useMemo(() => {
     const list = [...monthTx];
@@ -5208,9 +5476,9 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
             </div>
           </div>
           <div style={{display:'flex', alignItems:'center', gap: 8}}>
-            <SyncPill status={status} account={account} skipSync={skipSync}/>
+            <SyncPill status={status} account={account} skipSync={skipSync} onForceSync={onForceSync}/>
             <ZoomBtn level={zoomLevel} onCycle={onZoom}/>
-            <KebabMenu onOpenAccounts={onManageAccounts} onOpenProjects={onManageProjects} onOpenItems={onManageItems} onOpenCategories={onManageCategories} />
+            <KebabMenu onOpenAccounts={onManageAccounts} onOpenProjects={onManageProjects} onOpenItems={onManageItems} onOpenCategories={onManageCategories} isAdmin={isAdmin} />
           </div>
         </div>
         <div className="title-row">
@@ -5252,7 +5520,7 @@ function HomeView({ account, skipSync, status, lastSync, viewMonth, setViewMonth
   );
 }
 
-function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom, onOpenSearch }) {
+function ListView({ viewMonth, setViewMonth, monthTx, account, skipSync, status, onForceSync, grandBal, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom, onOpenSearch, isAdmin }) {
   const [sortDir, setSortDir] = useState('desc');
   const groups = useMemo(() => {
     const g = {};
@@ -5291,12 +5559,14 @@ function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, select
               <Ic.Search size={18}/>
             </button>
           )}
+          <SyncPill status={status} account={account} skipSync={skipSync} onForceSync={onForceSync}/>
           <ZoomBtn level={zoomLevel} onCycle={onZoom}/>
           <KebabMenu
             onOpenAccounts={onManageAccounts}
             onOpenProjects={onManageProjects}
             onOpenItems={onManageItems}
             onOpenCategories={onManageCategories}
+            isAdmin={isAdmin}
           />
         </div>
         <div className="title-row">
@@ -5343,7 +5613,7 @@ function ListView({ viewMonth, setViewMonth, monthTx, onTap, accountList, select
   );
 }
 
-function ChartView({ viewMonth, setViewMonth, monthTx, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom }) {
+function ChartView({ viewMonth, setViewMonth, monthTx, account, skipSync, status, onForceSync, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom, isAdmin }) {
   const byCat = useMemo(() => {
     const m = {};
     monthTx.filter(t => t.type === 'expense').forEach(t => { m[t.category] = (m[t.category]||0) + t.amount; });
@@ -5367,12 +5637,14 @@ function ChartView({ viewMonth, setViewMonth, monthTx, accountList, selectedAcco
       <header className="page-head rise">
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap: 10}}>
           <div className="crumb">สรุปค่าใช้จ่ายตามหมวด</div>
+          <SyncPill status={status} account={account} skipSync={skipSync} onForceSync={onForceSync}/>
           <ZoomBtn level={zoomLevel} onCycle={onZoom}/>
           <KebabMenu
             onOpenAccounts={onManageAccounts}
             onOpenProjects={onManageProjects}
             onOpenItems={onManageItems}
             onOpenCategories={onManageCategories}
+            isAdmin={isAdmin}
           />
         </div>
         <div className="title-row">
@@ -5430,7 +5702,7 @@ function DonutChart({ data, palette, total }) {
   return <svg viewBox={`0 0 ${size} ${size}`}>{arcs}</svg>;
 }
 
-function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setState, pushToast, onSignIn, onSignOut, onSyncNow, onEnableSync, authLoading, cacheStatus, pendingCount, isOnline, isAdmin, currentUser, onOpenUsersManager }) {
+function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setState, pushToast, onSignIn, onSignOut, onSyncNow, onForceSync, onEnableSync, authLoading, cacheStatus, pendingCount, isOnline, isAdmin, currentUser, onOpenUsersManager }) {
   const fileRef = useRef(null);
   const [confirm, setConfirm] = useState(false);
   // v2.9: Lessons editor state
@@ -5674,7 +5946,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
                 <div className="nm">{accName}</div>
                 <div className="em">{accEmail}</div>
               </div>
-              <SyncPill status={status} account={account} skipSync={skipSync}/>
+              <SyncPill status={status} account={account} skipSync={skipSync} onForceSync={onForceSync}/>
             </div>
             <div className="two-col">
               <button className="btn-ghost" onClick={onSyncNow}>
@@ -5830,6 +6102,81 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
         </div>
       )}
 
+      {/* v5.15: Per-user transaction count summary — admin only.
+          Useful for spotting which user added how many entries this overall
+          period, and for catching transactions whose createdBy is missing
+          (legacy or imported data that predates the multi-user system). */}
+      {isAdmin && (() => {
+        const txs = state.transactions || [];
+        const users = state.users || [];
+        // Count by createdBy. Anything that isn't a known user id (or is empty)
+        // gets bucketed as "ไม่ระบุ" so the total still adds up.
+        const knownIds = new Set(users.map(u => u.id));
+        const counts = {};
+        let unknownCount = 0;
+        for (const t of txs) {
+          const by = t.createdBy;
+          if (by && knownIds.has(by)) {
+            counts[by] = (counts[by] || 0) + 1;
+          } else {
+            unknownCount += 1;
+          }
+        }
+        // Build the rows: one per known user (in the same order as state.users
+        // for stable display), then "ไม่ระบุ" at the bottom if non-zero.
+        const rows = users.map(u => ({
+          id: u.id,
+          label: u.label || u.id,
+          icon: u.icon || '👤',
+          role: u.role,
+          count: counts[u.id] || 0,
+        }));
+        if (unknownCount > 0) {
+          rows.push({ id: '__unknown', label: 'ไม่ระบุ', icon: '❓', role: null, count: unknownCount });
+        }
+        return (
+          <div className="panel rise">
+            <div className="hd">
+              <div className="ico-wrap"><Ic.Chart size={16}/></div>
+              <div>
+                <div className="tt">สรุปรายการต่อผู้ใช้</div>
+                <div className="sb">นับ transaction แยกตามผู้สร้าง · รวม {txs.length} รายการ</div>
+              </div>
+            </div>
+            <div style={{marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6}}>
+              {rows.map(r => (
+                <div key={r.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '8px 12px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 8,
+                  fontSize: 13,
+                }}>
+                  <span style={{fontSize: 18}}>{r.icon}</span>
+                  <span style={{flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+                    {r.label}
+                    {r.role === 'admin' && <span className="admin-tag-inline" style={{marginLeft: 6}}>admin</span>}
+                  </span>
+                  <span style={{
+                    fontVariantNumeric: 'tabular-nums',
+                    fontWeight: 600,
+                    color: r.count > 0 ? 'var(--text)' : 'var(--text-faint)',
+                  }}>
+                    {r.count.toLocaleString('th-TH')} รายการ
+                  </span>
+                </div>
+              ))}
+            </div>
+            {unknownCount > 0 && (
+              <p style={{fontSize: 11, color: 'var(--text-faint)', marginTop: 10, lineHeight: 1.5}}>
+                "ไม่ระบุ" คือรายการที่ไม่มีข้อมูลผู้สร้าง เช่น import มาจากเวอร์ชันเก่าก่อนระบบผู้ใช้
+              </p>
+            )}
+          </div>
+        );
+      })()}
+
       {/* v3.5: Offline storage / photo cache — admin only (v5.0) */}
       {isAdmin && (
         <OfflineStoragePanel
@@ -5921,7 +6268,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.14.1 · Safe Sync (typo fix)</div>
+      <div className="vstrip">my money · v5.15 · Safe Sync ✦ Status truth ✦ Member permissions</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -7599,7 +7946,7 @@ function UsersManager({ users, currentUserId, onClose, onAdd, onUpdate, onChange
   );
 }
 
-function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove, pushToast }) {
+function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove, pushToast, isAdmin = true }) {
   const [newName, setNewName] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editDraft, setEditDraft] = useState('');
@@ -7756,14 +8103,18 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
                             </div>
                           </div>
                           <div className="actions">
-                            <button className="edit-btn" onClick={() => startEdit(it)}
-                                    title="แก้ไข">
-                              <Ic.Pencil size={14}/>
-                            </button>
-                            <button className="del-btn" onClick={() => { setConfirmDelId(it.id); setEditingId(null); }}
-                                    title="ลบ">
-                              <Ic.Trash size={14}/>
-                            </button>
+                            {isAdmin && (
+                              <>
+                                <button className="edit-btn" onClick={() => startEdit(it)}
+                                        title="แก้ไข">
+                                  <Ic.Pencil size={14}/>
+                                </button>
+                                <button className="del-btn" onClick={() => { setConfirmDelId(it.id); setEditingId(null); }}
+                                        title="ลบ">
+                                  <Ic.Trash size={14}/>
+                                </button>
+                              </>
+                            )}
                           </div>
                         </>
                       )}
@@ -7789,7 +8140,7 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
 }
 
 // ============ Accounts Manager Modal ============
-function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpdate, onRemove, onSetPerm, isAdmin, pushToast }) {
+function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpdate, onRemove, onSetPerm, isAdmin, currentUserId, pushToast }) {
   const [newName, setNewName] = useState('');
   const [newDecimals, setNewDecimals] = useState(2);
   // v5.6: unit symbol per account. '__custom' is a sentinel meaning "show custom input".
@@ -8084,14 +8435,20 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
                                 <Ic.Users size={14}/>
                               </button>
                             )}
-                            <button className="edit-btn" onClick={() => startEdit(a)}
-                                    title="แก้ไข">
-                              <Ic.Pencil size={14}/>
-                            </button>
-                            <button className="del-btn" onClick={() => { setConfirmDelId(a.id); setEditingId(null); }}
-                                    title="ลบ">
-                              <Ic.Trash size={14}/>
-                            </button>
+                            {isAdmin && (
+                              <button className="edit-btn" onClick={() => startEdit(a)}
+                                      title="แก้ไข">
+                                <Ic.Pencil size={14}/>
+                              </button>
+                            )}
+                            {/* v5.15 (rule 1จ): non-admin can only delete accounts they
+                                themselves created. Admin can always delete. */}
+                            {(isAdmin || (a.createdBy && a.createdBy === currentUserId)) && (
+                              <button className="del-btn" onClick={() => { setConfirmDelId(a.id); setEditingId(null); }}
+                                      title="ลบ">
+                                <Ic.Trash size={14}/>
+                              </button>
+                            )}
                           </div>
                         </>
                       )}
