@@ -1109,10 +1109,16 @@ button.sync-pill {
 }
 .photo-viewer .close-btn {
   position: absolute; top: max(16px, env(safe-area-inset-top)); right: 16px;
-  width: 40px; height: 40px; border-radius: 50%;
-  background: rgba(255,255,255,0.15); color: #fff;
+  /* v5.18: bumped size + opacity. The previous 40px button at 15% alpha was
+     getting lost over light-toned photos (e.g. white plastic bags), so users
+     couldn't see how to close and ended up using the back button — which
+     navigated away from the app entirely (now also fixed via popstate). */
+  width: 48px; height: 48px; border-radius: 50%;
+  background: rgba(0,0,0,0.6); color: #fff;
+  border: 2px solid rgba(255,255,255,0.5);
   display: inline-flex; align-items: center; justify-content: center;
   backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.5);
 }
 
 /* Tx row photo thumb */
@@ -3198,8 +3204,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.17';
-const APP_VERSION_TAG = 'อุดช่องโหว่บัญชีลับ + เช็กชื่อสด + แก้ sync ลวงตา';
+const APP_VERSION = 'v5.18';
+const APP_VERSION_TAG = 'แก้ปุ่มปิดรูป + รองรับปุ่ม Back ปิด lightbox';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -6324,7 +6330,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.17 · อุดบัญชีลับ + เช็กชื่อสด + sync truth</div>
+      <div className="vstrip">my money · v5.18 · ปิดรูปได้ทั้ง X และ Back</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -7392,6 +7398,48 @@ function ZoomableImage({ src, onClose }) {
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef({ startX: 0, startY: 0, lastX: 0, lastY: 0, startDist: 0, startScale: 1 });
   const lastTapRef = useRef(0);
+
+  // v5.18: Hardware/software back-button handling. On Android (and Chrome's
+  // back gesture), pressing back in this fullscreen viewer used to navigate
+  // away from the app entirely — confusing because users expected back to
+  // dismiss only the lightbox. We push a synthetic history entry on mount,
+  // then listen for popstate: if the user pops, we close the viewer instead
+  // of navigating. On normal close (X button or backdrop tap), we go back
+  // ourselves so we don't leave a phantom entry behind.
+  //
+  // closeRef lets the popstate listener call the latest onClose without
+  // re-binding when the prop identity changes mid-render.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  // poppedRef tracks whether the close was triggered BY popstate already, so
+  // the unmount cleanup doesn't try to history.back() a second time.
+  const poppedRef = useRef(false);
+  useEffect(() => {
+    // Push a placeholder state so back has something to pop off.
+    try { window.history.pushState({ _photoViewer: true }, ''); } catch {}
+    const onPop = () => {
+      poppedRef.current = true;
+      closeRef.current?.();
+    };
+    window.addEventListener('popstate', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      // If we're unmounting because the user closed via X / backdrop / esc
+      // (not because they hit back), the placeholder entry is still on the
+      // history stack — pop it ourselves so the next back press works as
+      // the user expects.
+      if (!poppedRef.current) {
+        try { window.history.back(); } catch {}
+      }
+    };
+  }, []);
+
+  // v5.18: also support Esc on desktop browsers (mostly for keyboard users).
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const getDist = (t1, t2) => Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
 
