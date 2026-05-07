@@ -2887,6 +2887,187 @@ async function remoteSave(data, options = {}) {
   return await res.json();
 }
 
+// ========== v5.20 Phase 2: Q.json — distributed queue file ==========
+// Q.json sits next to my-money.json in the OneDrive app folder. It tracks
+// who is currently editing the shared vault, who's waiting in line, and
+// when each lock holder last sent a heartbeat. Schema:
+//
+//   {
+//     queue: [
+//       {
+//         userId:    'abi',
+//         userLabel: 'อาบี',
+//         timestamp: '2026-05-07T04:23:45.678Z',
+//         txOrderId: 1715055825678123,           // tie-breaker if two users
+//                                                // have the exact same ms
+//         status:    'waiting' | 'editing',
+//         opCount:   5,                          // how many ops they'll deploy
+//         heartbeat: '2026-05-07T04:23:50.123Z', // updated every 10s while editing
+//         acquiredAt:'2026-05-07T04:23:48.001Z'  // when status flipped to editing
+//       }
+//     ],
+//     lastModified: '2026-05-07T04:23:45.678Z'
+//   }
+//
+// IMPORTANT: this is a separate file from my-money.json. We never put queue
+// state inside the main vault, because the queue is metadata about WHO can
+// write it, not vault content. Putting them together would create a chicken-
+// and-egg problem (you'd need to acquire a lock to write the lock file).
+//
+// Lock semantics (the contract):
+//
+//   * Adding yourself to the queue with status='waiting' is permitted at any
+//     time — it only requires that the file's optimistic-lock check passes.
+//   * Promoting yourself to 'editing' requires that you ARE the queue head
+//     after sorting by (timestamp asc, txOrderId asc) AND no one else has
+//     status='editing'. If two clients both promote at once, a re-validation
+//     pass detects it: whichever's timestamp is later demotes back to
+//     'waiting'.
+//   * While editing, you must update `heartbeat` every 10 seconds. Other
+//     clients treat any 'editing' entry whose heartbeat is older than 30s
+//     as dead, and may evict it (move it out of the queue) so the next
+//     waiter can proceed.
+//   * Releasing the lock means removing your entry from the queue entirely.
+//
+// All Q.json mutations use OneDrive ETag-based optimistic locking so that
+// two clients writing concurrently don't silently overwrite each other.
+
+const Q_FILE_NAME = 'Q.json';
+const Q_FILE_PATH = `/me/drive/special/approot:/${Q_FILE_NAME}:/content`;
+const Q_META_PATH = `/me/drive/special/approot:/${Q_FILE_NAME}`;
+const HEARTBEAT_INTERVAL_MS = 10000;  // 10s — how often the editor refreshes its heartbeat
+const LEASE_TIMEOUT_MS      = 30000;  // 30s — after this, an editor is considered dead
+
+// Default empty Q.json document.
+function emptyQDoc() {
+  return { queue: [], lastModified: new Date().toISOString() };
+}
+
+// Fetch Q.json AND its ETag (we need the ETag for optimistic locking on PUT).
+// Returns { doc, etag } where doc is emptyQDoc() if the file doesn't exist
+// yet (HTTP 404 — first run on a fresh OneDrive). We use a single Graph call
+// that returns both metadata and content via the ":/content" form, but the
+// ETag actually lives on the file metadata, not the content endpoint, so we
+// make one extra call. The cost is ~150ms; an acceptable tax for safety.
+async function qFetch() {
+  const token = await getToken();
+  // Try content first — if it 404s we know we need to bootstrap.
+  const res = await fetch(GRAPH_URL(Q_FILE_PATH), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 404) return { doc: emptyQDoc(), etag: null };
+  if (!res.ok) throw new Error(`Q load ${res.status}`);
+  const doc = await res.json();
+  // Now fetch the ETag from metadata. We grab only the eTag field to keep
+  // the response tiny.
+  const metaRes = await fetch(GRAPH_URL(`${Q_META_PATH}?$select=eTag`), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  let etag = null;
+  if (metaRes.ok) {
+    const meta = await metaRes.json();
+    etag = meta.eTag || null;
+  }
+  // Defensive: ensure the doc actually has the shape we expect. Forgiving
+  // parsing — if someone (or a previous bug) wrote a malformed Q.json,
+  // we recover with an empty queue rather than throwing.
+  if (!doc || !Array.isArray(doc.queue)) {
+    return { doc: emptyQDoc(), etag };
+  }
+  return { doc, etag };
+}
+
+// Save Q.json with optimistic locking. The caller passes the etag they got
+// from qFetch(); if the remote file has been modified since then (etag
+// mismatch), Graph returns 412 Precondition Failed and we throw
+// QError('CONFLICT'). Callers handle CONFLICT by re-fetching and retrying.
+class QError extends Error {
+  constructor(code, message) { super(message || code); this.code = code; }
+}
+
+async function qSave(doc, etag) {
+  const stamped = { ...doc, lastModified: new Date().toISOString() };
+  const token = await getToken();
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+  // If we have an etag (file existed when we read it), require it to still
+  // match. If we don't have one (file didn't exist), require the file to
+  // STILL not exist using If-None-Match: *.
+  if (etag) {
+    headers['If-Match'] = etag;
+  } else {
+    headers['If-None-Match'] = '*';
+  }
+  const res = await fetch(GRAPH_URL(Q_FILE_PATH), {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(stamped),
+  });
+  if (res.status === 412) {
+    throw new QError('CONFLICT', 'Q.json was modified by another device');
+  }
+  if (!res.ok) {
+    const t = await res.text();
+    throw new QError('SAVE_FAILED', `Q save ${res.status}: ${t.slice(0,120)}`);
+  }
+  // The PUT response contains the new file metadata including the new etag,
+  // which the caller can chain into the next save without re-fetching.
+  const newMeta = await res.json();
+  return { etag: newMeta.eTag || null };
+}
+
+// High-level helper: read-modify-write Q.json with automatic conflict retry.
+// `mutator` is a synchronous function that takes the current doc and returns
+// the new doc; if it returns null/undefined we treat that as a no-op cancel.
+// We retry up to maxAttempts times on CONFLICT — concurrent writes from
+// other devices are common and shouldn't surface as errors to the user.
+async function qMutate(mutator, maxAttempts = 5) {
+  let lastError = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const { doc, etag } = await qFetch();
+    const next = mutator(doc);
+    if (!next) return doc; // mutator decided to cancel; return current doc unchanged
+    try {
+      await qSave(next, etag);
+      return next;
+    } catch (e) {
+      if (e.code === 'CONFLICT') {
+        lastError = e;
+        // Brief backoff before retry — random jitter (50-150ms) reduces the
+        // chance that two retrying clients keep colliding in lockstep.
+        await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError || new QError('CONFLICT', 'too many retries');
+}
+
+// ----- Queue helpers (pure functions over a queue array) -----
+
+// Sort the queue by (timestamp asc, txOrderId asc). The head of this sorted
+// array is whoever should hold the lock next.
+function qSortQueue(q) {
+  return [...q].sort((a, b) => {
+    if (a.timestamp !== b.timestamp) return a.timestamp < b.timestamp ? -1 : 1;
+    return (a.txOrderId || 0) - (b.txOrderId || 0);
+  });
+}
+
+// Evict any 'editing' entries whose heartbeat is too old. This is what
+// allows the queue to recover from a dead client (browser crash, tab close,
+// Chrome freeze that lasts > LEASE_TIMEOUT_MS, etc.).
+function qEvictDead(queue, now = Date.now()) {
+  return queue.filter(entry => {
+    if (entry.status !== 'editing') return true;
+    const hb = entry.heartbeat ? Date.parse(entry.heartbeat) : 0;
+    return (now - hb) < LEASE_TIMEOUT_MS;
+  });
+}
+
 // ========== Local photo store (IndexedDB) ==========
 // v3.5: bumped to v2 — added 'pending' store for offline uploads queue
 // v5.19: bumped to v3 — added 'pending_ops' store for userx.json (Phase 1
@@ -3392,8 +3573,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.19';
-const APP_VERSION_TAG = 'Phase 1: pending op log + badges + Manage screen';
+const APP_VERSION = 'v5.20';
+const APP_VERSION_TAG = 'Phase 2: Q.json + Lock + Heartbeat (apply เป็น stub)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -3728,6 +3909,307 @@ function useSync(state, setState, isOnline) {
   return { status, lastSync, errMsg, pullOnce, schedulePush, forcePush, setStatus };
 }
 
+// ========== v5.20 Phase 2: useDeploy — distributed lock state machine ==========
+//
+// useDeploy implements the queue-based locking protocol the user designed:
+//
+//   STANDBY  → user can edit; pending ops accumulate locally in userx.json
+//   WAITING  → user clicked Deploy; we appended ourselves to Q.json's queue
+//              with status='waiting' and are polling to see if it's our turn
+//   EDITING  → we're at the head of the queue; we hold the lock, send
+//              heartbeats, and (in Phase 3) actually apply ops to my-money.json
+//   STANDBY  → done; we've removed ourselves from Q.json
+//
+// This hook only handles the LOCK lifecycle. The actual op-apply logic
+// (download my-money.json, replay ops, upload, etc.) is the caller's job
+// (Phase 3 will plug it in via the onApply callback). For Phase 2, the
+// caller can pass a no-op onApply just to verify the lock flow end-to-end.
+//
+// Concurrency notes:
+//   * Acquiring uses qMutate's CONFLICT-retry loop, so two clients pressing
+//     Deploy at literally the same millisecond won't lose each other's
+//     queue entry — the loser's append happens against the winner's new
+//     etag.
+//   * Re-validation runs after we promote ourselves from waiting to editing:
+//     we re-fetch Q.json, sort, and check the head is still us. If not
+//     (because two clients raced on the promote step), we demote ourselves
+//     back to waiting and the next poll will retry.
+//   * The heartbeat interval is short (10s) compared to LEASE_TIMEOUT_MS
+//     (30s), giving us 3 missed heartbeats of slack before others consider
+//     us dead. This balances battery cost (don't poll too often) against
+//     responsiveness (don't make others wait too long for a dead client).
+function useDeploy(currentUser, isOnline) {
+  // 'idle' is the externally-visible synonym for STANDBY. We use 'idle'
+  // internally to match React conventions for "nothing in flight".
+  const [phase, setPhase] = useState('idle');           // 'idle' | 'waiting' | 'editing' | 'releasing' | 'error'
+  const [queuePosition, setQueuePosition] = useState(null);  // 1-indexed; 1 = next up
+  const [queueLength, setQueueLength] = useState(0);
+  const [errMsg, setErrMsg] = useState(null);
+
+  // Refs let async callbacks see the latest values without forcing them to
+  // be rebuilt every render. txOrderIdRef captures the unique sub-millisecond
+  // tie-breaker we generated at acquire time; we need to remember it across
+  // multiple Q.json reads/writes during the wait/edit phases.
+  const txOrderIdRef = useRef(null);
+  const heartbeatTimerRef = useRef(null);
+  const pollTimerRef = useRef(null);
+  const cancelledRef = useRef(false);  // user pressed cancel mid-wait
+  const phaseRef = useRef('idle');     // mirror of phase for use in async callbacks
+  phaseRef.current = phase;
+
+  // ----- helpers -----
+  const stopHeartbeat = useCallback(() => {
+    if (heartbeatTimerRef.current) {
+      clearInterval(heartbeatTimerRef.current);
+      heartbeatTimerRef.current = null;
+    }
+  }, []);
+  const stopPoll = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+  // Cleanup on unmount or user logout.
+  useEffect(() => () => { stopHeartbeat(); stopPoll(); }, [stopHeartbeat, stopPoll]);
+
+  // ----- lock release (used by both happy path and cancel/error paths) -----
+  const releaseLock = useCallback(async () => {
+    if (!currentUser?.id) return;
+    stopHeartbeat();
+    stopPoll();
+    try {
+      await qMutate(doc => {
+        const before = doc.queue.length;
+        doc.queue = doc.queue.filter(e => e.userId !== currentUser.id);
+        return doc.queue.length === before ? null : doc;
+      });
+    } catch (e) {
+      // If release fails (network, conflict storm), the entry will be
+      // evicted by other clients via lease timeout — not catastrophic,
+      // just suboptimal. Log and move on.
+      console.warn('Q release failed:', e);
+    }
+    txOrderIdRef.current = null;
+  }, [currentUser?.id, stopHeartbeat, stopPoll]);
+
+  // ----- heartbeat: while editing, refresh Q.json[me].heartbeat every 10s -----
+  const sendHeartbeat = useCallback(async () => {
+    if (!currentUser?.id || phaseRef.current !== 'editing') return;
+    try {
+      await qMutate(doc => {
+        const me = doc.queue.find(e => e.userId === currentUser.id);
+        if (!me || me.status !== 'editing') return null; // no-op if we're not editing anymore
+        me.heartbeat = new Date().toISOString();
+        return doc;
+      });
+    } catch (e) {
+      // Heartbeat failures are tolerated: a single missed beat is fine
+      // (we have 3 beats of slack before lease expires). Log and continue.
+      console.warn('heartbeat failed:', e);
+    }
+  }, [currentUser?.id]);
+
+  // ----- poll while waiting: check if it's our turn yet -----
+  const pollForTurn = useCallback(async () => {
+    if (cancelledRef.current) return;
+    if (phaseRef.current !== 'waiting') return;
+    try {
+      const { doc } = await qFetch();
+      // Evict dead editors so a crashed client doesn't block us forever.
+      const live = qEvictDead(doc.queue);
+      const sorted = qSortQueue(live);
+      const myIdx = sorted.findIndex(e => e.userId === currentUser.id);
+
+      if (myIdx === -1) {
+        // We somehow got removed from the queue (maybe someone reset the
+        // queue file). Surface as error so user can retry.
+        setPhase('error');
+        setErrMsg('คุณถูกลบจากคิว — กรุณาลองใหม่');
+        stopPoll();
+        return;
+      }
+      setQueuePosition(myIdx + 1);
+      setQueueLength(sorted.length);
+
+      // Are we the head AND no one is currently editing? If yes, attempt
+      // promotion (which is itself an atomic Q.json mutation). If not,
+      // schedule another poll.
+      const headIsUs = myIdx === 0;
+      const someoneElseEditing = sorted.some(e => e.userId !== currentUser.id && e.status === 'editing');
+      if (headIsUs && !someoneElseEditing) {
+        // Try to promote.
+        const promotedDoc = await qMutate(d => {
+          // Re-evict at write time to be safe — dead editor might have
+          // appeared between our fetch and our write.
+          const liveQ = qEvictDead(d.queue);
+          const sortedQ = qSortQueue(liveQ);
+          const me = sortedQ.find(e => e.userId === currentUser.id);
+          if (!me) return null;
+          // Defensive: only promote if we're STILL the head and no one
+          // else is editing in the (just re-evicted) queue.
+          if (sortedQ[0]?.userId !== currentUser.id) return null;
+          if (sortedQ.some(e => e.userId !== currentUser.id && e.status === 'editing')) return null;
+          me.status = 'editing';
+          me.acquiredAt = new Date().toISOString();
+          me.heartbeat = me.acquiredAt;
+          d.queue = sortedQ;
+          return d;
+        });
+        // Re-validate: did we end up the only editor? Two clients might both
+        // succeed at the optimistic promote (one races onto the other's
+        // intermediate state). Re-fetch and check.
+        const { doc: verifyDoc } = await qFetch();
+        const verifySorted = qSortQueue(qEvictDead(verifyDoc.queue));
+        const editors = verifySorted.filter(e => e.status === 'editing');
+        if (editors.length > 1) {
+          // Multi-editor race. Whoever has the LATER acquiredAt demotes back
+          // to waiting (they lost the tie). The earlier one keeps the lock.
+          const sortedEditors = [...editors].sort((a, b) => (a.acquiredAt < b.acquiredAt ? -1 : 1));
+          if (sortedEditors[0].userId !== currentUser.id) {
+            // We're the loser — demote ourselves and continue polling.
+            await qMutate(d => {
+              const me = d.queue.find(e => e.userId === currentUser.id);
+              if (!me || me.status !== 'editing') return null;
+              me.status = 'waiting';
+              delete me.acquiredAt;
+              return d;
+            });
+            // Schedule next poll.
+            pollTimerRef.current = setTimeout(pollForTurn, 2000);
+            return;
+          }
+        }
+        // We hold the lock. Transition to editing and start the heartbeat.
+        setPhase('editing');
+        setQueuePosition(null);
+        heartbeatTimerRef.current = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+      } else {
+        // Not our turn yet — try again shortly.
+        pollTimerRef.current = setTimeout(pollForTurn, 2000);
+      }
+    } catch (e) {
+      console.error('pollForTurn error:', e);
+      // Transient error — keep polling. If the network is genuinely down
+      // the user will see it via the existing isOnline indicator.
+      pollTimerRef.current = setTimeout(pollForTurn, 3000);
+    }
+  }, [currentUser?.id, sendHeartbeat, stopPoll]);
+
+  // ----- public API: kick off the deploy flow -----
+  // Returns a promise that resolves once the lock is released (after onApply
+  // runs). Callers can await this to know when to refresh their UI.
+  const startDeploy = useCallback(async (onApply) => {
+    if (!currentUser?.id) {
+      setErrMsg('ต้องเข้าสู่ระบบก่อน');
+      return { ok: false, reason: 'no-user' };
+    }
+    if (!isOnline) {
+      setErrMsg('ออฟไลน์ — กรุณาเชื่อมต่ออินเทอร์เน็ต');
+      return { ok: false, reason: 'offline' };
+    }
+    if (phaseRef.current !== 'idle') {
+      // already in flight — ignore double-tap
+      return { ok: false, reason: 'busy' };
+    }
+
+    cancelledRef.current = false;
+    setErrMsg(null);
+    setPhase('waiting');
+    setQueuePosition(null);
+    setQueueLength(0);
+
+    // Step 1: append ourselves to the queue with status='waiting'.
+    const now = Date.now();
+    const txOrderId = now * 1000 + Math.floor(Math.random() * 1000);
+    txOrderIdRef.current = txOrderId;
+    const myEntry = {
+      userId:    currentUser.id,
+      userLabel: currentUser.label || currentUser.id,
+      timestamp: new Date(now).toISOString(),
+      txOrderId,
+      status:    'waiting',
+      heartbeat: new Date(now).toISOString(),
+    };
+    try {
+      await qMutate(doc => {
+        // First evict any dead editors so we don't enqueue behind a corpse.
+        doc.queue = qEvictDead(doc.queue);
+        // If we somehow already have an entry (e.g. from a previous crashed
+        // session), remove it first to avoid duplicates.
+        doc.queue = doc.queue.filter(e => e.userId !== currentUser.id);
+        doc.queue.push(myEntry);
+        return doc;
+      });
+    } catch (e) {
+      setPhase('error');
+      setErrMsg('เพิ่มเข้าคิวไม่สำเร็จ: ' + (e.message || e));
+      return { ok: false, reason: 'enqueue-failed', error: e };
+    }
+
+    // Step 2: poll until we're at the head and can promote ourselves.
+    // pollForTurn will eventually flip phase to 'editing' (or 'error').
+    pollForTurn();
+
+    // Step 3: wait until phase becomes 'editing' or 'error'/'idle' (cancel).
+    // We do this via a polled promise — clean and simple.
+    await new Promise((resolve) => {
+      const check = () => {
+        if (phaseRef.current === 'editing') return resolve();
+        if (phaseRef.current === 'error' || phaseRef.current === 'idle') return resolve();
+        setTimeout(check, 250);
+      };
+      check();
+    });
+
+    if (phaseRef.current !== 'editing') {
+      // Aborted before we got the lock — release if we have an entry just in case.
+      await releaseLock();
+      setPhase('idle');
+      return { ok: false, reason: 'aborted' };
+    }
+
+    // Step 4: we hold the lock. Run the caller's apply logic.
+    let applyResult = null;
+    try {
+      if (typeof onApply === 'function') {
+        applyResult = await onApply();
+      }
+    } catch (e) {
+      console.error('onApply threw:', e);
+      setErrMsg('Apply ล้มเหลว: ' + (e.message || e));
+      // Even on apply failure, we release the lock — don't hold the queue
+      // hostage. The caller can decide how to surface the error.
+    }
+
+    // Step 5: release the lock and return to idle.
+    setPhase('releasing');
+    await releaseLock();
+    setPhase('idle');
+    return { ok: true, applyResult };
+  }, [currentUser?.id, isOnline, pollForTurn, releaseLock]);
+
+  // ----- public API: cancel an in-flight deploy (only valid while waiting) -----
+  const cancelDeploy = useCallback(async () => {
+    if (phaseRef.current !== 'waiting') return;
+    cancelledRef.current = true;
+    stopPoll();
+    await releaseLock();
+    setPhase('idle');
+    setQueuePosition(null);
+    setQueueLength(0);
+  }, [stopPoll, releaseLock]);
+
+  return {
+    phase,            // 'idle' | 'waiting' | 'editing' | 'releasing' | 'error'
+    queuePosition,    // 1-indexed; null when not waiting
+    queueLength,      // total people in queue (incl. self)
+    errMsg,
+    startDeploy,      // (onApply) => Promise<{ok, applyResult}>
+    cancelDeploy,     // () => Promise<void>
+  };
+}
+
 // ========== App ==========
 // ============ v5.0: PIN-based profile gate (uses runtime user list) ============
 // User picks profile after Microsoft login → enters 4-digit PIN → enters app.
@@ -3947,6 +4429,12 @@ function App() {
   const [state, setState] = useState({ transactions: [], items: [], accounts: [], projects: [], categories: [], users: [], lastModified: null });
   const isOnline = !!account && HAS_CONFIG && !skipSync;
   const { status, lastSync, errMsg, pullOnce, schedulePush, forcePush, setStatus } = useSync(state, setState, isOnline);
+
+  // v5.20 Phase 2: deploy lock state machine. Currently passed a no-op
+  // onApply because the actual op-application logic lands in Phase 3.
+  // The hook owns the queue lifecycle (waiting → editing → release) and
+  // exposes phase / queue position so the UI can show progress to the user.
+  const deploy = useDeploy(currentUser, isOnline);
 
   // v5.0: PIN-based profile gate (replaces v3.7 role+lock and v4.0 hardcoded profiles)
   //
@@ -4971,42 +5459,122 @@ function App() {
             Pending screen. The "Deploy" button is intentionally a stub in
             Phase 1 — it will be wired up to Q.json + lock acquire in
             Phase 2/3. For now it just shows a toast explaining that. */}
-        {pendingOps.length > 0 && (
+        {/* v5.20 Phase 2: Banner now reflects the deploy lock state machine.
+            - idle  + has pending ops  → show Deploy button (wired up)
+            - waiting                  → show queue position + Cancel button
+            - editing                  → show "กำลัง deploy..." (no buttons)
+            - releasing                → show "เสร็จสิ้น..."
+            - error                    → show error message + dismiss button
+            
+            For Phase 2 the Deploy button just goes through the lock cycle
+            (acquire → editing → release) without applying anything. Phase 3
+            will fill in the onApply callback. */}
+        {(pendingOps.length > 0 || deploy.phase !== 'idle') && (
           <div style={{
             margin: '0 14px 10px',
             padding: '10px 14px',
             borderRadius: 12,
-            background: 'var(--sync-warn-bg, rgba(251,191,36,0.12))',
-            border: '1px solid var(--sync-warn, #fbbf24)',
+            background:
+              deploy.phase === 'editing'  ? 'rgba(34,197,94,0.12)' :
+              deploy.phase === 'waiting'  ? 'rgba(59,130,246,0.12)' :
+              deploy.phase === 'error'    ? 'rgba(239,68,68,0.12)' :
+              'var(--sync-warn-bg, rgba(251,191,36,0.12))',
+            border:
+              '1px solid ' + (
+                deploy.phase === 'editing' ? 'rgba(34,197,94,0.5)' :
+                deploy.phase === 'waiting' ? 'rgba(59,130,246,0.5)' :
+                deploy.phase === 'error'   ? 'rgba(239,68,68,0.5)' :
+                'var(--sync-warn, #fbbf24)'
+              ),
             display: 'flex', alignItems: 'center', gap: 10,
             fontSize: 13,
           }}>
-            <span style={{fontSize: 18}}>🟡</span>
-            <span style={{flex: 1, color: 'var(--text)'}}>
-              <b>{pendingOps.length} รายการ</b> รอ deploy
-            </span>
-            <button
-              onClick={() => setShowManagePending(true)}
-              style={{
-                padding: '6px 12px', fontSize: 12, fontWeight: 600,
-                background: 'transparent',
-                border: '1px solid var(--line-strong, var(--line))',
-                borderRadius: 8, cursor: 'pointer',
-                color: 'var(--text)',
-              }}>
-              จัดการ
-            </button>
-            <button
-              onClick={() => pushToast('Deploy ยังไม่พร้อมใน Phase 1 — รอ Phase 2-3')}
-              style={{
-                padding: '6px 12px', fontSize: 12, fontWeight: 600,
-                background: 'var(--gold)', color: '#fff',
-                border: 'none', borderRadius: 8, cursor: 'pointer',
-                opacity: 0.6, // visual hint that it's not fully wired yet
-              }}
-              title="Phase 2-3 จะ wire up logic deploy">
-              Deploy
-            </button>
+            {deploy.phase === 'idle' && (
+              <>
+                <span style={{fontSize: 18}}>🟡</span>
+                <span style={{flex: 1, color: 'var(--text)'}}>
+                  <b>{pendingOps.length} รายการ</b> รอ deploy
+                </span>
+                <button
+                  onClick={() => setShowManagePending(true)}
+                  style={{
+                    padding: '6px 12px', fontSize: 12, fontWeight: 600,
+                    background: 'transparent',
+                    border: '1px solid var(--line-strong, var(--line))',
+                    borderRadius: 8, cursor: 'pointer',
+                    color: 'var(--text)',
+                  }}>
+                  จัดการ
+                </button>
+                <button
+                  onClick={async () => {
+                    // Phase 2: lock cycle only — no actual apply yet.
+                    // Phase 3 will pass an onApply that replays ops onto
+                    // my-money.json. For now we show a toast so the user
+                    // knows the lock cycle worked end-to-end.
+                    const result = await deploy.startDeploy(async () => {
+                      // Hold the lock for a brief moment so the user can
+                      // observe the EDITING state in the banner. Without
+                      // this the editing flash is too fast to see.
+                      await new Promise(r => setTimeout(r, 1500));
+                      return { applied: 0, note: 'Phase 2 stub — Phase 3 จะใส่ apply logic จริง' };
+                    });
+                    if (result?.ok) {
+                      pushToast('Lock cycle ทำงานสำเร็จ (Phase 2 stub)');
+                    } else if (result?.reason && result.reason !== 'busy') {
+                      pushToast('Deploy ล้มเหลว: ' + result.reason);
+                    }
+                  }}
+                  style={{
+                    padding: '6px 12px', fontSize: 12, fontWeight: 600,
+                    background: 'var(--gold)', color: '#fff',
+                    border: 'none', borderRadius: 8, cursor: 'pointer',
+                  }}>
+                  Deploy
+                </button>
+              </>
+            )}
+            {deploy.phase === 'waiting' && (
+              <>
+                <span style={{fontSize: 18}}>🕐</span>
+                <span style={{flex: 1, color: 'var(--text)'}}>
+                  รอคิว... {deploy.queuePosition != null
+                    ? `ตำแหน่งที่ ${deploy.queuePosition} จาก ${deploy.queueLength}`
+                    : 'กำลังเชื่อมต่อ'}
+                </span>
+                <button
+                  onClick={() => deploy.cancelDeploy()}
+                  style={{
+                    padding: '6px 12px', fontSize: 12, fontWeight: 600,
+                    background: 'transparent',
+                    border: '1px solid var(--expense-soft)',
+                    borderRadius: 8, cursor: 'pointer',
+                    color: 'var(--expense-soft)',
+                  }}>
+                  ยกเลิก
+                </button>
+              </>
+            )}
+            {deploy.phase === 'editing' && (
+              <>
+                <span style={{fontSize: 18}}>⚙️</span>
+                <span style={{flex: 1, color: 'var(--text)'}}>
+                  กำลัง deploy... <span style={{color: 'var(--text-faint)', fontSize: 11}}>(อย่าปิดแอป)</span>
+                </span>
+              </>
+            )}
+            {deploy.phase === 'releasing' && (
+              <>
+                <span style={{fontSize: 18}}>✅</span>
+                <span style={{flex: 1, color: 'var(--text)'}}>กำลังคืน lock...</span>
+              </>
+            )}
+            {deploy.phase === 'error' && (
+              <>
+                <span style={{fontSize: 18}}>❌</span>
+                <span style={{flex: 1, color: 'var(--text)'}}>{deploy.errMsg || 'Deploy ล้มเหลว'}</span>
+              </>
+            )}
           </div>
         )}
         {tab === 'home' && homeView === 'overview' && (
@@ -6677,7 +7245,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.19 · Phase 1: Pending Ops Log (Deploy ยังไม่พร้อม)</div>
+      <div className="vstrip">my money · v5.20 · Phase 2: Q.json + Lock (apply ยังไม่พร้อม)</div>
 
       {showLessonsEditor && (
         <LessonsEditor
