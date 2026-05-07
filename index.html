@@ -1109,10 +1109,16 @@ button.sync-pill {
 }
 .photo-viewer .close-btn {
   position: absolute; top: max(16px, env(safe-area-inset-top)); right: 16px;
-  width: 40px; height: 40px; border-radius: 50%;
-  background: rgba(255,255,255,0.15); color: #fff;
+  /* v5.18: bumped size + opacity. The previous 40px button at 15% alpha was
+     getting lost over light-toned photos (e.g. white plastic bags), so users
+     couldn't see how to close and ended up using the back button — which
+     navigated away from the app entirely (now also fixed via popstate). */
+  width: 48px; height: 48px; border-radius: 50%;
+  background: rgba(0,0,0,0.6); color: #fff;
+  border: 2px solid rgba(255,255,255,0.5);
   display: inline-flex; align-items: center; justify-content: center;
   backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.5);
 }
 
 /* Tx row photo thumb */
@@ -2881,16 +2887,205 @@ async function remoteSave(data, options = {}) {
   return await res.json();
 }
 
+// ========== v5.20 Phase 2: Q.json — distributed queue file ==========
+// Q.json sits next to my-money.json in the OneDrive app folder. It tracks
+// who is currently editing the shared vault, who's waiting in line, and
+// when each lock holder last sent a heartbeat. Schema:
+//
+//   {
+//     queue: [
+//       {
+//         userId:    'abi',
+//         userLabel: 'อาบี',
+//         timestamp: '2026-05-07T04:23:45.678Z',
+//         txOrderId: 1715055825678123,           // tie-breaker if two users
+//                                                // have the exact same ms
+//         status:    'waiting' | 'editing',
+//         opCount:   5,                          // how many ops they'll deploy
+//         heartbeat: '2026-05-07T04:23:50.123Z', // updated every 10s while editing
+//         acquiredAt:'2026-05-07T04:23:48.001Z'  // when status flipped to editing
+//       }
+//     ],
+//     lastModified: '2026-05-07T04:23:45.678Z'
+//   }
+//
+// IMPORTANT: this is a separate file from my-money.json. We never put queue
+// state inside the main vault, because the queue is metadata about WHO can
+// write it, not vault content. Putting them together would create a chicken-
+// and-egg problem (you'd need to acquire a lock to write the lock file).
+//
+// Lock semantics (the contract):
+//
+//   * Adding yourself to the queue with status='waiting' is permitted at any
+//     time — it only requires that the file's optimistic-lock check passes.
+//   * Promoting yourself to 'editing' requires that you ARE the queue head
+//     after sorting by (timestamp asc, txOrderId asc) AND no one else has
+//     status='editing'. If two clients both promote at once, a re-validation
+//     pass detects it: whichever's timestamp is later demotes back to
+//     'waiting'.
+//   * While editing, you must update `heartbeat` every 10 seconds. Other
+//     clients treat any 'editing' entry whose heartbeat is older than 30s
+//     as dead, and may evict it (move it out of the queue) so the next
+//     waiter can proceed.
+//   * Releasing the lock means removing your entry from the queue entirely.
+//
+// All Q.json mutations use OneDrive ETag-based optimistic locking so that
+// two clients writing concurrently don't silently overwrite each other.
+
+const Q_FILE_NAME = 'Q.json';
+const Q_FILE_PATH = `/me/drive/special/approot:/${Q_FILE_NAME}:/content`;
+const Q_META_PATH = `/me/drive/special/approot:/${Q_FILE_NAME}`;
+const HEARTBEAT_INTERVAL_MS = 10000;  // 10s — how often the editor refreshes its heartbeat
+const LEASE_TIMEOUT_MS      = 30000;  // 30s — after this, an editor is considered dead
+
+// Default empty Q.json document.
+function emptyQDoc() {
+  return { queue: [], lastModified: new Date().toISOString() };
+}
+
+// Fetch Q.json AND its ETag (we need the ETag for optimistic locking on PUT).
+// Returns { doc, etag } where doc is emptyQDoc() if the file doesn't exist
+// yet (HTTP 404 — first run on a fresh OneDrive). We use a single Graph call
+// that returns both metadata and content via the ":/content" form, but the
+// ETag actually lives on the file metadata, not the content endpoint, so we
+// make one extra call. The cost is ~150ms; an acceptable tax for safety.
+async function qFetch() {
+  const token = await getToken();
+  // Try content first — if it 404s we know we need to bootstrap.
+  const res = await fetch(GRAPH_URL(Q_FILE_PATH), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 404) return { doc: emptyQDoc(), etag: null };
+  if (!res.ok) throw new Error(`Q load ${res.status}`);
+  const doc = await res.json();
+  // Now fetch the ETag from metadata. We grab only the eTag field to keep
+  // the response tiny.
+  const metaRes = await fetch(GRAPH_URL(`${Q_META_PATH}?$select=eTag`), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  let etag = null;
+  if (metaRes.ok) {
+    const meta = await metaRes.json();
+    etag = meta.eTag || null;
+  }
+  // Defensive: ensure the doc actually has the shape we expect. Forgiving
+  // parsing — if someone (or a previous bug) wrote a malformed Q.json,
+  // we recover with an empty queue rather than throwing.
+  if (!doc || !Array.isArray(doc.queue)) {
+    return { doc: emptyQDoc(), etag };
+  }
+  return { doc, etag };
+}
+
+// Save Q.json with optimistic locking. The caller passes the etag they got
+// from qFetch(); if the remote file has been modified since then (etag
+// mismatch), Graph returns 412 Precondition Failed and we throw
+// QError('CONFLICT'). Callers handle CONFLICT by re-fetching and retrying.
+class QError extends Error {
+  constructor(code, message) { super(message || code); this.code = code; }
+}
+
+async function qSave(doc, etag) {
+  const stamped = { ...doc, lastModified: new Date().toISOString() };
+  const token = await getToken();
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+  // If we have an etag (file existed when we read it), require it to still
+  // match. If we don't have one (file didn't exist), require the file to
+  // STILL not exist using If-None-Match: *.
+  if (etag) {
+    headers['If-Match'] = etag;
+  } else {
+    headers['If-None-Match'] = '*';
+  }
+  const res = await fetch(GRAPH_URL(Q_FILE_PATH), {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(stamped),
+  });
+  if (res.status === 412) {
+    throw new QError('CONFLICT', 'Q.json was modified by another device');
+  }
+  if (!res.ok) {
+    const t = await res.text();
+    throw new QError('SAVE_FAILED', `Q save ${res.status}: ${t.slice(0,120)}`);
+  }
+  // The PUT response contains the new file metadata including the new etag,
+  // which the caller can chain into the next save without re-fetching.
+  const newMeta = await res.json();
+  return { etag: newMeta.eTag || null };
+}
+
+// High-level helper: read-modify-write Q.json with automatic conflict retry.
+// `mutator` is a synchronous function that takes the current doc and returns
+// the new doc; if it returns null/undefined we treat that as a no-op cancel.
+// We retry up to maxAttempts times on CONFLICT — concurrent writes from
+// other devices are common and shouldn't surface as errors to the user.
+async function qMutate(mutator, maxAttempts = 5) {
+  let lastError = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const { doc, etag } = await qFetch();
+    const next = mutator(doc);
+    if (!next) return doc; // mutator decided to cancel; return current doc unchanged
+    try {
+      await qSave(next, etag);
+      return next;
+    } catch (e) {
+      if (e.code === 'CONFLICT') {
+        lastError = e;
+        // Brief backoff before retry — random jitter (50-150ms) reduces the
+        // chance that two retrying clients keep colliding in lockstep.
+        await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError || new QError('CONFLICT', 'too many retries');
+}
+
+// ----- Queue helpers (pure functions over a queue array) -----
+
+// Sort the queue by (timestamp asc, txOrderId asc). The head of this sorted
+// array is whoever should hold the lock next.
+function qSortQueue(q) {
+  return [...q].sort((a, b) => {
+    if (a.timestamp !== b.timestamp) return a.timestamp < b.timestamp ? -1 : 1;
+    return (a.txOrderId || 0) - (b.txOrderId || 0);
+  });
+}
+
+// Evict any 'editing' entries whose heartbeat is too old. This is what
+// allows the queue to recover from a dead client (browser crash, tab close,
+// Chrome freeze that lasts > LEASE_TIMEOUT_MS, etc.).
+function qEvictDead(queue, now = Date.now()) {
+  return queue.filter(entry => {
+    if (entry.status !== 'editing') return true;
+    const hb = entry.heartbeat ? Date.parse(entry.heartbeat) : 0;
+    return (now - hb) < LEASE_TIMEOUT_MS;
+  });
+}
+
 // ========== Local photo store (IndexedDB) ==========
 // v3.5: bumped to v2 — added 'pending' store for offline uploads queue
+// v5.19: bumped to v3 — added 'pending_ops' store for userx.json (Phase 1
+//        of the lock-based sync system). The store holds a single record
+//        keyed by user.id; each record is the userx.json document with
+//        { operations[], history[] }. This is per-device — one user with
+//        two devices will have two independent userx.json's, which matches
+//        the user's intent: they want device-level batches that get
+//        explicitly deployed via the Deploy button.
 const IDB_NAME = 'mymoney-photos';
 const IDB_STORE = 'photos';        // cached photos: key = OneDrive ID, value = Blob
 const IDB_PENDING = 'pending';     // queued uploads: key = local-temp-id, value = { blob, txId, name, createdAt }
+const IDB_USEROPS = 'pending_ops'; // v5.19: per-user pending operation log; key = userId, value = { operations[], history[] }
 let _idbPromise = null;
 function openDB() {
   if (_idbPromise) return _idbPromise;
   _idbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(IDB_NAME, 2);
+    const req = indexedDB.open(IDB_NAME, 3); // v5.19: bumped to 3 for IDB_USEROPS
     req.onupgradeneeded = (e) => {
       const db = req.result;
       if (!db.objectStoreNames.contains(IDB_STORE)) {
@@ -2898,6 +3093,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(IDB_PENDING)) {
         db.createObjectStore(IDB_PENDING); // key = local-temp-id, value = { blob, txId, name }
+      }
+      if (!db.objectStoreNames.contains(IDB_USEROPS)) {
+        db.createObjectStore(IDB_USEROPS); // v5.19: key = userId, value = { operations[], history[] }
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -3010,6 +3208,183 @@ async function idbListPending() {
       tx.onerror = () => resolve([]);
     });
   } catch { return []; }
+}
+
+// ========== v5.19 Phase 1: userx.json (pending operation log) ==========
+// Per-device, per-user log of changes the user has made but hasn't deployed
+// yet. Each record is keyed by user.id and looks like:
+//
+//   {
+//     userId: 'abi',
+//     operations: [          ← active queue (will be deployed)
+//       { id: 'op_001', action: 'add'|'edit'|'delete',
+//         before: <tx snapshot or null>,
+//         after:  <tx snapshot or null>,
+//         status: 'pending',
+//         ts: ISO string },
+//       ...
+//     ],
+//     history: [             ← deployed ops, capped at 100 newest
+//       { ...same shape, status: 'success'|'cancelled'|'retry-later',
+//         deployedAt: ISO string },
+//       ...
+//     ]
+//   }
+//
+// IMPORTANT: this lives in IndexedDB on the device only — it never gets
+// uploaded to OneDrive. That means a user with two devices has two separate
+// userx.json's, which is intentional: each device has its own batch that the
+// user explicitly deploys with the Deploy button.
+
+// Default empty document for a user we haven't seen before.
+function emptyUserOpsDoc(userId) {
+  return { userId, operations: [], history: [] };
+}
+
+// Generate a fresh op id. We use a short ulid-like pattern (timestamp+random)
+// because op_ids only need to be unique within a single device's userx.json
+// — they don't sync, so they don't need to be globally unique.
+function newOpId() {
+  return 'op_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+async function idbGetUserOps(userId) {
+  if (!userId) return emptyUserOpsDoc('anonymous');
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_USEROPS, 'readonly');
+      const req = tx.objectStore(IDB_USEROPS).get(userId);
+      tx.oncomplete = () => {
+        const v = req.result;
+        if (v && Array.isArray(v.operations) && Array.isArray(v.history)) resolve(v);
+        else resolve(emptyUserOpsDoc(userId));
+      };
+      tx.onerror = () => resolve(emptyUserOpsDoc(userId));
+    });
+  } catch {
+    return emptyUserOpsDoc(userId);
+  }
+}
+
+async function idbPutUserOps(userId, doc) {
+  if (!userId) return;
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_USEROPS, 'readwrite');
+      tx.objectStore(IDB_USEROPS).put(doc, userId);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.error('idbPutUserOps failed:', e);
+  }
+}
+
+// Append a new pending operation. If the user is creating an op that targets
+// a tx that already has a pending op of their own (e.g. they edit an item
+// they just added but haven't deployed yet), we MERGE rather than append —
+// this matches the user's spec from the conversation: "ลบ op เดิม" /
+// "update op_edit.after เป็น value ใหม่". Concretely:
+//
+//   action=add → no merge possible (new tx, no existing op to merge with)
+//
+//   action=edit on a tx that has pending add  → mutate that add's `after`
+//     so the deployed result already reflects the latest edit.
+//   action=edit on a tx that has pending edit → update that edit's `after`
+//     (keep the original `before`, which captures the pre-edit state).
+//
+//   action=delete on a tx that has pending add  → DROP the add entirely.
+//     The user adds and then immediately removes — net effect is nothing to
+//     deploy, so we cancel the add. (User confirmed this in conversation.)
+//   action=delete on a tx that has pending edit → replace the edit with a
+//     delete (keep `before` from the edit so the apply step can verify the
+//     row hasn't drifted on the server).
+async function appendUserOp(userId, op) {
+  const doc = await idbGetUserOps(userId);
+  // Identify the target tx for merging: for add/edit/delete we look at the
+  // resulting/affected tx id, which lives in different fields per action.
+  const targetTxId =
+    op.action === 'add'    ? op.after?.id  :
+    op.action === 'edit'   ? (op.after?.id || op.before?.id) :
+    op.action === 'delete' ? op.before?.id :
+    null;
+
+  let merged = false;
+  if (targetTxId) {
+    for (let i = 0; i < doc.operations.length; i++) {
+      const existing = doc.operations[i];
+      const existingTxId =
+        existing.action === 'add'    ? existing.after?.id  :
+        existing.action === 'edit'   ? (existing.after?.id || existing.before?.id) :
+        existing.action === 'delete' ? existing.before?.id :
+        null;
+      if (existingTxId !== targetTxId) continue;
+
+      // Found a pending op for the same tx → merge per the rules above.
+      if (op.action === 'edit' && existing.action === 'add') {
+        // Edit on a pending-add tx: just update what we'll add.
+        existing.after = op.after;
+        existing.ts = op.ts;
+        merged = true;
+        break;
+      }
+      if (op.action === 'edit' && existing.action === 'edit') {
+        existing.after = op.after;
+        existing.ts = op.ts;
+        merged = true;
+        break;
+      }
+      if (op.action === 'delete' && existing.action === 'add') {
+        // Add then delete = noop. Drop the add.
+        doc.operations.splice(i, 1);
+        merged = true;
+        break;
+      }
+      if (op.action === 'delete' && existing.action === 'edit') {
+        // Edit then delete = just delete. Keep existing.before so apply can
+        // verify drift, but switch the action.
+        existing.action = 'delete';
+        existing.after = null;
+        existing.ts = op.ts;
+        merged = true;
+        break;
+      }
+      // Otherwise (e.g. add on a tx that already has pending add — shouldn't
+      // happen since ids are unique) fall through to append.
+    }
+  }
+
+  if (!merged) {
+    doc.operations.push(op);
+  }
+  await idbPutUserOps(userId, doc);
+  return doc;
+}
+
+// Remove a single pending op by its id. Used by the Manage Pending UI.
+// If the user wanted cascade behaviour we'd also drop dependent ops here,
+// but per their explicit decision we DON'T cascade — dependent ops fail at
+// deploy time with status='cancelled' instead. Simpler logic, fewer surprises.
+async function removeUserOp(userId, opId) {
+  const doc = await idbGetUserOps(userId);
+  const before = doc.operations.length;
+  doc.operations = doc.operations.filter(o => o.id !== opId);
+  if (doc.operations.length !== before) {
+    await idbPutUserOps(userId, doc);
+  }
+  return doc;
+}
+
+// Clear all pending operations for a user (used by "ลบทั้งหมด" button and
+// also by the deploy step once it has successfully recorded results in the
+// history bucket). Does NOT clear history.
+async function clearUserOps(userId) {
+  const doc = await idbGetUserOps(userId);
+  doc.operations = [];
+  await idbPutUserOps(userId, doc);
+  return doc;
 }
 
 // Upload photo: saves to BOTH OneDrive (/photos/) AND local IndexedDB.
@@ -3198,8 +3573,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.17';
-const APP_VERSION_TAG = 'อุดช่องโหว่บัญชีลับ + เช็กชื่อสด + แก้ sync ลวงตา';
+const APP_VERSION = 'v5.20';
+const APP_VERSION_TAG = 'Phase 2: Q.json + Lock + Heartbeat (apply เป็น stub)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -3534,6 +3909,307 @@ function useSync(state, setState, isOnline) {
   return { status, lastSync, errMsg, pullOnce, schedulePush, forcePush, setStatus };
 }
 
+// ========== v5.20 Phase 2: useDeploy — distributed lock state machine ==========
+//
+// useDeploy implements the queue-based locking protocol the user designed:
+//
+//   STANDBY  → user can edit; pending ops accumulate locally in userx.json
+//   WAITING  → user clicked Deploy; we appended ourselves to Q.json's queue
+//              with status='waiting' and are polling to see if it's our turn
+//   EDITING  → we're at the head of the queue; we hold the lock, send
+//              heartbeats, and (in Phase 3) actually apply ops to my-money.json
+//   STANDBY  → done; we've removed ourselves from Q.json
+//
+// This hook only handles the LOCK lifecycle. The actual op-apply logic
+// (download my-money.json, replay ops, upload, etc.) is the caller's job
+// (Phase 3 will plug it in via the onApply callback). For Phase 2, the
+// caller can pass a no-op onApply just to verify the lock flow end-to-end.
+//
+// Concurrency notes:
+//   * Acquiring uses qMutate's CONFLICT-retry loop, so two clients pressing
+//     Deploy at literally the same millisecond won't lose each other's
+//     queue entry — the loser's append happens against the winner's new
+//     etag.
+//   * Re-validation runs after we promote ourselves from waiting to editing:
+//     we re-fetch Q.json, sort, and check the head is still us. If not
+//     (because two clients raced on the promote step), we demote ourselves
+//     back to waiting and the next poll will retry.
+//   * The heartbeat interval is short (10s) compared to LEASE_TIMEOUT_MS
+//     (30s), giving us 3 missed heartbeats of slack before others consider
+//     us dead. This balances battery cost (don't poll too often) against
+//     responsiveness (don't make others wait too long for a dead client).
+function useDeploy(currentUser, isOnline) {
+  // 'idle' is the externally-visible synonym for STANDBY. We use 'idle'
+  // internally to match React conventions for "nothing in flight".
+  const [phase, setPhase] = useState('idle');           // 'idle' | 'waiting' | 'editing' | 'releasing' | 'error'
+  const [queuePosition, setQueuePosition] = useState(null);  // 1-indexed; 1 = next up
+  const [queueLength, setQueueLength] = useState(0);
+  const [errMsg, setErrMsg] = useState(null);
+
+  // Refs let async callbacks see the latest values without forcing them to
+  // be rebuilt every render. txOrderIdRef captures the unique sub-millisecond
+  // tie-breaker we generated at acquire time; we need to remember it across
+  // multiple Q.json reads/writes during the wait/edit phases.
+  const txOrderIdRef = useRef(null);
+  const heartbeatTimerRef = useRef(null);
+  const pollTimerRef = useRef(null);
+  const cancelledRef = useRef(false);  // user pressed cancel mid-wait
+  const phaseRef = useRef('idle');     // mirror of phase for use in async callbacks
+  phaseRef.current = phase;
+
+  // ----- helpers -----
+  const stopHeartbeat = useCallback(() => {
+    if (heartbeatTimerRef.current) {
+      clearInterval(heartbeatTimerRef.current);
+      heartbeatTimerRef.current = null;
+    }
+  }, []);
+  const stopPoll = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+  // Cleanup on unmount or user logout.
+  useEffect(() => () => { stopHeartbeat(); stopPoll(); }, [stopHeartbeat, stopPoll]);
+
+  // ----- lock release (used by both happy path and cancel/error paths) -----
+  const releaseLock = useCallback(async () => {
+    if (!currentUser?.id) return;
+    stopHeartbeat();
+    stopPoll();
+    try {
+      await qMutate(doc => {
+        const before = doc.queue.length;
+        doc.queue = doc.queue.filter(e => e.userId !== currentUser.id);
+        return doc.queue.length === before ? null : doc;
+      });
+    } catch (e) {
+      // If release fails (network, conflict storm), the entry will be
+      // evicted by other clients via lease timeout — not catastrophic,
+      // just suboptimal. Log and move on.
+      console.warn('Q release failed:', e);
+    }
+    txOrderIdRef.current = null;
+  }, [currentUser?.id, stopHeartbeat, stopPoll]);
+
+  // ----- heartbeat: while editing, refresh Q.json[me].heartbeat every 10s -----
+  const sendHeartbeat = useCallback(async () => {
+    if (!currentUser?.id || phaseRef.current !== 'editing') return;
+    try {
+      await qMutate(doc => {
+        const me = doc.queue.find(e => e.userId === currentUser.id);
+        if (!me || me.status !== 'editing') return null; // no-op if we're not editing anymore
+        me.heartbeat = new Date().toISOString();
+        return doc;
+      });
+    } catch (e) {
+      // Heartbeat failures are tolerated: a single missed beat is fine
+      // (we have 3 beats of slack before lease expires). Log and continue.
+      console.warn('heartbeat failed:', e);
+    }
+  }, [currentUser?.id]);
+
+  // ----- poll while waiting: check if it's our turn yet -----
+  const pollForTurn = useCallback(async () => {
+    if (cancelledRef.current) return;
+    if (phaseRef.current !== 'waiting') return;
+    try {
+      const { doc } = await qFetch();
+      // Evict dead editors so a crashed client doesn't block us forever.
+      const live = qEvictDead(doc.queue);
+      const sorted = qSortQueue(live);
+      const myIdx = sorted.findIndex(e => e.userId === currentUser.id);
+
+      if (myIdx === -1) {
+        // We somehow got removed from the queue (maybe someone reset the
+        // queue file). Surface as error so user can retry.
+        setPhase('error');
+        setErrMsg('คุณถูกลบจากคิว — กรุณาลองใหม่');
+        stopPoll();
+        return;
+      }
+      setQueuePosition(myIdx + 1);
+      setQueueLength(sorted.length);
+
+      // Are we the head AND no one is currently editing? If yes, attempt
+      // promotion (which is itself an atomic Q.json mutation). If not,
+      // schedule another poll.
+      const headIsUs = myIdx === 0;
+      const someoneElseEditing = sorted.some(e => e.userId !== currentUser.id && e.status === 'editing');
+      if (headIsUs && !someoneElseEditing) {
+        // Try to promote.
+        const promotedDoc = await qMutate(d => {
+          // Re-evict at write time to be safe — dead editor might have
+          // appeared between our fetch and our write.
+          const liveQ = qEvictDead(d.queue);
+          const sortedQ = qSortQueue(liveQ);
+          const me = sortedQ.find(e => e.userId === currentUser.id);
+          if (!me) return null;
+          // Defensive: only promote if we're STILL the head and no one
+          // else is editing in the (just re-evicted) queue.
+          if (sortedQ[0]?.userId !== currentUser.id) return null;
+          if (sortedQ.some(e => e.userId !== currentUser.id && e.status === 'editing')) return null;
+          me.status = 'editing';
+          me.acquiredAt = new Date().toISOString();
+          me.heartbeat = me.acquiredAt;
+          d.queue = sortedQ;
+          return d;
+        });
+        // Re-validate: did we end up the only editor? Two clients might both
+        // succeed at the optimistic promote (one races onto the other's
+        // intermediate state). Re-fetch and check.
+        const { doc: verifyDoc } = await qFetch();
+        const verifySorted = qSortQueue(qEvictDead(verifyDoc.queue));
+        const editors = verifySorted.filter(e => e.status === 'editing');
+        if (editors.length > 1) {
+          // Multi-editor race. Whoever has the LATER acquiredAt demotes back
+          // to waiting (they lost the tie). The earlier one keeps the lock.
+          const sortedEditors = [...editors].sort((a, b) => (a.acquiredAt < b.acquiredAt ? -1 : 1));
+          if (sortedEditors[0].userId !== currentUser.id) {
+            // We're the loser — demote ourselves and continue polling.
+            await qMutate(d => {
+              const me = d.queue.find(e => e.userId === currentUser.id);
+              if (!me || me.status !== 'editing') return null;
+              me.status = 'waiting';
+              delete me.acquiredAt;
+              return d;
+            });
+            // Schedule next poll.
+            pollTimerRef.current = setTimeout(pollForTurn, 2000);
+            return;
+          }
+        }
+        // We hold the lock. Transition to editing and start the heartbeat.
+        setPhase('editing');
+        setQueuePosition(null);
+        heartbeatTimerRef.current = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+      } else {
+        // Not our turn yet — try again shortly.
+        pollTimerRef.current = setTimeout(pollForTurn, 2000);
+      }
+    } catch (e) {
+      console.error('pollForTurn error:', e);
+      // Transient error — keep polling. If the network is genuinely down
+      // the user will see it via the existing isOnline indicator.
+      pollTimerRef.current = setTimeout(pollForTurn, 3000);
+    }
+  }, [currentUser?.id, sendHeartbeat, stopPoll]);
+
+  // ----- public API: kick off the deploy flow -----
+  // Returns a promise that resolves once the lock is released (after onApply
+  // runs). Callers can await this to know when to refresh their UI.
+  const startDeploy = useCallback(async (onApply) => {
+    if (!currentUser?.id) {
+      setErrMsg('ต้องเข้าสู่ระบบก่อน');
+      return { ok: false, reason: 'no-user' };
+    }
+    if (!isOnline) {
+      setErrMsg('ออฟไลน์ — กรุณาเชื่อมต่ออินเทอร์เน็ต');
+      return { ok: false, reason: 'offline' };
+    }
+    if (phaseRef.current !== 'idle') {
+      // already in flight — ignore double-tap
+      return { ok: false, reason: 'busy' };
+    }
+
+    cancelledRef.current = false;
+    setErrMsg(null);
+    setPhase('waiting');
+    setQueuePosition(null);
+    setQueueLength(0);
+
+    // Step 1: append ourselves to the queue with status='waiting'.
+    const now = Date.now();
+    const txOrderId = now * 1000 + Math.floor(Math.random() * 1000);
+    txOrderIdRef.current = txOrderId;
+    const myEntry = {
+      userId:    currentUser.id,
+      userLabel: currentUser.label || currentUser.id,
+      timestamp: new Date(now).toISOString(),
+      txOrderId,
+      status:    'waiting',
+      heartbeat: new Date(now).toISOString(),
+    };
+    try {
+      await qMutate(doc => {
+        // First evict any dead editors so we don't enqueue behind a corpse.
+        doc.queue = qEvictDead(doc.queue);
+        // If we somehow already have an entry (e.g. from a previous crashed
+        // session), remove it first to avoid duplicates.
+        doc.queue = doc.queue.filter(e => e.userId !== currentUser.id);
+        doc.queue.push(myEntry);
+        return doc;
+      });
+    } catch (e) {
+      setPhase('error');
+      setErrMsg('เพิ่มเข้าคิวไม่สำเร็จ: ' + (e.message || e));
+      return { ok: false, reason: 'enqueue-failed', error: e };
+    }
+
+    // Step 2: poll until we're at the head and can promote ourselves.
+    // pollForTurn will eventually flip phase to 'editing' (or 'error').
+    pollForTurn();
+
+    // Step 3: wait until phase becomes 'editing' or 'error'/'idle' (cancel).
+    // We do this via a polled promise — clean and simple.
+    await new Promise((resolve) => {
+      const check = () => {
+        if (phaseRef.current === 'editing') return resolve();
+        if (phaseRef.current === 'error' || phaseRef.current === 'idle') return resolve();
+        setTimeout(check, 250);
+      };
+      check();
+    });
+
+    if (phaseRef.current !== 'editing') {
+      // Aborted before we got the lock — release if we have an entry just in case.
+      await releaseLock();
+      setPhase('idle');
+      return { ok: false, reason: 'aborted' };
+    }
+
+    // Step 4: we hold the lock. Run the caller's apply logic.
+    let applyResult = null;
+    try {
+      if (typeof onApply === 'function') {
+        applyResult = await onApply();
+      }
+    } catch (e) {
+      console.error('onApply threw:', e);
+      setErrMsg('Apply ล้มเหลว: ' + (e.message || e));
+      // Even on apply failure, we release the lock — don't hold the queue
+      // hostage. The caller can decide how to surface the error.
+    }
+
+    // Step 5: release the lock and return to idle.
+    setPhase('releasing');
+    await releaseLock();
+    setPhase('idle');
+    return { ok: true, applyResult };
+  }, [currentUser?.id, isOnline, pollForTurn, releaseLock]);
+
+  // ----- public API: cancel an in-flight deploy (only valid while waiting) -----
+  const cancelDeploy = useCallback(async () => {
+    if (phaseRef.current !== 'waiting') return;
+    cancelledRef.current = true;
+    stopPoll();
+    await releaseLock();
+    setPhase('idle');
+    setQueuePosition(null);
+    setQueueLength(0);
+  }, [stopPoll, releaseLock]);
+
+  return {
+    phase,            // 'idle' | 'waiting' | 'editing' | 'releasing' | 'error'
+    queuePosition,    // 1-indexed; null when not waiting
+    queueLength,      // total people in queue (incl. self)
+    errMsg,
+    startDeploy,      // (onApply) => Promise<{ok, applyResult}>
+    cancelDeploy,     // () => Promise<void>
+  };
+}
+
 // ========== App ==========
 // ============ v5.0: PIN-based profile gate (uses runtime user list) ============
 // User picks profile after Microsoft login → enters 4-digit PIN → enters app.
@@ -3785,6 +4461,86 @@ function App() {
     [state.users, appProfileId]
   );
   const isAdmin = currentUser?.role === 'admin';
+
+  // v5.20 Phase 2: deploy lock state machine. Must be declared AFTER
+  // currentUser is initialized (it depends on currentUser). Currently
+  // passed a no-op onApply because the actual op-application logic lands
+  // in Phase 3. The hook owns the queue lifecycle (waiting → editing →
+  // release) and exposes phase / queue position so the UI can show
+  // progress to the user.
+  const deploy = useDeploy(currentUser, isOnline);
+
+  // v5.19 Phase 1: Per-user pending operation log. The doc carries
+  //   { userId, operations: [active], history: [done, capped] }
+  // and lives in IndexedDB; we mirror the active operations into React
+  // state so the UI can react to them (banner count, pending badges,
+  // Manage screen, etc.). reloadUserOps() must be called whenever we
+  // mutate the doc through the idb* helpers — there's no observable
+  // notification for IDB writes, so we call it explicitly.
+  //
+  // We DO NOT eagerly load history here — only when the History viewer
+  // is opened (Phase 4), to keep this state lean for the common case.
+  const [userOpsDoc, setUserOpsDoc] = useState(() => emptyUserOpsDoc(appProfileId || 'anonymous'));
+  const reloadUserOps = useCallback(async () => {
+    if (!currentUser?.id) {
+      setUserOpsDoc(emptyUserOpsDoc('anonymous'));
+      return;
+    }
+    const doc = await idbGetUserOps(currentUser.id);
+    setUserOpsDoc(doc);
+  }, [currentUser?.id]);
+  // Reload whenever the active user changes (sign-in, switch profile, etc.).
+  useEffect(() => { reloadUserOps(); }, [reloadUserOps]);
+
+  // Helper: append an op and refresh the in-memory copy. Components that
+  // mutate (TxSheet save, removeTx, etc.) call addPendingOp so the same
+  // merge-on-same-tx logic from appendUserOp() applies in one place.
+  const addPendingOp = useCallback(async ({ action, before, after }) => {
+    if (!currentUser?.id) return;
+    const op = {
+      id: newOpId(),
+      action,
+      before: before || null,
+      after: after || null,
+      status: 'pending',
+      ts: new Date().toISOString(),
+    };
+    await appendUserOp(currentUser.id, op);
+    await reloadUserOps();
+  }, [currentUser?.id, reloadUserOps]);
+
+  const removePendingOp = useCallback(async (opId) => {
+    if (!currentUser?.id) return;
+    await removeUserOp(currentUser.id, opId);
+    await reloadUserOps();
+  }, [currentUser?.id, reloadUserOps]);
+
+  const clearAllPendingOps = useCallback(async () => {
+    if (!currentUser?.id) return;
+    await clearUserOps(currentUser.id);
+    await reloadUserOps();
+  }, [currentUser?.id, reloadUserOps]);
+
+  // Convenience derivations for downstream UI:
+  //   pendingOps      — the active operations array (may be empty)
+  //   pendingByTxId   — Map for O(1) lookup when we render TxRow badges;
+  //                     each tx can only have ONE pending op of its own at
+  //                     a time (the merge logic in appendUserOp guarantees
+  //                     this), so the map value is a single op, not a list.
+  const pendingOps = userOpsDoc.operations || [];
+  const pendingByTxId = useMemo(() => {
+    const m = new Map();
+    for (const op of pendingOps) {
+      const id =
+        op.action === 'add'    ? op.after?.id  :
+        op.action === 'edit'   ? (op.after?.id || op.before?.id) :
+        op.action === 'delete' ? op.before?.id :
+        null;
+      if (id) m.set(id, op);
+    }
+    return m;
+  }, [pendingOps]);
+
   // Strip any legacy URL parameters from previous versions (?as=, ?unlock=, ?role=)
   useEffect(() => {
     try {
@@ -3818,6 +4574,7 @@ function App() {
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
   const [showUsersManager, setShowUsersManager] = useState(false); // v5.0: admin-only
   const [showSearch, setShowSearch] = useState(false); // v5.5: advanced search
+  const [showManagePending, setShowManagePending] = useState(false); // v5.19 Phase 1
   // v2.8: text zoom level — 0=normal, 1=large (115%), 2=larger (130%), 3=largest (145%)
   const [zoomLevel, setZoomLevel] = useState(() => {
     try {
@@ -4120,6 +4877,11 @@ function App() {
   };
 
   const addOrUpdate = (entry) => {
+    // v5.19 Phase 1: capture before/after snapshots for the operation log.
+    // We need `before` for edits so the deploy step can detect drift (the
+    // server side row might have been edited by someone else in the
+    // meantime; `before` lets us compare-and-set safely).
+    const existingBefore = state.transactions.find(t => t.id === entry.id) || null;
     mutate(prev => {
       const idx = prev.transactions.findIndex(t => t.id === entry.id);
       if (idx >= 0) {
@@ -4133,6 +4895,19 @@ function App() {
       const tagged = { ...entry, createdBy: appProfileId };
       return { ...prev, transactions: [tagged, ...prev.transactions] };
     });
+    // v5.19 Phase 1: also record this in the user's pending op log. Note we
+    // do this AFTER mutate() so the Sentry/Toast UX feels identical to v5.18,
+    // and we do it fire-and-forget — the op log is best-effort and not
+    // user-blocking. If IDB is wedged we fall through to the regular
+    // schedule-push path silently (Phase 2 will surface an error UI).
+    if (existingBefore) {
+      // Edit: snapshot the pre-state in `before` and post-state in `after`.
+      const after = { ...entry, createdBy: existingBefore.createdBy || entry.createdBy || appProfileId };
+      addPendingOp({ action: 'edit', before: existingBefore, after }).catch(() => {});
+    } else {
+      const after = { ...entry, createdBy: appProfileId };
+      addPendingOp({ action: 'add', before: null, after }).catch(() => {});
+    }
     pushToast(entry.type === 'income' ? 'บันทึกรายรับแล้ว' : 'บันทึกรายจ่ายแล้ว');
   };
   const removeTx = (id) => {
@@ -4143,6 +4918,15 @@ function App() {
       else if (tx.photoId) deletePhoto(tx.photoId);
     }
     mutate(prev => ({ ...prev, transactions: prev.transactions.filter(t => t.id !== id) }));
+    // v5.19 Phase 1: record the delete op. before = full row snapshot so the
+    // deploy step can detect drift; after = null because there's nothing
+    // left. If the user is deleting a tx they haven't deployed yet (i.e. it
+    // currently has a pending add op of theirs), appendUserOp's merge logic
+    // will simply DROP that pending add — net effect: nothing to deploy,
+    // which is what the user wanted.
+    if (tx) {
+      addPendingOp({ action: 'delete', before: tx, after: null }).catch(() => {});
+    }
     pushToast('ลบรายการแล้ว');
   };
   // Duplicate a transaction: copy all fields with new ID, current date/time, no photos
@@ -4669,6 +5453,132 @@ function App() {
             </button>
           </div>
         )}
+        {/* v5.19 Phase 1: Pending operations banner. Renders above the main
+            view whenever the current user has pending ops. We keep it above
+            the view (rather than inside each view) so it shows on Home,
+            List, Chart and Settings without per-view wiring. The banner is
+            non-intrusive (a thin strip) but tappable to open the Manage
+            Pending screen. The "Deploy" button is intentionally a stub in
+            Phase 1 — it will be wired up to Q.json + lock acquire in
+            Phase 2/3. For now it just shows a toast explaining that. */}
+        {/* v5.20 Phase 2: Banner now reflects the deploy lock state machine.
+            - idle  + has pending ops  → show Deploy button (wired up)
+            - waiting                  → show queue position + Cancel button
+            - editing                  → show "กำลัง deploy..." (no buttons)
+            - releasing                → show "เสร็จสิ้น..."
+            - error                    → show error message + dismiss button
+            
+            For Phase 2 the Deploy button just goes through the lock cycle
+            (acquire → editing → release) without applying anything. Phase 3
+            will fill in the onApply callback. */}
+        {(pendingOps.length > 0 || deploy.phase !== 'idle') && (
+          <div style={{
+            margin: '0 14px 10px',
+            padding: '10px 14px',
+            borderRadius: 12,
+            background:
+              deploy.phase === 'editing'  ? 'rgba(34,197,94,0.12)' :
+              deploy.phase === 'waiting'  ? 'rgba(59,130,246,0.12)' :
+              deploy.phase === 'error'    ? 'rgba(239,68,68,0.12)' :
+              'var(--sync-warn-bg, rgba(251,191,36,0.12))',
+            border:
+              '1px solid ' + (
+                deploy.phase === 'editing' ? 'rgba(34,197,94,0.5)' :
+                deploy.phase === 'waiting' ? 'rgba(59,130,246,0.5)' :
+                deploy.phase === 'error'   ? 'rgba(239,68,68,0.5)' :
+                'var(--sync-warn, #fbbf24)'
+              ),
+            display: 'flex', alignItems: 'center', gap: 10,
+            fontSize: 13,
+          }}>
+            {deploy.phase === 'idle' && (
+              <>
+                <span style={{fontSize: 18}}>🟡</span>
+                <span style={{flex: 1, color: 'var(--text)'}}>
+                  <b>{pendingOps.length} รายการ</b> รอ deploy
+                </span>
+                <button
+                  onClick={() => setShowManagePending(true)}
+                  style={{
+                    padding: '6px 12px', fontSize: 12, fontWeight: 600,
+                    background: 'transparent',
+                    border: '1px solid var(--line-strong, var(--line))',
+                    borderRadius: 8, cursor: 'pointer',
+                    color: 'var(--text)',
+                  }}>
+                  จัดการ
+                </button>
+                <button
+                  onClick={async () => {
+                    // Phase 2: lock cycle only — no actual apply yet.
+                    // Phase 3 will pass an onApply that replays ops onto
+                    // my-money.json. For now we show a toast so the user
+                    // knows the lock cycle worked end-to-end.
+                    const result = await deploy.startDeploy(async () => {
+                      // Hold the lock for a brief moment so the user can
+                      // observe the EDITING state in the banner. Without
+                      // this the editing flash is too fast to see.
+                      await new Promise(r => setTimeout(r, 1500));
+                      return { applied: 0, note: 'Phase 2 stub — Phase 3 จะใส่ apply logic จริง' };
+                    });
+                    if (result?.ok) {
+                      pushToast('Lock cycle ทำงานสำเร็จ (Phase 2 stub)');
+                    } else if (result?.reason && result.reason !== 'busy') {
+                      pushToast('Deploy ล้มเหลว: ' + result.reason);
+                    }
+                  }}
+                  style={{
+                    padding: '6px 12px', fontSize: 12, fontWeight: 600,
+                    background: 'var(--gold)', color: '#fff',
+                    border: 'none', borderRadius: 8, cursor: 'pointer',
+                  }}>
+                  Deploy
+                </button>
+              </>
+            )}
+            {deploy.phase === 'waiting' && (
+              <>
+                <span style={{fontSize: 18}}>🕐</span>
+                <span style={{flex: 1, color: 'var(--text)'}}>
+                  รอคิว... {deploy.queuePosition != null
+                    ? `ตำแหน่งที่ ${deploy.queuePosition} จาก ${deploy.queueLength}`
+                    : 'กำลังเชื่อมต่อ'}
+                </span>
+                <button
+                  onClick={() => deploy.cancelDeploy()}
+                  style={{
+                    padding: '6px 12px', fontSize: 12, fontWeight: 600,
+                    background: 'transparent',
+                    border: '1px solid var(--expense-soft)',
+                    borderRadius: 8, cursor: 'pointer',
+                    color: 'var(--expense-soft)',
+                  }}>
+                  ยกเลิก
+                </button>
+              </>
+            )}
+            {deploy.phase === 'editing' && (
+              <>
+                <span style={{fontSize: 18}}>⚙️</span>
+                <span style={{flex: 1, color: 'var(--text)'}}>
+                  กำลัง deploy... <span style={{color: 'var(--text-faint)', fontSize: 11}}>(อย่าปิดแอป)</span>
+                </span>
+              </>
+            )}
+            {deploy.phase === 'releasing' && (
+              <>
+                <span style={{fontSize: 18}}>✅</span>
+                <span style={{flex: 1, color: 'var(--text)'}}>กำลังคืน lock...</span>
+              </>
+            )}
+            {deploy.phase === 'error' && (
+              <>
+                <span style={{fontSize: 18}}>❌</span>
+                <span style={{flex: 1, color: 'var(--text)'}}>{deploy.errMsg || 'Deploy ล้มเหลว'}</span>
+              </>
+            )}
+          </div>
+        )}
         {tab === 'home' && homeView === 'overview' && (
           <AccountsOverviewView
             state={visibleState}
@@ -4706,6 +5616,7 @@ function App() {
             onZoom={cycleZoom}
             onBack={() => setHomeView('overview')}
             isAdmin={isAdmin}
+            pendingByTxId={pendingByTxId}
           />
         )}
         {tab === 'list' && (
@@ -4730,6 +5641,7 @@ function App() {
             zoomLevel={zoomLevel}
             onZoom={cycleZoom}
             isAdmin={isAdmin}
+            pendingByTxId={pendingByTxId}
           />
         )}
         {tab === 'chart' && (
@@ -4859,6 +5771,17 @@ function App() {
         />
         );
       })()}
+
+      {/* v5.19 Phase 1: pending operations manager modal */}
+      {showManagePending && (
+        <ManagePendingScreen
+          ops={pendingOps}
+          onClose={() => setShowManagePending(false)}
+          onRemove={removePendingOp}
+          onClearAll={clearAllPendingOps}
+          pushToast={pushToast}
+        />
+      )}
 
       {showItemsManager && (
         <ItemsManager
@@ -5494,7 +6417,7 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
 }
 
 
-function HomeView({ account, skipSync, status, lastSync, onForceSync, viewMonth, setViewMonth, totals, monthTx, grandBal, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, onBack, zoomLevel, onZoom, isAdmin }) {
+function HomeView({ account, skipSync, status, lastSync, onForceSync, viewMonth, setViewMonth, totals, monthTx, grandBal, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, onBack, zoomLevel, onZoom, isAdmin, pendingByTxId }) {
   const [sortDir, setSortDir] = useState('desc');
   const sortedTx = useMemo(() => {
     const list = [...monthTx];
@@ -5570,13 +6493,13 @@ function HomeView({ account, skipSync, status, lastSync, onForceSync, viewMonth,
 
       <div className="tx-list">
         {recent.length === 0 && <EmptyState/>}
-        {recent.map((t, i) => <TxRow key={t.id} t={t} onClick={() => onTap(t)} delay={i * 40} accounts={masterAccounts} customCats={masterCategories}/>)}
+        {recent.map((t, i) => <TxRow key={t.id} t={t} onClick={() => onTap(t)} delay={i * 40} accounts={masterAccounts} customCats={masterCategories} pendingOp={pendingByTxId?.get(t.id)}/>)}
       </div>
     </div>
   );
 }
 
-function ListView({ viewMonth, setViewMonth, monthTx, account, skipSync, status, onForceSync, grandBal, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom, onOpenSearch, isAdmin }) {
+function ListView({ viewMonth, setViewMonth, monthTx, account, skipSync, status, onForceSync, grandBal, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom, onOpenSearch, isAdmin, pendingByTxId }) {
   const [sortDir, setSortDir] = useState('desc');
   const groups = useMemo(() => {
     const g = {};
@@ -5659,7 +6582,7 @@ function ListView({ viewMonth, setViewMonth, monthTx, account, skipSync, status,
                 </div>
               </div>
               <div className="tx-list" style={{marginTop:0}}>
-                {list.map((t,i) => <TxRow key={t.id} t={t} onClick={() => onTap(t)} delay={i*30} accounts={masterAccounts} customCats={masterCategories}/>)}
+                {list.map((t,i) => <TxRow key={t.id} t={t} onClick={() => onTap(t)} delay={i*30} accounts={masterAccounts} customCats={masterCategories} pendingOp={pendingByTxId?.get(t.id)}/>)}
               </div>
             </div>
           );
@@ -6324,7 +7247,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.17 · อุดบัญชีลับ + เช็กชื่อสด + sync truth</div>
+      <div className="vstrip">my money · v5.20 · Phase 2: Q.json + Lock (apply ยังไม่พร้อม)</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -6383,7 +7306,7 @@ function TxRowThumb({ photoId }) {
   return <img className="tx-row-thumb" src={url} alt="" loading="lazy"/>;
 }
 
-function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
+function TxRow({ t, onClick, delay = 0, accounts, customCats, pendingOp = null }) {
   const cat = getCat(t.type, t.category, customCats);
   const isIn = t.type === 'income';
   const timeStr = timeFromIso(t.createdAt);
@@ -6416,7 +7339,18 @@ function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
   const d = t.date ? new Date(t.date + 'T00:00:00') : null;
   const dd = d ? String(d.getDate()).padStart(2, '0') : '--';
   const mm = d ? String(d.getMonth() + 1).padStart(2, '0') : '--';
-  
+
+  // v5.19 Phase 1: pending-op badge. The badge color and tooltip depend on
+  // which kind of operation is queued — yellow for adds, orange for edits,
+  // red for deletes. Caller (the parent List/Home view) computed this by
+  // looking up t.id in the pendingByTxId map; we just render it here.
+  const pendingMeta = pendingOp ? (
+    pendingOp.action === 'add'    ? { color: 'var(--sync-warn)',     label: '🟡', title: 'รอ deploy: เพิ่มใหม่' } :
+    pendingOp.action === 'edit'   ? { color: 'orange',                label: '🟠', title: 'รอ deploy: แก้ไข' } :
+    pendingOp.action === 'delete' ? { color: 'var(--expense-soft)',  label: '🔴', title: 'รอ deploy: ลบ' } :
+    null
+  ) : null;
+
   return (
     <button className="tx-row rise" style={{animationDelay: `${delay}ms`, alignItems: 'flex-start'}} onClick={onClick}>
       <div className="date-badge">
@@ -6425,8 +7359,24 @@ function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
         {t.accountName && <div className="acc" title={t.accountName}>{t.accountName}</div>}
       </div>
       <div className="mid" style={{display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1}}>
-        <div className="title-ln" style={{whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3}}>
+        <div className="title-ln" style={{whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3, textDecoration: pendingMeta?.title?.includes('ลบ') ? 'line-through' : 'none'}}>
           {title}
+          {pendingMeta && (
+            <span title={pendingMeta.title}
+                  style={{
+                    display: 'inline-block',
+                    marginLeft: 6,
+                    fontSize: 12,
+                    verticalAlign: 'middle',
+                    padding: '1px 6px',
+                    borderRadius: 8,
+                    background: pendingMeta.color,
+                    color: '#fff',
+                    fontWeight: 600,
+                  }}>
+              {pendingMeta.label} pending
+            </span>
+          )}
         </div>
         {noteText && (
           <div className="note-ln">{noteText}</div>
@@ -7393,6 +8343,48 @@ function ZoomableImage({ src, onClose }) {
   const dragRef = useRef({ startX: 0, startY: 0, lastX: 0, lastY: 0, startDist: 0, startScale: 1 });
   const lastTapRef = useRef(0);
 
+  // v5.18: Hardware/software back-button handling. On Android (and Chrome's
+  // back gesture), pressing back in this fullscreen viewer used to navigate
+  // away from the app entirely — confusing because users expected back to
+  // dismiss only the lightbox. We push a synthetic history entry on mount,
+  // then listen for popstate: if the user pops, we close the viewer instead
+  // of navigating. On normal close (X button or backdrop tap), we go back
+  // ourselves so we don't leave a phantom entry behind.
+  //
+  // closeRef lets the popstate listener call the latest onClose without
+  // re-binding when the prop identity changes mid-render.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  // poppedRef tracks whether the close was triggered BY popstate already, so
+  // the unmount cleanup doesn't try to history.back() a second time.
+  const poppedRef = useRef(false);
+  useEffect(() => {
+    // Push a placeholder state so back has something to pop off.
+    try { window.history.pushState({ _photoViewer: true }, ''); } catch {}
+    const onPop = () => {
+      poppedRef.current = true;
+      closeRef.current?.();
+    };
+    window.addEventListener('popstate', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      // If we're unmounting because the user closed via X / backdrop / esc
+      // (not because they hit back), the placeholder entry is still on the
+      // history stack — pop it ourselves so the next back press works as
+      // the user expects.
+      if (!poppedRef.current) {
+        try { window.history.back(); } catch {}
+      }
+    };
+  }, []);
+
+  // v5.18: also support Esc on desktop browsers (mostly for keyboard users).
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const getDist = (t1, t2) => Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
 
   const onTouchStart = (e) => {
@@ -8046,6 +9038,123 @@ function UsersManager({ users, currentUserId, onClose, onAdd, onUpdate, onChange
               เสร็จสิ้น
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ v5.19 Phase 1: Manage Pending Operations ============
+// A bottom-sheet-style screen that lists the user's pending operations,
+// lets them remove individual ones, or clear the whole batch. It's
+// intentionally simple — no "edit op" affordance (per the design decision:
+// edit = remove + redo from the main list). No cascade dialogs (per the
+// user's preference: let dependent ops fail at deploy time with status
+// 'cancelled' instead).
+function ManagePendingScreen({ ops, onClose, onRemove, onClearAll, pushToast }) {
+  if (!ops) ops = [];
+
+  // Pretty label for the action chip
+  const actionMeta = (op) => {
+    if (op.action === 'add')    return { icon: '➕', label: 'ADD',    color: 'var(--income-soft)' };
+    if (op.action === 'edit')   return { icon: '✏️', label: 'EDIT',   color: 'orange' };
+    if (op.action === 'delete') return { icon: '🗑️', label: 'DELETE', color: 'var(--expense-soft)' };
+    return { icon: '?', label: '?', color: 'var(--text-faint)' };
+  };
+
+  // For human display: pull a short summary out of the op's snapshot. For
+  // adds we summarise the new row; for edits we summarise both before/after
+  // amounts; for deletes we summarise what's being removed.
+  const summary = (op) => {
+    const snap = op.after || op.before || {};
+    const item = (snap.item || snap.payee || snap.note || 'รายการ').toString().slice(0, 40);
+    const amt = typeof snap.amount === 'number' ? snap.amount : null;
+    const acct = snap.accountName || '';
+    if (op.action === 'edit' && op.before && op.after) {
+      const a = op.before.amount, b = op.after.amount;
+      if (a !== b && a != null && b != null) {
+        return `${item} · ${acct} · ${a.toLocaleString()} → ${b.toLocaleString()}`;
+      }
+    }
+    return `${item}${amt != null ? ' · ' + amt.toLocaleString() : ''}${acct ? ' · ' + acct : ''}`;
+  };
+
+  return (
+    <div className="sheet-backdrop fade" onClick={onClose}>
+      <div className="sheet-wrap sheet-in" onClick={e => e.stopPropagation()}>
+        <div className="sheet" style={{maxHeight: '85vh', overflowY: 'auto'}}>
+          <div className="sheet-handle"></div>
+          <div className="sheet-head">
+            <h2>รายการรอ deploy ({ops.length})</h2>
+            <button className="icon-btn-round" onClick={onClose} aria-label="ปิด">
+              <Ic.X size={16}/>
+            </button>
+          </div>
+
+          {ops.length === 0 ? (
+            <div style={{padding: '40px 20px', textAlign: 'center', color: 'var(--text-faint)'}}>
+              <div style={{fontSize: 36, marginBottom: 8}}>✨</div>
+              <div>ไม่มีรายการที่รอ deploy</div>
+            </div>
+          ) : (
+            <div style={{padding: '8px 4px 20px'}}>
+              {ops.map((op, idx) => {
+                const meta = actionMeta(op);
+                return (
+                  <div key={op.id} style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 10,
+                    padding: '12px 0',
+                    borderBottom: idx === ops.length - 1 ? 'none' : '1px solid var(--line)',
+                  }}>
+                    <span style={{
+                      flexShrink: 0, padding: '3px 8px', borderRadius: 8,
+                      background: meta.color, color: '#fff',
+                      fontSize: 11, fontWeight: 700,
+                      minWidth: 64, textAlign: 'center',
+                    }}>
+                      {meta.icon} {meta.label}
+                    </span>
+                    <div style={{flex: 1, minWidth: 0, fontSize: 13, lineHeight: 1.4}}>
+                      <div style={{color: 'var(--text)', wordBreak: 'break-word'}}>{summary(op)}</div>
+                      <div style={{fontSize: 10, color: 'var(--text-faint)', marginTop: 2}}>
+                        {new Date(op.ts).toLocaleString('th-TH', {dateStyle: 'short', timeStyle: 'short'})}
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await onRemove(op.id);
+                        pushToast('ลบรายการรอ deploy แล้ว');
+                      }}
+                      className="del-btn"
+                      title="ลบรายการนี้ออกจากคิว"
+                      style={{flexShrink: 0}}>
+                      <Ic.Trash size={14}/>
+                    </button>
+                  </div>
+                );
+              })}
+
+              <button
+                onClick={async () => {
+                  if (window.confirm(`ลบรายการรอ deploy ทั้งหมด ${ops.length} รายการ?\n(การแก้ไขในแอปจะไม่หาย — เพียงไม่ส่งขึ้น cloud ในรอบนี้)`)) {
+                    await onClearAll();
+                    pushToast('ลบรายการรอ deploy ทั้งหมดแล้ว');
+                    onClose();
+                  }
+                }}
+                style={{
+                  width: '100%', marginTop: 16,
+                  padding: '12px',
+                  background: 'transparent',
+                  border: '1px solid var(--expense-soft)',
+                  color: 'var(--expense-soft)',
+                  borderRadius: 10, fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer',
+                }}>
+                <Ic.Trash size={14}/> ลบทั้งหมด ({ops.length})
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
