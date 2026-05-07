@@ -2889,14 +2889,22 @@ async function remoteSave(data, options = {}) {
 
 // ========== Local photo store (IndexedDB) ==========
 // v3.5: bumped to v2 — added 'pending' store for offline uploads queue
+// v5.19: bumped to v3 — added 'pending_ops' store for userx.json (Phase 1
+//        of the lock-based sync system). The store holds a single record
+//        keyed by user.id; each record is the userx.json document with
+//        { operations[], history[] }. This is per-device — one user with
+//        two devices will have two independent userx.json's, which matches
+//        the user's intent: they want device-level batches that get
+//        explicitly deployed via the Deploy button.
 const IDB_NAME = 'mymoney-photos';
 const IDB_STORE = 'photos';        // cached photos: key = OneDrive ID, value = Blob
 const IDB_PENDING = 'pending';     // queued uploads: key = local-temp-id, value = { blob, txId, name, createdAt }
+const IDB_USEROPS = 'pending_ops'; // v5.19: per-user pending operation log; key = userId, value = { operations[], history[] }
 let _idbPromise = null;
 function openDB() {
   if (_idbPromise) return _idbPromise;
   _idbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(IDB_NAME, 2);
+    const req = indexedDB.open(IDB_NAME, 3); // v5.19: bumped to 3 for IDB_USEROPS
     req.onupgradeneeded = (e) => {
       const db = req.result;
       if (!db.objectStoreNames.contains(IDB_STORE)) {
@@ -2904,6 +2912,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(IDB_PENDING)) {
         db.createObjectStore(IDB_PENDING); // key = local-temp-id, value = { blob, txId, name }
+      }
+      if (!db.objectStoreNames.contains(IDB_USEROPS)) {
+        db.createObjectStore(IDB_USEROPS); // v5.19: key = userId, value = { operations[], history[] }
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -3016,6 +3027,183 @@ async function idbListPending() {
       tx.onerror = () => resolve([]);
     });
   } catch { return []; }
+}
+
+// ========== v5.19 Phase 1: userx.json (pending operation log) ==========
+// Per-device, per-user log of changes the user has made but hasn't deployed
+// yet. Each record is keyed by user.id and looks like:
+//
+//   {
+//     userId: 'abi',
+//     operations: [          ← active queue (will be deployed)
+//       { id: 'op_001', action: 'add'|'edit'|'delete',
+//         before: <tx snapshot or null>,
+//         after:  <tx snapshot or null>,
+//         status: 'pending',
+//         ts: ISO string },
+//       ...
+//     ],
+//     history: [             ← deployed ops, capped at 100 newest
+//       { ...same shape, status: 'success'|'cancelled'|'retry-later',
+//         deployedAt: ISO string },
+//       ...
+//     ]
+//   }
+//
+// IMPORTANT: this lives in IndexedDB on the device only — it never gets
+// uploaded to OneDrive. That means a user with two devices has two separate
+// userx.json's, which is intentional: each device has its own batch that the
+// user explicitly deploys with the Deploy button.
+
+// Default empty document for a user we haven't seen before.
+function emptyUserOpsDoc(userId) {
+  return { userId, operations: [], history: [] };
+}
+
+// Generate a fresh op id. We use a short ulid-like pattern (timestamp+random)
+// because op_ids only need to be unique within a single device's userx.json
+// — they don't sync, so they don't need to be globally unique.
+function newOpId() {
+  return 'op_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+async function idbGetUserOps(userId) {
+  if (!userId) return emptyUserOpsDoc('anonymous');
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_USEROPS, 'readonly');
+      const req = tx.objectStore(IDB_USEROPS).get(userId);
+      tx.oncomplete = () => {
+        const v = req.result;
+        if (v && Array.isArray(v.operations) && Array.isArray(v.history)) resolve(v);
+        else resolve(emptyUserOpsDoc(userId));
+      };
+      tx.onerror = () => resolve(emptyUserOpsDoc(userId));
+    });
+  } catch {
+    return emptyUserOpsDoc(userId);
+  }
+}
+
+async function idbPutUserOps(userId, doc) {
+  if (!userId) return;
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_USEROPS, 'readwrite');
+      tx.objectStore(IDB_USEROPS).put(doc, userId);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.error('idbPutUserOps failed:', e);
+  }
+}
+
+// Append a new pending operation. If the user is creating an op that targets
+// a tx that already has a pending op of their own (e.g. they edit an item
+// they just added but haven't deployed yet), we MERGE rather than append —
+// this matches the user's spec from the conversation: "ลบ op เดิม" /
+// "update op_edit.after เป็น value ใหม่". Concretely:
+//
+//   action=add → no merge possible (new tx, no existing op to merge with)
+//
+//   action=edit on a tx that has pending add  → mutate that add's `after`
+//     so the deployed result already reflects the latest edit.
+//   action=edit on a tx that has pending edit → update that edit's `after`
+//     (keep the original `before`, which captures the pre-edit state).
+//
+//   action=delete on a tx that has pending add  → DROP the add entirely.
+//     The user adds and then immediately removes — net effect is nothing to
+//     deploy, so we cancel the add. (User confirmed this in conversation.)
+//   action=delete on a tx that has pending edit → replace the edit with a
+//     delete (keep `before` from the edit so the apply step can verify the
+//     row hasn't drifted on the server).
+async function appendUserOp(userId, op) {
+  const doc = await idbGetUserOps(userId);
+  // Identify the target tx for merging: for add/edit/delete we look at the
+  // resulting/affected tx id, which lives in different fields per action.
+  const targetTxId =
+    op.action === 'add'    ? op.after?.id  :
+    op.action === 'edit'   ? (op.after?.id || op.before?.id) :
+    op.action === 'delete' ? op.before?.id :
+    null;
+
+  let merged = false;
+  if (targetTxId) {
+    for (let i = 0; i < doc.operations.length; i++) {
+      const existing = doc.operations[i];
+      const existingTxId =
+        existing.action === 'add'    ? existing.after?.id  :
+        existing.action === 'edit'   ? (existing.after?.id || existing.before?.id) :
+        existing.action === 'delete' ? existing.before?.id :
+        null;
+      if (existingTxId !== targetTxId) continue;
+
+      // Found a pending op for the same tx → merge per the rules above.
+      if (op.action === 'edit' && existing.action === 'add') {
+        // Edit on a pending-add tx: just update what we'll add.
+        existing.after = op.after;
+        existing.ts = op.ts;
+        merged = true;
+        break;
+      }
+      if (op.action === 'edit' && existing.action === 'edit') {
+        existing.after = op.after;
+        existing.ts = op.ts;
+        merged = true;
+        break;
+      }
+      if (op.action === 'delete' && existing.action === 'add') {
+        // Add then delete = noop. Drop the add.
+        doc.operations.splice(i, 1);
+        merged = true;
+        break;
+      }
+      if (op.action === 'delete' && existing.action === 'edit') {
+        // Edit then delete = just delete. Keep existing.before so apply can
+        // verify drift, but switch the action.
+        existing.action = 'delete';
+        existing.after = null;
+        existing.ts = op.ts;
+        merged = true;
+        break;
+      }
+      // Otherwise (e.g. add on a tx that already has pending add — shouldn't
+      // happen since ids are unique) fall through to append.
+    }
+  }
+
+  if (!merged) {
+    doc.operations.push(op);
+  }
+  await idbPutUserOps(userId, doc);
+  return doc;
+}
+
+// Remove a single pending op by its id. Used by the Manage Pending UI.
+// If the user wanted cascade behaviour we'd also drop dependent ops here,
+// but per their explicit decision we DON'T cascade — dependent ops fail at
+// deploy time with status='cancelled' instead. Simpler logic, fewer surprises.
+async function removeUserOp(userId, opId) {
+  const doc = await idbGetUserOps(userId);
+  const before = doc.operations.length;
+  doc.operations = doc.operations.filter(o => o.id !== opId);
+  if (doc.operations.length !== before) {
+    await idbPutUserOps(userId, doc);
+  }
+  return doc;
+}
+
+// Clear all pending operations for a user (used by "ลบทั้งหมด" button and
+// also by the deploy step once it has successfully recorded results in the
+// history bucket). Does NOT clear history.
+async function clearUserOps(userId) {
+  const doc = await idbGetUserOps(userId);
+  doc.operations = [];
+  await idbPutUserOps(userId, doc);
+  return doc;
 }
 
 // Upload photo: saves to BOTH OneDrive (/photos/) AND local IndexedDB.
@@ -3204,8 +3392,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.18';
-const APP_VERSION_TAG = 'แก้ปุ่มปิดรูป + รองรับปุ่ม Back ปิด lightbox';
+const APP_VERSION = 'v5.19';
+const APP_VERSION_TAG = 'Phase 1: pending op log + badges + Manage screen';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -3791,6 +3979,78 @@ function App() {
     [state.users, appProfileId]
   );
   const isAdmin = currentUser?.role === 'admin';
+
+  // v5.19 Phase 1: Per-user pending operation log. The doc carries
+  //   { userId, operations: [active], history: [done, capped] }
+  // and lives in IndexedDB; we mirror the active operations into React
+  // state so the UI can react to them (banner count, pending badges,
+  // Manage screen, etc.). reloadUserOps() must be called whenever we
+  // mutate the doc through the idb* helpers — there's no observable
+  // notification for IDB writes, so we call it explicitly.
+  //
+  // We DO NOT eagerly load history here — only when the History viewer
+  // is opened (Phase 4), to keep this state lean for the common case.
+  const [userOpsDoc, setUserOpsDoc] = useState(() => emptyUserOpsDoc(appProfileId || 'anonymous'));
+  const reloadUserOps = useCallback(async () => {
+    if (!currentUser?.id) {
+      setUserOpsDoc(emptyUserOpsDoc('anonymous'));
+      return;
+    }
+    const doc = await idbGetUserOps(currentUser.id);
+    setUserOpsDoc(doc);
+  }, [currentUser?.id]);
+  // Reload whenever the active user changes (sign-in, switch profile, etc.).
+  useEffect(() => { reloadUserOps(); }, [reloadUserOps]);
+
+  // Helper: append an op and refresh the in-memory copy. Components that
+  // mutate (TxSheet save, removeTx, etc.) call addPendingOp so the same
+  // merge-on-same-tx logic from appendUserOp() applies in one place.
+  const addPendingOp = useCallback(async ({ action, before, after }) => {
+    if (!currentUser?.id) return;
+    const op = {
+      id: newOpId(),
+      action,
+      before: before || null,
+      after: after || null,
+      status: 'pending',
+      ts: new Date().toISOString(),
+    };
+    await appendUserOp(currentUser.id, op);
+    await reloadUserOps();
+  }, [currentUser?.id, reloadUserOps]);
+
+  const removePendingOp = useCallback(async (opId) => {
+    if (!currentUser?.id) return;
+    await removeUserOp(currentUser.id, opId);
+    await reloadUserOps();
+  }, [currentUser?.id, reloadUserOps]);
+
+  const clearAllPendingOps = useCallback(async () => {
+    if (!currentUser?.id) return;
+    await clearUserOps(currentUser.id);
+    await reloadUserOps();
+  }, [currentUser?.id, reloadUserOps]);
+
+  // Convenience derivations for downstream UI:
+  //   pendingOps      — the active operations array (may be empty)
+  //   pendingByTxId   — Map for O(1) lookup when we render TxRow badges;
+  //                     each tx can only have ONE pending op of its own at
+  //                     a time (the merge logic in appendUserOp guarantees
+  //                     this), so the map value is a single op, not a list.
+  const pendingOps = userOpsDoc.operations || [];
+  const pendingByTxId = useMemo(() => {
+    const m = new Map();
+    for (const op of pendingOps) {
+      const id =
+        op.action === 'add'    ? op.after?.id  :
+        op.action === 'edit'   ? (op.after?.id || op.before?.id) :
+        op.action === 'delete' ? op.before?.id :
+        null;
+      if (id) m.set(id, op);
+    }
+    return m;
+  }, [pendingOps]);
+
   // Strip any legacy URL parameters from previous versions (?as=, ?unlock=, ?role=)
   useEffect(() => {
     try {
@@ -3824,6 +4084,7 @@ function App() {
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
   const [showUsersManager, setShowUsersManager] = useState(false); // v5.0: admin-only
   const [showSearch, setShowSearch] = useState(false); // v5.5: advanced search
+  const [showManagePending, setShowManagePending] = useState(false); // v5.19 Phase 1
   // v2.8: text zoom level — 0=normal, 1=large (115%), 2=larger (130%), 3=largest (145%)
   const [zoomLevel, setZoomLevel] = useState(() => {
     try {
@@ -4126,6 +4387,11 @@ function App() {
   };
 
   const addOrUpdate = (entry) => {
+    // v5.19 Phase 1: capture before/after snapshots for the operation log.
+    // We need `before` for edits so the deploy step can detect drift (the
+    // server side row might have been edited by someone else in the
+    // meantime; `before` lets us compare-and-set safely).
+    const existingBefore = state.transactions.find(t => t.id === entry.id) || null;
     mutate(prev => {
       const idx = prev.transactions.findIndex(t => t.id === entry.id);
       if (idx >= 0) {
@@ -4139,6 +4405,19 @@ function App() {
       const tagged = { ...entry, createdBy: appProfileId };
       return { ...prev, transactions: [tagged, ...prev.transactions] };
     });
+    // v5.19 Phase 1: also record this in the user's pending op log. Note we
+    // do this AFTER mutate() so the Sentry/Toast UX feels identical to v5.18,
+    // and we do it fire-and-forget — the op log is best-effort and not
+    // user-blocking. If IDB is wedged we fall through to the regular
+    // schedule-push path silently (Phase 2 will surface an error UI).
+    if (existingBefore) {
+      // Edit: snapshot the pre-state in `before` and post-state in `after`.
+      const after = { ...entry, createdBy: existingBefore.createdBy || entry.createdBy || appProfileId };
+      addPendingOp({ action: 'edit', before: existingBefore, after }).catch(() => {});
+    } else {
+      const after = { ...entry, createdBy: appProfileId };
+      addPendingOp({ action: 'add', before: null, after }).catch(() => {});
+    }
     pushToast(entry.type === 'income' ? 'บันทึกรายรับแล้ว' : 'บันทึกรายจ่ายแล้ว');
   };
   const removeTx = (id) => {
@@ -4149,6 +4428,15 @@ function App() {
       else if (tx.photoId) deletePhoto(tx.photoId);
     }
     mutate(prev => ({ ...prev, transactions: prev.transactions.filter(t => t.id !== id) }));
+    // v5.19 Phase 1: record the delete op. before = full row snapshot so the
+    // deploy step can detect drift; after = null because there's nothing
+    // left. If the user is deleting a tx they haven't deployed yet (i.e. it
+    // currently has a pending add op of theirs), appendUserOp's merge logic
+    // will simply DROP that pending add — net effect: nothing to deploy,
+    // which is what the user wanted.
+    if (tx) {
+      addPendingOp({ action: 'delete', before: tx, after: null }).catch(() => {});
+    }
     pushToast('ลบรายการแล้ว');
   };
   // Duplicate a transaction: copy all fields with new ID, current date/time, no photos
@@ -4675,6 +4963,52 @@ function App() {
             </button>
           </div>
         )}
+        {/* v5.19 Phase 1: Pending operations banner. Renders above the main
+            view whenever the current user has pending ops. We keep it above
+            the view (rather than inside each view) so it shows on Home,
+            List, Chart and Settings without per-view wiring. The banner is
+            non-intrusive (a thin strip) but tappable to open the Manage
+            Pending screen. The "Deploy" button is intentionally a stub in
+            Phase 1 — it will be wired up to Q.json + lock acquire in
+            Phase 2/3. For now it just shows a toast explaining that. */}
+        {pendingOps.length > 0 && (
+          <div style={{
+            margin: '0 14px 10px',
+            padding: '10px 14px',
+            borderRadius: 12,
+            background: 'var(--sync-warn-bg, rgba(251,191,36,0.12))',
+            border: '1px solid var(--sync-warn, #fbbf24)',
+            display: 'flex', alignItems: 'center', gap: 10,
+            fontSize: 13,
+          }}>
+            <span style={{fontSize: 18}}>🟡</span>
+            <span style={{flex: 1, color: 'var(--text)'}}>
+              <b>{pendingOps.length} รายการ</b> รอ deploy
+            </span>
+            <button
+              onClick={() => setShowManagePending(true)}
+              style={{
+                padding: '6px 12px', fontSize: 12, fontWeight: 600,
+                background: 'transparent',
+                border: '1px solid var(--line-strong, var(--line))',
+                borderRadius: 8, cursor: 'pointer',
+                color: 'var(--text)',
+              }}>
+              จัดการ
+            </button>
+            <button
+              onClick={() => pushToast('Deploy ยังไม่พร้อมใน Phase 1 — รอ Phase 2-3')}
+              style={{
+                padding: '6px 12px', fontSize: 12, fontWeight: 600,
+                background: 'var(--gold)', color: '#fff',
+                border: 'none', borderRadius: 8, cursor: 'pointer',
+                opacity: 0.6, // visual hint that it's not fully wired yet
+              }}
+              title="Phase 2-3 จะ wire up logic deploy">
+              Deploy
+            </button>
+          </div>
+        )}
         {tab === 'home' && homeView === 'overview' && (
           <AccountsOverviewView
             state={visibleState}
@@ -4712,6 +5046,7 @@ function App() {
             onZoom={cycleZoom}
             onBack={() => setHomeView('overview')}
             isAdmin={isAdmin}
+            pendingByTxId={pendingByTxId}
           />
         )}
         {tab === 'list' && (
@@ -4736,6 +5071,7 @@ function App() {
             zoomLevel={zoomLevel}
             onZoom={cycleZoom}
             isAdmin={isAdmin}
+            pendingByTxId={pendingByTxId}
           />
         )}
         {tab === 'chart' && (
@@ -4865,6 +5201,17 @@ function App() {
         />
         );
       })()}
+
+      {/* v5.19 Phase 1: pending operations manager modal */}
+      {showManagePending && (
+        <ManagePendingScreen
+          ops={pendingOps}
+          onClose={() => setShowManagePending(false)}
+          onRemove={removePendingOp}
+          onClearAll={clearAllPendingOps}
+          pushToast={pushToast}
+        />
+      )}
 
       {showItemsManager && (
         <ItemsManager
@@ -5500,7 +5847,7 @@ function AccountsOverviewView({ state, onSelectAccount, onSelectAll, onManageAcc
 }
 
 
-function HomeView({ account, skipSync, status, lastSync, onForceSync, viewMonth, setViewMonth, totals, monthTx, grandBal, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, onBack, zoomLevel, onZoom, isAdmin }) {
+function HomeView({ account, skipSync, status, lastSync, onForceSync, viewMonth, setViewMonth, totals, monthTx, grandBal, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, onBack, zoomLevel, onZoom, isAdmin, pendingByTxId }) {
   const [sortDir, setSortDir] = useState('desc');
   const sortedTx = useMemo(() => {
     const list = [...monthTx];
@@ -5576,13 +5923,13 @@ function HomeView({ account, skipSync, status, lastSync, onForceSync, viewMonth,
 
       <div className="tx-list">
         {recent.length === 0 && <EmptyState/>}
-        {recent.map((t, i) => <TxRow key={t.id} t={t} onClick={() => onTap(t)} delay={i * 40} accounts={masterAccounts} customCats={masterCategories}/>)}
+        {recent.map((t, i) => <TxRow key={t.id} t={t} onClick={() => onTap(t)} delay={i * 40} accounts={masterAccounts} customCats={masterCategories} pendingOp={pendingByTxId?.get(t.id)}/>)}
       </div>
     </div>
   );
 }
 
-function ListView({ viewMonth, setViewMonth, monthTx, account, skipSync, status, onForceSync, grandBal, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom, onOpenSearch, isAdmin }) {
+function ListView({ viewMonth, setViewMonth, monthTx, account, skipSync, status, onForceSync, grandBal, onTap, accountList, selectedAccount, onSelectAccount, masterAccounts, masterCategories, onManageAccounts, onManageProjects, onManageItems, onManageCategories, zoomLevel, onZoom, onOpenSearch, isAdmin, pendingByTxId }) {
   const [sortDir, setSortDir] = useState('desc');
   const groups = useMemo(() => {
     const g = {};
@@ -5665,7 +6012,7 @@ function ListView({ viewMonth, setViewMonth, monthTx, account, skipSync, status,
                 </div>
               </div>
               <div className="tx-list" style={{marginTop:0}}>
-                {list.map((t,i) => <TxRow key={t.id} t={t} onClick={() => onTap(t)} delay={i*30} accounts={masterAccounts} customCats={masterCategories}/>)}
+                {list.map((t,i) => <TxRow key={t.id} t={t} onClick={() => onTap(t)} delay={i*30} accounts={masterAccounts} customCats={masterCategories} pendingOp={pendingByTxId?.get(t.id)}/>)}
               </div>
             </div>
           );
@@ -6330,7 +6677,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.18 · ปิดรูปได้ทั้ง X และ Back</div>
+      <div className="vstrip">my money · v5.19 · Phase 1: Pending Ops Log (Deploy ยังไม่พร้อม)</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -6389,7 +6736,7 @@ function TxRowThumb({ photoId }) {
   return <img className="tx-row-thumb" src={url} alt="" loading="lazy"/>;
 }
 
-function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
+function TxRow({ t, onClick, delay = 0, accounts, customCats, pendingOp = null }) {
   const cat = getCat(t.type, t.category, customCats);
   const isIn = t.type === 'income';
   const timeStr = timeFromIso(t.createdAt);
@@ -6422,7 +6769,18 @@ function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
   const d = t.date ? new Date(t.date + 'T00:00:00') : null;
   const dd = d ? String(d.getDate()).padStart(2, '0') : '--';
   const mm = d ? String(d.getMonth() + 1).padStart(2, '0') : '--';
-  
+
+  // v5.19 Phase 1: pending-op badge. The badge color and tooltip depend on
+  // which kind of operation is queued — yellow for adds, orange for edits,
+  // red for deletes. Caller (the parent List/Home view) computed this by
+  // looking up t.id in the pendingByTxId map; we just render it here.
+  const pendingMeta = pendingOp ? (
+    pendingOp.action === 'add'    ? { color: 'var(--sync-warn)',     label: '🟡', title: 'รอ deploy: เพิ่มใหม่' } :
+    pendingOp.action === 'edit'   ? { color: 'orange',                label: '🟠', title: 'รอ deploy: แก้ไข' } :
+    pendingOp.action === 'delete' ? { color: 'var(--expense-soft)',  label: '🔴', title: 'รอ deploy: ลบ' } :
+    null
+  ) : null;
+
   return (
     <button className="tx-row rise" style={{animationDelay: `${delay}ms`, alignItems: 'flex-start'}} onClick={onClick}>
       <div className="date-badge">
@@ -6431,8 +6789,24 @@ function TxRow({ t, onClick, delay = 0, accounts, customCats }) {
         {t.accountName && <div className="acc" title={t.accountName}>{t.accountName}</div>}
       </div>
       <div className="mid" style={{display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1}}>
-        <div className="title-ln" style={{whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3}}>
+        <div className="title-ln" style={{whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3, textDecoration: pendingMeta?.title?.includes('ลบ') ? 'line-through' : 'none'}}>
           {title}
+          {pendingMeta && (
+            <span title={pendingMeta.title}
+                  style={{
+                    display: 'inline-block',
+                    marginLeft: 6,
+                    fontSize: 12,
+                    verticalAlign: 'middle',
+                    padding: '1px 6px',
+                    borderRadius: 8,
+                    background: pendingMeta.color,
+                    color: '#fff',
+                    fontWeight: 600,
+                  }}>
+              {pendingMeta.label} pending
+            </span>
+          )}
         </div>
         {noteText && (
           <div className="note-ln">{noteText}</div>
@@ -8094,6 +8468,123 @@ function UsersManager({ users, currentUserId, onClose, onAdd, onUpdate, onChange
               เสร็จสิ้น
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ v5.19 Phase 1: Manage Pending Operations ============
+// A bottom-sheet-style screen that lists the user's pending operations,
+// lets them remove individual ones, or clear the whole batch. It's
+// intentionally simple — no "edit op" affordance (per the design decision:
+// edit = remove + redo from the main list). No cascade dialogs (per the
+// user's preference: let dependent ops fail at deploy time with status
+// 'cancelled' instead).
+function ManagePendingScreen({ ops, onClose, onRemove, onClearAll, pushToast }) {
+  if (!ops) ops = [];
+
+  // Pretty label for the action chip
+  const actionMeta = (op) => {
+    if (op.action === 'add')    return { icon: '➕', label: 'ADD',    color: 'var(--income-soft)' };
+    if (op.action === 'edit')   return { icon: '✏️', label: 'EDIT',   color: 'orange' };
+    if (op.action === 'delete') return { icon: '🗑️', label: 'DELETE', color: 'var(--expense-soft)' };
+    return { icon: '?', label: '?', color: 'var(--text-faint)' };
+  };
+
+  // For human display: pull a short summary out of the op's snapshot. For
+  // adds we summarise the new row; for edits we summarise both before/after
+  // amounts; for deletes we summarise what's being removed.
+  const summary = (op) => {
+    const snap = op.after || op.before || {};
+    const item = (snap.item || snap.payee || snap.note || 'รายการ').toString().slice(0, 40);
+    const amt = typeof snap.amount === 'number' ? snap.amount : null;
+    const acct = snap.accountName || '';
+    if (op.action === 'edit' && op.before && op.after) {
+      const a = op.before.amount, b = op.after.amount;
+      if (a !== b && a != null && b != null) {
+        return `${item} · ${acct} · ${a.toLocaleString()} → ${b.toLocaleString()}`;
+      }
+    }
+    return `${item}${amt != null ? ' · ' + amt.toLocaleString() : ''}${acct ? ' · ' + acct : ''}`;
+  };
+
+  return (
+    <div className="sheet-backdrop fade" onClick={onClose}>
+      <div className="sheet-wrap sheet-in" onClick={e => e.stopPropagation()}>
+        <div className="sheet" style={{maxHeight: '85vh', overflowY: 'auto'}}>
+          <div className="sheet-handle"></div>
+          <div className="sheet-head">
+            <h2>รายการรอ deploy ({ops.length})</h2>
+            <button className="icon-btn-round" onClick={onClose} aria-label="ปิด">
+              <Ic.X size={16}/>
+            </button>
+          </div>
+
+          {ops.length === 0 ? (
+            <div style={{padding: '40px 20px', textAlign: 'center', color: 'var(--text-faint)'}}>
+              <div style={{fontSize: 36, marginBottom: 8}}>✨</div>
+              <div>ไม่มีรายการที่รอ deploy</div>
+            </div>
+          ) : (
+            <div style={{padding: '8px 4px 20px'}}>
+              {ops.map((op, idx) => {
+                const meta = actionMeta(op);
+                return (
+                  <div key={op.id} style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 10,
+                    padding: '12px 0',
+                    borderBottom: idx === ops.length - 1 ? 'none' : '1px solid var(--line)',
+                  }}>
+                    <span style={{
+                      flexShrink: 0, padding: '3px 8px', borderRadius: 8,
+                      background: meta.color, color: '#fff',
+                      fontSize: 11, fontWeight: 700,
+                      minWidth: 64, textAlign: 'center',
+                    }}>
+                      {meta.icon} {meta.label}
+                    </span>
+                    <div style={{flex: 1, minWidth: 0, fontSize: 13, lineHeight: 1.4}}>
+                      <div style={{color: 'var(--text)', wordBreak: 'break-word'}}>{summary(op)}</div>
+                      <div style={{fontSize: 10, color: 'var(--text-faint)', marginTop: 2}}>
+                        {new Date(op.ts).toLocaleString('th-TH', {dateStyle: 'short', timeStyle: 'short'})}
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await onRemove(op.id);
+                        pushToast('ลบรายการรอ deploy แล้ว');
+                      }}
+                      className="del-btn"
+                      title="ลบรายการนี้ออกจากคิว"
+                      style={{flexShrink: 0}}>
+                      <Ic.Trash size={14}/>
+                    </button>
+                  </div>
+                );
+              })}
+
+              <button
+                onClick={async () => {
+                  if (window.confirm(`ลบรายการรอ deploy ทั้งหมด ${ops.length} รายการ?\n(การแก้ไขในแอปจะไม่หาย — เพียงไม่ส่งขึ้น cloud ในรอบนี้)`)) {
+                    await onClearAll();
+                    pushToast('ลบรายการรอ deploy ทั้งหมดแล้ว');
+                    onClose();
+                  }
+                }}
+                style={{
+                  width: '100%', marginTop: 16,
+                  padding: '12px',
+                  background: 'transparent',
+                  border: '1px solid var(--expense-soft)',
+                  color: 'var(--expense-soft)',
+                  borderRadius: 10, fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer',
+                }}>
+                <Ic.Trash size={14}/> ลบทั้งหมด ({ops.length})
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
