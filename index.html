@@ -2887,6 +2887,235 @@ async function remoteSave(data, options = {}) {
   return await res.json();
 }
 
+// ========== v5.21 Phase 3: applyOpsToVault — replay ops onto my-money.json ==========
+//
+// This runs INSIDE the editing critical section (i.e. only after useDeploy
+// has acquired the Q.json lock). It:
+//
+//   1. Downloads the freshest copy of my-money.json from OneDrive
+//   2. Walks the user's pending operations in order, applying each one
+//      against the working copy. Each op gets a status:
+//        - 'success'      — applied successfully
+//        - 'cancelled'    — target tx no longer exists (was already deleted)
+//        - 'retry-later'  — target tx exists but its data has drifted from
+//                            the snapshot in op.before (concurrent edit by
+//                            someone else); the user should review and decide
+//   3. Uploads the final working copy back to OneDrive
+//   4. Returns the per-op results so the caller can show a summary and move
+//      successful/cancelled ops into the user's history bucket.
+//
+// Drift detection (the heart of the system): for edit/delete, we compare the
+// CURRENT row in my-money.json against op.before. If they differ on any
+// non-trivial field, we know someone else has edited that row in the
+// meantime, and we mark the op 'retry-later' rather than blindly overwriting
+// their changes.
+function rowsEqualForDrift(a, b) {
+  if (!a || !b) return a === b;
+  // Fields that, if different, mean "someone else edited this row". We
+  // intentionally EXCLUDE photos[], updatedAt, and id — photos can change
+  // independently of financial data, updatedAt is bookkeeping, and id
+  // shouldn't differ on the same row.
+  const fields = ['type', 'amount', 'item', 'payee', 'note', 'category',
+                  'project', 'accountName', 'date'];
+  for (const f of fields) {
+    const av = a[f] == null ? '' : a[f];
+    const bv = b[f] == null ? '' : b[f];
+    if (av !== bv) return false;
+  }
+  return true;
+}
+
+async function applyOpsToVault(operations) {
+  if (!Array.isArray(operations) || operations.length === 0) {
+    return { results: [], finalState: null, applied: 0, cancelled: 0, retry: 0 };
+  }
+
+  // 1) Download the latest my-money.json. We MUST work on the freshest copy
+  //    so concurrent edits from other users (made before they entered the
+  //    queue, or from this user from another device) are visible during
+  //    drift detection.
+  const remote = await remoteFetch();
+  const vault = remote || {
+    transactions: [], items: [], accounts: [], projects: [],
+    categories: [], users: [], lastModified: null,
+  };
+  if (!Array.isArray(vault.transactions)) vault.transactions = [];
+
+  // 2) Walk operations IN ORDER. Each op transforms `vault` in place.
+  const results = [];
+  for (const op of operations) {
+    let status = 'success';
+    let reason = null;
+
+    if (op.action === 'add') {
+      // Always succeed — duplicate ids are theoretically possible but our
+      // `uid()` generator makes collisions astronomically unlikely.
+      vault.transactions.unshift(op.after);
+    } else if (op.action === 'edit') {
+      const idx = vault.transactions.findIndex(t => t.id === op.before?.id);
+      if (idx === -1) {
+        status = 'cancelled';
+        reason = 'รายการต้นฉบับถูกลบแล้ว';
+      } else if (!rowsEqualForDrift(vault.transactions[idx], op.before)) {
+        status = 'retry-later';
+        reason = 'มีการแก้ไขจากอุปกรณ์อื่นก่อน';
+      } else {
+        vault.transactions[idx] = { ...op.after };
+      }
+    } else if (op.action === 'delete') {
+      const idx = vault.transactions.findIndex(t => t.id === op.before?.id);
+      if (idx === -1) {
+        status = 'cancelled';
+        reason = 'รายการถูกลบไปแล้ว';
+      } else if (!rowsEqualForDrift(vault.transactions[idx], op.before)) {
+        status = 'retry-later';
+        reason = 'มีการแก้ไขจากอุปกรณ์อื่นก่อน';
+      } else {
+        vault.transactions.splice(idx, 1);
+      }
+    } else {
+      status = 'cancelled';
+      reason = 'ไม่รู้จัก action: ' + op.action;
+    }
+
+    results.push({ opId: op.id, action: op.action, status, reason });
+  }
+
+  // 3) Upload. We use force:true because we hold the Q.json lock — that's
+  //    the source of truth for "who can write right now" in the new world.
+  await remoteSave(vault, { force: true });
+
+  // 4) v5.21 follow-up: Photo cleanup. When a delete-tx succeeds, or an
+  //    edit-tx removes some photos from a tx's photos[] array, those photo
+  //    files are now orphaned in OneDrive (and in our IndexedDB cache).
+  //    Walk the just-applied successful ops to figure out which photoIds
+  //    are no longer referenced by ANY transaction in the freshly-saved
+  //    vault, then delete them from cloud + cache.
+  //
+  //    Why "fresh vault" matters: another user might still be referencing
+  //    the same photoId from a different tx (rare in practice — uploadPhoto
+  //    creates a new id each time — but worth the safety check, especially
+  //    after duplicate-tx flows that may copy photos refs).
+  //
+  //    We deliberately do this AFTER remoteSave() so a network failure on
+  //    the photo delete step doesn't leave the vault unsaved. Failed photo
+  //    deletes are logged but do NOT throw — the user's data write is
+  //    already committed, and an orphaned photo is a leak, not a corruption.
+  const orphanedPhotoIds = collectOrphanedPhotoIds(operations, results, vault);
+  for (const photoId of orphanedPhotoIds) {
+    try {
+      await deletePhoto(photoId);
+    } catch (e) {
+      console.warn('orphaned photo delete failed for', photoId, e);
+    }
+  }
+
+  const counts = results.reduce((acc, r) => {
+    acc[r.status] = (acc[r.status] || 0) + 1;
+    return acc;
+  }, {});
+  return {
+    results,
+    finalState: vault,
+    applied:   counts['success']      || 0,
+    cancelled: counts['cancelled']    || 0,
+    retry:     counts['retry-later']  || 0,
+    orphanedPhotos: orphanedPhotoIds.length,
+  };
+}
+
+// Helper for applyOpsToVault step 4. Returns the list of photoIds that were
+// referenced by op.before but are no longer referenced by ANY tx in the
+// final vault. Only counts ops whose result was 'success' — retry-later or
+// cancelled ops didn't actually mutate the vault, so their photos must be
+// preserved (they may still be referenced once the user retries).
+function collectOrphanedPhotoIds(operations, results, finalVault) {
+  // Build the set of "candidate" photoIds — anything that COULD have become
+  // orphaned this round.
+  const candidates = new Set();
+  for (let i = 0; i < operations.length; i++) {
+    const op = operations[i];
+    const result = results[i];
+    if (!result || result.status !== 'success') continue;
+
+    if (op.action === 'delete') {
+      // Whole tx removed → all its photos become candidates.
+      const photos = (op.before && Array.isArray(op.before.photos)) ? op.before.photos : [];
+      for (const p of photos) {
+        if (p && p.id) candidates.add(p.id);
+      }
+      // Legacy v1.3 single-photo shape — keep it covered too.
+      if (op.before && op.before.photoId) candidates.add(op.before.photoId);
+    } else if (op.action === 'edit') {
+      // Photos that were on the row before but are not on the row after.
+      const beforePhotos = (op.before && Array.isArray(op.before.photos)) ? op.before.photos : [];
+      const afterPhotos  = (op.after  && Array.isArray(op.after.photos))  ? op.after.photos  : [];
+      const afterIds = new Set(afterPhotos.map(p => p && p.id).filter(Boolean));
+      for (const p of beforePhotos) {
+        if (p && p.id && !afterIds.has(p.id)) candidates.add(p.id);
+      }
+      // Legacy: single photoId removed by an edit
+      if (op.before && op.before.photoId &&
+          !(op.after && op.after.photoId === op.before.photoId)) {
+        candidates.add(op.before.photoId);
+      }
+    }
+  }
+
+  if (candidates.size === 0) return [];
+
+  // Build the set of photoIds STILL referenced anywhere in the saved vault.
+  // Anything not in this set is a true orphan and safe to delete.
+  const stillUsed = new Set();
+  for (const tx of (finalVault?.transactions || [])) {
+    if (Array.isArray(tx.photos)) {
+      for (const p of tx.photos) {
+        if (p && p.id) stillUsed.add(p.id);
+      }
+    } else if (tx.photoId) {
+      stillUsed.add(tx.photoId); // legacy v1.3 single-photo shape
+    }
+  }
+
+  return [...candidates].filter(id => !stillUsed.has(id));
+}
+
+// Move just-deployed ops out of `operations` into `history`. Retry-later
+// ops stay active; success/cancelled go to history (capped at 100 newest).
+async function commitDeployResults(userId, results) {
+  if (!userId || !Array.isArray(results) || results.length === 0) return;
+  const doc = await idbGetUserOps(userId);
+  const resultByOpId = new Map(results.map(r => [r.opId, r]));
+
+  const deployed = [];
+  const stillPending = [];
+  for (const op of doc.operations) {
+    const r = resultByOpId.get(op.id);
+    if (r) {
+      deployed.push({
+        ...op,
+        status: r.status,
+        reason: r.reason || null,
+        deployedAt: new Date().toISOString(),
+      });
+    } else {
+      stillPending.push(op);
+    }
+  }
+
+  // 'retry-later' stays active (but tagged with reason for the UI). Other
+  // statuses go to history.
+  const retryOps = deployed.filter(d => d.status === 'retry-later');
+  const finalOps = deployed.filter(d => d.status !== 'retry-later');
+
+  doc.operations = [...stillPending, ...retryOps.map(r => {
+    const { deployedAt, status, ...rest } = r;
+    return rest;
+  })];
+  doc.history = [...finalOps, ...(doc.history || [])].slice(0, 100);
+  await idbPutUserOps(userId, doc);
+}
+
 // ========== v5.20 Phase 2: Q.json — distributed queue file ==========
 // Q.json sits next to my-money.json in the OneDrive app folder. It tracks
 // who is currently editing the shared vault, who's waiting in line, and
@@ -3573,8 +3802,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.20';
-const APP_VERSION_TAG = 'Phase 2: Q.json + Lock + Heartbeat (apply เป็น stub)';
+const APP_VERSION = 'v5.22';
+const APP_VERSION_TAG = 'Phase 3+: ลบ photo orphan หลัง deploy success';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -4575,6 +4804,9 @@ function App() {
   const [showUsersManager, setShowUsersManager] = useState(false); // v5.0: admin-only
   const [showSearch, setShowSearch] = useState(false); // v5.5: advanced search
   const [showManagePending, setShowManagePending] = useState(false); // v5.19 Phase 1
+  // v5.21 Phase 3: result of the most recent deploy. Shown in a modal once
+  // the deploy completes (success/cancelled/retry-later breakdown).
+  const [deployResult, setDeployResult] = useState(null);
   // v2.8: text zoom level — 0=normal, 1=large (115%), 2=larger (130%), 3=largest (145%)
   const [zoomLevel, setZoomLevel] = useState(() => {
     try {
@@ -4777,8 +5009,17 @@ function App() {
   useEffect(() => {
     if (booting) return;
     if (firstChangeRef.current) { firstChangeRef.current = false; return; }
+    // v5.21 Phase 3: do NOT auto-push while a Deploy is in flight. Deploy
+    // owns my-money.json writes during its critical section — letting the
+    // 2.5s debounce timer fire concurrently would race against
+    // applyOpsToVault and could overwrite the deploy result with stale
+    // local state (e.g. state captured before the post-deploy pull
+    // completed). The Deploy flow does its own setState() with the fresh
+    // remote vault, which will trigger this effect again — but by that
+    // point deploy.phase is back to 'idle' so we'll push normally.
+    if (deploy.phase === 'waiting' || deploy.phase === 'editing' || deploy.phase === 'releasing') return;
     if (isOnline && didPullRef.current) schedulePush();
-  }, [state.transactions, state.items, state.accounts, state.projects, state.categories, state.users, state.lastModified, isOnline, booting, schedulePush]);
+  }, [state.transactions, state.items, state.accounts, state.projects, state.categories, state.users, state.lastModified, isOnline, booting, schedulePush, deploy.phase]);
 
   // Migration: backfill master lists (accounts/projects/items) from existing transactions.
   // This handles legacy data from before the master list feature existed.
@@ -5510,19 +5751,43 @@ function App() {
                 </button>
                 <button
                   onClick={async () => {
-                    // Phase 2: lock cycle only — no actual apply yet.
-                    // Phase 3 will pass an onApply that replays ops onto
-                    // my-money.json. For now we show a toast so the user
-                    // knows the lock cycle worked end-to-end.
+                    // v5.21 Phase 3: real apply logic now lives here.
+                    // We snapshot pendingOps at the moment Deploy is pressed
+                    // so any ops the user adds AFTER pressing Deploy stay
+                    // pending for the next round (rather than getting
+                    // swept up halfway through the apply).
+                    const opsSnapshot = pendingOps.slice();
+                    if (opsSnapshot.length === 0) {
+                      pushToast('ไม่มีรายการรอ deploy');
+                      return;
+                    }
+                    let applyOutcome = null;
                     const result = await deploy.startDeploy(async () => {
-                      // Hold the lock for a brief moment so the user can
-                      // observe the EDITING state in the banner. Without
-                      // this the editing flash is too fast to see.
-                      await new Promise(r => setTimeout(r, 1500));
-                      return { applied: 0, note: 'Phase 2 stub — Phase 3 จะใส่ apply logic จริง' };
+                      // INSIDE THE LOCK: replay the snapshot against the
+                      // freshest my-money.json from OneDrive, then commit
+                      // the results into the user's history bucket.
+                      applyOutcome = await applyOpsToVault(opsSnapshot);
+                      if (currentUser?.id) {
+                        await commitDeployResults(currentUser.id, applyOutcome.results);
+                        // Refresh the React-side mirror of userx.json so the
+                        // banner / badges re-render correctly.
+                        await reloadUserOps();
+                      }
+                      // After the vault is updated, also pull the new state
+                      // into local React state so the UI reflects what's on
+                      // OneDrive. We skip the auto-sync's optimistic-lock
+                      // check because we know exactly what we just wrote.
+                      try {
+                        const fresh = await remoteFetch();
+                        if (fresh) setState(fresh);
+                      } catch (e) {
+                        console.warn('post-deploy pull failed:', e);
+                      }
+                      return applyOutcome;
                     });
-                    if (result?.ok) {
-                      pushToast('Lock cycle ทำงานสำเร็จ (Phase 2 stub)');
+                    if (result?.ok && applyOutcome) {
+                      // Show the per-op summary modal.
+                      setDeployResult(applyOutcome);
                     } else if (result?.reason && result.reason !== 'busy') {
                       pushToast('Deploy ล้มเหลว: ' + result.reason);
                     }
@@ -5780,6 +6045,17 @@ function App() {
           onRemove={removePendingOp}
           onClearAll={clearAllPendingOps}
           pushToast={pushToast}
+        />
+      )}
+
+      {/* v5.21 Phase 3: Deploy result summary modal — auto-shows after a
+          deploy completes. Closing it just dismisses; retry-later ops are
+          already restored to the active queue by commitDeployResults so
+          the user can address them in Manage Pending. */}
+      {deployResult && (
+        <DeployResultScreen
+          result={deployResult}
+          onClose={() => setDeployResult(null)}
         />
       )}
 
@@ -7247,7 +7523,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.20 · Phase 2: Q.json + Lock (apply ยังไม่พร้อม)</div>
+      <div className="vstrip">my money · v5.22 · Photo cleanup หลัง deploy 🧹</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -9155,6 +9431,148 @@ function ManagePendingScreen({ ops, onClose, onRemove, onClearAll, pushToast }) 
               </button>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ v5.21 Phase 3: Deploy Result Summary ============
+// Shown after a Deploy run completes. Tells the user how many ops succeeded,
+// how many were cancelled (target row was already deleted/missing), and how
+// many need retry-later (target row was edited by someone else between when
+// the user prepared their edit and when their turn in the queue arrived).
+// The retry-later ones stay in the user's active queue; the user closes
+// this modal, optionally adjusts those ops in Manage Pending, and presses
+// Deploy again.
+function DeployResultScreen({ result, onClose }) {
+  if (!result) return null;
+  const results = result.results || [];
+  const ok        = results.filter(r => r.status === 'success').length;
+  const cancelled = results.filter(r => r.status === 'cancelled').length;
+  const retry     = results.filter(r => r.status === 'retry-later').length;
+
+  const actionLabel = (action) => (
+    action === 'add'    ? '➕ ADD' :
+    action === 'edit'   ? '✏️ EDIT' :
+    action === 'delete' ? '🗑️ DELETE' :
+    action
+  );
+  const statusMeta = (status) => (
+    status === 'success'      ? { icon: '✅', color: 'var(--income-soft)', label: 'สำเร็จ' } :
+    status === 'cancelled'    ? { icon: '⏭️', color: 'var(--text-faint)',  label: 'ยกเลิก' } :
+    status === 'retry-later'  ? { icon: '⚠️', color: 'var(--sync-warn)',   label: 'รอลองใหม่' } :
+                                { icon: '?',  color: 'var(--text-faint)',  label: status }
+  );
+
+  return (
+    <div className="sheet-backdrop fade" onClick={onClose}>
+      <div className="sheet-wrap sheet-in" onClick={e => e.stopPropagation()}>
+        <div className="sheet" style={{maxHeight: '85vh', overflowY: 'auto'}}>
+          <div className="sheet-handle"></div>
+          <div className="sheet-head">
+            <h2>Deploy เสร็จสิ้น</h2>
+            <button className="icon-btn-round" onClick={onClose} aria-label="ปิด">
+              <Ic.X size={16}/>
+            </button>
+          </div>
+
+          {/* Summary row of counts */}
+          <div style={{
+            display: 'flex', gap: 8, margin: '8px 0 16px',
+            flexWrap: 'wrap',
+          }}>
+            {ok > 0 && (
+              <div style={{flex: 1, minWidth: 90, padding: 12, borderRadius: 10,
+                           background: 'var(--income-soft)', color: '#fff', textAlign: 'center'}}>
+                <div style={{fontSize: 24, fontWeight: 700}}>{ok}</div>
+                <div style={{fontSize: 11, opacity: 0.9}}>✅ สำเร็จ</div>
+              </div>
+            )}
+            {cancelled > 0 && (
+              <div style={{flex: 1, minWidth: 90, padding: 12, borderRadius: 10,
+                           background: 'var(--text-faint)', color: '#fff', textAlign: 'center'}}>
+                <div style={{fontSize: 24, fontWeight: 700}}>{cancelled}</div>
+                <div style={{fontSize: 11, opacity: 0.9}}>⏭️ ยกเลิก</div>
+              </div>
+            )}
+            {retry > 0 && (
+              <div style={{flex: 1, minWidth: 90, padding: 12, borderRadius: 10,
+                           background: 'var(--sync-warn)', color: '#fff', textAlign: 'center'}}>
+                <div style={{fontSize: 24, fontWeight: 700}}>{retry}</div>
+                <div style={{fontSize: 11, opacity: 0.9}}>⚠️ รอลองใหม่</div>
+              </div>
+            )}
+          </div>
+
+          {/* v5.21+: photo cleanup notice. Only show when at least one photo
+              was actually deleted — most deploys won't touch photos at all. */}
+          {result.orphanedPhotos > 0 && (
+            <div style={{
+              fontSize: 12, color: 'var(--text-dim)',
+              marginBottom: 12, padding: '8px 12px',
+              background: 'var(--surface)', borderRadius: 8,
+              border: '1px solid var(--line)',
+            }}>
+              🧹 ลบรูปที่ไม่ใช้แล้ว {result.orphanedPhotos} รูปออกจาก OneDrive
+            </div>
+          )}
+
+          {/* Per-op detail. Useful when something went wrong — the user can
+              see exactly which row drifted and decide what to do. */}
+          <div style={{padding: '4px 0 20px'}}>
+            {results.map((r, i) => {
+              const meta = statusMeta(r.status);
+              return (
+                <div key={r.opId || i} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 10,
+                  padding: '10px 0',
+                  borderBottom: i === results.length - 1 ? 'none' : '1px solid var(--line)',
+                  fontSize: 13,
+                }}>
+                  <span style={{
+                    flexShrink: 0, fontSize: 11, fontWeight: 600,
+                    minWidth: 70, color: 'var(--text-dim)',
+                  }}>
+                    {actionLabel(r.action)}
+                  </span>
+                  <span style={{
+                    flexShrink: 0, padding: '2px 8px', borderRadius: 6,
+                    background: meta.color, color: '#fff',
+                    fontSize: 11, fontWeight: 600, minWidth: 60, textAlign: 'center',
+                  }}>
+                    {meta.icon} {meta.label}
+                  </span>
+                  <span style={{flex: 1, minWidth: 0, color: 'var(--text-dim)', lineHeight: 1.4}}>
+                    {r.reason || (r.status === 'success' ? 'OK' : '')}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {retry > 0 && (
+            <div style={{
+              marginBottom: 16, padding: 12,
+              background: 'rgba(251,191,36,0.12)',
+              border: '1px solid var(--sync-warn)',
+              borderRadius: 10, fontSize: 12, lineHeight: 1.5,
+            }}>
+              💡 รายการที่ "รอลองใหม่" ยังอยู่ในคิว — เปิด "จัดการ" เพื่อแก้ไข
+              หรือกด Deploy ใหม่อีกครั้ง (ระบบจะดึงข้อมูลล่าสุดจาก cloud มาเทียบ)
+            </div>
+          )}
+
+          <button
+            onClick={onClose}
+            style={{
+              width: '100%', padding: '12px',
+              background: 'var(--gold)', color: '#fff',
+              border: 'none', borderRadius: 10,
+              fontSize: 14, fontWeight: 600, cursor: 'pointer',
+            }}>
+            ปิด
+          </button>
         </div>
       </div>
     </div>
