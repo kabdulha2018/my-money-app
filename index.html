@@ -4093,8 +4093,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.29';
-const APP_VERSION_TAG = 'Phase 4: History + Reset Q + Orphan photo scan';
+const APP_VERSION = 'v5.30';
+const APP_VERSION_TAG = 'หลัง deploy บังคับ refresh state จาก vault ใหม่เสมอ';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -6230,15 +6230,38 @@ function App() {
                         // banner / badges re-render correctly.
                         await reloadUserOps();
                       }
-                      // After the vault is updated, also pull the new state
-                      // into local React state so the UI reflects what's on
-                      // OneDrive. We skip the auto-sync's optimistic-lock
-                      // check because we know exactly what we just wrote.
+                      // v5.30: MANDATORY post-deploy state refresh — the
+                      // user explicitly asked for this: after a successful
+                      // deploy the local state MUST match what was just
+                      // uploaded to OneDrive, no exceptions. Previously we
+                      // had a try-catch that swallowed network errors silently
+                      // and left the UI showing stale local state — confusing
+                      // because the user just clicked Deploy and "nothing
+                      // changed visually".
+                      //
+                      // Two-layer approach:
+                      // 1. PRIMARY: setState with applyOutcome.finalState.
+                      //    This is the exact object we just uploaded; it's
+                      //    guaranteed to match OneDrive (we wrote it there
+                      //    in remoteSave(vault) inside applyOpsToVault).
+                      //    No network dependency — this layer always works.
+                      // 2. VERIFY: pull again to double-check. If the pull
+                      //    succeeds we overwrite once more with the server
+                      //    copy (handles the extremely rare case where
+                      //    something else wrote to my-money.json between
+                      //    our upload and this fetch — impossible while we
+                      //    hold the Q.json lock, but belt-and-suspenders).
+                      //    If pull fails, the PRIMARY setState above already
+                      //    gave us the right state, so a warning is enough.
+                      if (applyOutcome.finalState) {
+                        setState(applyOutcome.finalState);
+                      }
                       try {
                         const fresh = await remoteFetch();
                         if (fresh) setState(fresh);
                       } catch (e) {
-                        console.warn('post-deploy pull failed:', e);
+                        console.warn('post-deploy verify pull failed:', e);
+                        pushToast('โหลด vault ใหม่ไม่สำเร็จ (ใช้ state ที่เพิ่ง deploy)');
                       }
                       return applyOutcome;
                     });
@@ -8104,7 +8127,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.29 · Phase 4: History + Storage 📜🧹</div>
+      <div className="vstrip">my money · v5.30 · บังคับ refresh หลัง deploy 🔄</div>
 
       {showLessonsEditor && (
         <LessonsEditor
