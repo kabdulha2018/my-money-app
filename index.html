@@ -1333,8 +1333,12 @@ button.sync-pill {
 /* Autocomplete dropdown for Item/Note inputs */
 .autocomplete-wrap { position: relative; }
 .autocomplete-list {
+  /* v5.28: bumped max-height from 200px → 320px so that on phones (which
+     have plenty of vertical space) the user can see ~7-8 accounts at once
+     instead of ~5. Anything past that still scrolls. We use min() with
+     vh so the dropdown never overflows the viewport on small screens. */
   position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-  z-index: 5; max-height: 200px; overflow-y: auto;
+  z-index: 5; max-height: min(320px, 50vh); overflow-y: auto;
   background: var(--surface2); border: 1px solid var(--line-strong);
   border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.5);
 }
@@ -3884,8 +3888,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.26';
-const APP_VERSION_TAG = 'แก้ Duplicate→Save ถูกมองเป็น Edit จน Deploy cancel';
+const APP_VERSION = 'v5.28';
+const APP_VERSION_TAG = 'Dropdown บัญชี — แสดงทุกบัญชีที่มีสิทธิ์ (แม้ยังไม่มี tx)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -5557,21 +5561,39 @@ function App() {
       id = `u_${crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : Date.now().toString(36) + Math.random().toString(36).slice(2)}`;
     }
     const pinHash = await hashPin(pin);
+    // v5.27 Phase 5c: build the user object once for both mutate and the
+    // pending 'add' op. We include pinHash in the op snapshot so the deploy
+    // step writes it to OneDrive (without it the user couldn't log in from
+    // other devices). Drift-detection deliberately ignores pinHash, so a
+    // concurrent PIN change on the same user won't mark our op retry-later.
+    const newUser = { id, label: trimmed, icon,
+                      role: role === 'admin' ? 'admin' : 'member', pinHash };
     mutate(prev => ({
       ...prev,
-      users: [...(prev.users || []), { id, label: trimmed, icon, role: role === 'admin' ? 'admin' : 'member', pinHash }],
+      users: [...(prev.users || []), newUser],
     }));
+    addPendingOp({ resource: 'user', action: 'add', before: null, after: newUser }).catch(() => {});
     return { ok: true, id };
   };
   const updateUser = (id, patch) => {
+    // v5.27 Phase 5c: route through Q. The caller may patch any subset of
+    // {label, icon, role, pinHash}; we snapshot the full before/after so
+    // drift detection works against the freshly-fetched vault during deploy.
+    const target = (state.users || []).find(u => u.id === id);
+    if (!target) return;
+    const updated = { ...target, ...patch, id: target.id };
     mutate(prev => ({
       ...prev,
-      users: (prev.users || []).map(u => u.id === id ? { ...u, ...patch, id: u.id } : u),
+      users: (prev.users || []).map(u => u.id === id ? updated : u),
     }));
+    addPendingOp({ resource: 'user', action: 'edit', before: target, after: updated }).catch(() => {});
   };
   const changeUserPin = async (id, newPin) => {
     if (!/^\d{4}$/.test(newPin)) return { ok: false, reason: 'format' };
     const pinHash = await hashPin(newPin);
+    // updateUser already records an 'edit' pending op for us. Drift fields
+    // for 'user' deliberately exclude pinHash, so a concurrent edit of
+    // label/icon/role by another admin won't mark this op retry-later.
     updateUser(id, { pinHash });
     return { ok: true };
   };
@@ -5583,6 +5605,12 @@ function App() {
     if (target?.role === 'admin' && admins.length <= 1) {
       return { ok: false, reason: 'last-admin' };
     }
+    // v5.27 Phase 5c: record the user-delete op so it goes through Q. The
+    // local cascade still happens (we strip the removed user's id from each
+    // account's permissions map for snappy UI), but we only record the
+    // user-delete op — the permission cleanup on each affected account is
+    // implicit (the apply step deletes the user row; consumers of the
+    // permissions map should already treat missing-user ids as no access).
     mutate(prev => ({
       ...prev,
       users: (prev.users || []).filter(u => u.id !== id),
@@ -5594,6 +5622,9 @@ function App() {
         return { ...a, permissions: next };
       }),
     }));
+    if (target) {
+      addPendingOp({ resource: 'user', action: 'delete', before: target, after: null }).catch(() => {});
+    }
     return { ok: true };
   };
 
@@ -5604,10 +5635,15 @@ function App() {
     const projs = state.projects || [];
     const exists = projs.some(p => (p.name || '').toLowerCase() === n.toLowerCase());
     if (exists) return false;
+    // v5.27 Phase 5c: route project mutations through the Q + Deploy system,
+    // just like accounts and items in 5b. Same pattern: build once, mutate
+    // local state, record an 'add' pending op for Deploy.
+    const newProject = { id: uid(), name: n, createdAt: new Date().toISOString() };
     mutate(prev => ({
       ...prev,
-      projects: [...(prev.projects || []), { id: uid(), name: n, createdAt: new Date().toISOString() }],
+      projects: [...(prev.projects || []), newProject],
     }));
+    addPendingOp({ resource: 'project', action: 'add', before: null, after: newProject }).catch(() => {});
     return true;
   };
   const updateMasterProject = (id, newName) => {
@@ -5619,15 +5655,23 @@ function App() {
     if (target.name === n) return { ok: true, affectedTx: 0 };
     const dup = projs.some(p => p.id !== id && (p.name || '').toLowerCase() === n.toLowerCase());
     if (dup) return { ok: false, reason: 'duplicate' };
+    // Cascade rename in local tx (UI feedback only) — see updateMasterItem
+    // for why we don't record per-tx edit ops on cascade rename.
     const affected = renameMasterField('project', target.name, n);
+    const updated = { ...target, name: n };
     mutate(prev => ({
       ...prev,
-      projects: (prev.projects || []).map(p => p.id === id ? { ...p, name: n } : p),
+      projects: (prev.projects || []).map(p => p.id === id ? updated : p),
     }));
+    addPendingOp({ resource: 'project', action: 'edit', before: target, after: updated }).catch(() => {});
     return { ok: true, affectedTx: affected };
   };
   const removeMasterProject = (id) => {
+    const target = (state.projects || []).find(p => p.id === id);
     mutate(prev => ({ ...prev, projects: (prev.projects || []).filter(p => p.id !== id) }));
+    if (target) {
+      addPendingOp({ resource: 'project', action: 'delete', before: target, after: null }).catch(() => {});
+    }
   };
 
   // ============ Categories Master List Handlers ============
@@ -5642,12 +5686,16 @@ function App() {
     const cats = state.categories || [];
     const exists = cats.some(c => c.type === t && (c.name || '').toLowerCase() === n.toLowerCase());
     if (exists) return false;
+    // v5.27 Phase 5c
+    const newCategory = {
+      id: 'cat-' + uid(), name: n, icon: icon || '🏷️', type: t,
+      createdAt: new Date().toISOString(),
+    };
     mutate(prev => ({
       ...prev,
-      categories: [...(prev.categories || []), {
-        id: 'cat-' + uid(), name: n, icon: icon || '🏷️', type: t, createdAt: new Date().toISOString(),
-      }],
+      categories: [...(prev.categories || []), newCategory],
     }));
+    addPendingOp({ resource: 'category', action: 'add', before: null, after: newCategory }).catch(() => {});
     return true;
   };
   const updateMasterCategory = (id, newName, newIcon) => {
@@ -5658,15 +5706,21 @@ function App() {
     if (!target) return { ok: false, reason: 'notfound' };
     const dup = cats.some(c => c.id !== id && c.type === target.type && (c.name || '').toLowerCase() === n.toLowerCase());
     if (dup) return { ok: false, reason: 'duplicate' };
+    const updated = { ...target, name: n, icon: newIcon || target.icon };
     mutate(prev => ({
       ...prev,
-      categories: (prev.categories || []).map(c => c.id === id ? { ...c, name: n, icon: newIcon || c.icon } : c),
+      categories: (prev.categories || []).map(c => c.id === id ? updated : c),
     }));
+    addPendingOp({ resource: 'category', action: 'edit', before: target, after: updated }).catch(() => {});
     return { ok: true, affectedTx: 0 };
   };
   // Deleting a category: clears the category field on matching transactions
   // (instead of deleting the transactions themselves), per user requirement.
   const removeMasterCategory = (id) => {
+    // v5.27 Phase 5c: capture target BEFORE the mutate so the pending op
+    // carries the full snapshot. The cascade that clears tx.category fields
+    // is local-only — same rationale as item/account/project cascades.
+    const target = (state.categories || []).find(c => c.id === id);
     let affected = 0;
     mutate(prev => {
       const kept = (prev.transactions || []).map(t => {
@@ -5679,6 +5733,9 @@ function App() {
         categories: (prev.categories || []).filter(c => c.id !== id),
       };
     });
+    if (target) {
+      addPendingOp({ resource: 'category', action: 'delete', before: target, after: null }).catch(() => {});
+    }
     return affected;
   };
 
@@ -6329,6 +6386,7 @@ function App() {
             removeMasterProject(id);
             pushToast('ลบโครงการแล้ว');
           }}
+          pendingByProjectId={pendingByResource.project}
         />
       )}
 
@@ -6356,6 +6414,7 @@ function App() {
               ? `ลบแล้ว · ล้างจาก ${affected} รายการ`
               : 'ลบหมวดหมู่แล้ว');
           }}
+          pendingByCategoryId={pendingByResource.category}
         />
       )}
 
@@ -6370,6 +6429,7 @@ function App() {
           onChangePin={changeUserPin}
           onRemove={removeUser}
           pushToast={pushToast}
+          pendingByUserId={pendingByResource.user}
         />
       )}
 
@@ -7695,7 +7755,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.26 · แก้ Duplicate→ถือว่าเป็นรายการใหม่ ✨</div>
+      <div className="vstrip">my money · v5.28 · Dropdown บัญชีแสดงครบทุกบัญชี 📋</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -8186,13 +8246,25 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
   }, [allTx]);
 
   // Autocomplete matches for account
+  // v5.28: when the field is empty (initial open), show ALL accounts the
+  // user has permission to — previously we capped at 8 and sorted by usage,
+  // so accounts the user just created (count=0) or rarely-used ones never
+  // appeared in the suggestions. For families with many accounts (the
+  // current vault has 17+), this meant the dropdown was effectively useless
+  // for picking a fresh account; the user would have to remember and type
+  // the exact name. Now: no query → return everything in usage-then-alpha
+  // order; with a query → cap stays at 8 because the filter narrows things
+  // down naturally.
   const accountMatches = useMemo(() => {
     const q = accountName.trim().toLowerCase();
     const entries = Array.from(accountMap.entries()).map(([label, count]) => ({ label, count }));
-    if (!q) return entries.sort((a, b) => b.count - a.count).slice(0, 8);
-    return entries
+    const sorted = entries.sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.label.localeCompare(b.label, 'th');
+    });
+    if (!q) return sorted; // show all permitted accounts on open
+    return sorted
       .filter(e => e.label.toLowerCase().includes(q))
-      .sort((a, b) => b.count - a.count)
       .slice(0, 8);
   }, [accountName, accountMap]);
   const accountExactExists = useMemo(() => {
@@ -9205,7 +9277,7 @@ function ConfirmDeleteTx({ tx, onCancel, onConfirm, accounts }) {
 // Lets the admin add/rename/remove users, change PINs, and toggle admin role.
 // Each user has: id (immutable, generated from label), label, icon, role, pinHash.
 // PIN changes are immediately hashed before storing.
-function UsersManager({ users, currentUserId, onClose, onAdd, onUpdate, onChangePin, onRemove, pushToast }) {
+function UsersManager({ users, currentUserId, onClose, onAdd, onUpdate, onChangePin, onRemove, pushToast, pendingByUserId }) {
   const [editingId, setEditingId] = useState(null);
   const [editLabel, setEditLabel] = useState('');
   const [editIcon, setEditIcon] = useState('👤');
@@ -9455,11 +9527,29 @@ function UsersManager({ users, currentUserId, onClose, onAdd, onUpdate, onChange
                   ) : (
                     <>
                       <div className="name-wrap">
-                        <div className="name">
+                        <div className="name" style={{
+                          textDecoration: pendingByUserId?.get(u.id)?.action === 'delete' ? 'line-through' : 'none',
+                        }}>
                           <span className="user-row-icon">{u.icon || '👤'}</span>
                           {u.label}
                           {isMe && <span className="me-tag">(คุณ)</span>}
                           {u.role === 'admin' && <span className="admin-tag-inline">admin</span>}
+                          {pendingByUserId?.get(u.id) && (() => {
+                            const op = pendingByUserId.get(u.id);
+                            const meta = op.action === 'add'    ? { c: 'var(--sync-warn)',    e: '🟡' } :
+                                         op.action === 'edit'   ? { c: 'orange',               e: '🟠' } :
+                                         op.action === 'delete' ? { c: 'var(--expense-soft)', e: '🔴' } :
+                                         null;
+                            return meta ? (
+                              <span style={{
+                                display: 'inline-block', marginLeft: 6, padding: '1px 6px',
+                                borderRadius: 6, background: meta.c, color: '#fff',
+                                fontSize: 10, fontWeight: 600, verticalAlign: 'middle',
+                              }} title={`รอ deploy: ${op.action}`}>
+                                {meta.e} pending
+                              </span>
+                            ) : null;
+                          })()}
                         </div>
                         <div className="meta">
                           ID: <code style={{color: 'var(--gold)'}}>{u.id}</code>
@@ -10453,7 +10543,7 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
 }
 
 // ============ Projects Manager Modal ============
-function ProjectsManager({ projects, transactions, onClose, onAdd, onUpdate, onRemove }) {
+function ProjectsManager({ projects, transactions, onClose, onAdd, onUpdate, onRemove, pendingByProjectId }) {
   const [newName, setNewName] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editDraft, setEditDraft] = useState('');
@@ -10581,7 +10671,27 @@ function ProjectsManager({ projects, transactions, onClose, onAdd, onUpdate, onR
                       ) : (
                         <>
                           <div className="name-wrap">
-                            <div className="name">📁 {p.name}</div>
+                            <div className="name" style={{
+                              textDecoration: pendingByProjectId?.get(p.id)?.action === 'delete' ? 'line-through' : 'none',
+                            }}>
+                              📁 {p.name}
+                              {pendingByProjectId?.get(p.id) && (() => {
+                                const op = pendingByProjectId.get(p.id);
+                                const meta = op.action === 'add'    ? { c: 'var(--sync-warn)',    e: '🟡' } :
+                                             op.action === 'edit'   ? { c: 'orange',               e: '🟠' } :
+                                             op.action === 'delete' ? { c: 'var(--expense-soft)', e: '🔴' } :
+                                             null;
+                                return meta ? (
+                                  <span style={{
+                                    display: 'inline-block', marginLeft: 6, padding: '1px 6px',
+                                    borderRadius: 6, background: meta.c, color: '#fff',
+                                    fontSize: 10, fontWeight: 600, verticalAlign: 'middle',
+                                  }} title={`รอ deploy: ${op.action}`}>
+                                    {meta.e} pending
+                                  </span>
+                                ) : null;
+                              })()}
+                            </div>
                             <div className="meta">{usage > 0 ? `ใช้ ${usage} ครั้ง` : 'ยังไม่ถูกใช้'}</div>
                           </div>
                           <div className="actions">
@@ -10614,7 +10724,7 @@ function ProjectsManager({ projects, transactions, onClose, onAdd, onUpdate, onR
 
 // ============ Categories Manager Modal ============
 // Manages only CUSTOM categories. Built-in categories are shown but not editable.
-function CategoriesManager({ categories, transactions, onClose, onAdd, onUpdate, onRemove, pushToast }) {
+function CategoriesManager({ categories, transactions, onClose, onAdd, onUpdate, onRemove, pushToast, pendingByCategoryId }) {
   const [tab, setTab] = useState('expense'); // 'income' | 'expense'
   const [newName, setNewName] = useState('');
   const [newIcon, setNewIcon] = useState('🏷️');
@@ -10781,7 +10891,27 @@ function CategoriesManager({ categories, transactions, onClose, onAdd, onUpdate,
                         <div className="name-wrap" style={{display:'flex', alignItems:'center', gap:10}}>
                           <span style={{fontSize: 22, flexShrink: 0}}>{c.icon}</span>
                           <div style={{flex: 1, minWidth: 0}}>
-                            <div className="name">{c.name}</div>
+                            <div className="name" style={{
+                              textDecoration: pendingByCategoryId?.get(c.id)?.action === 'delete' ? 'line-through' : 'none',
+                            }}>
+                              {c.name}
+                              {pendingByCategoryId?.get(c.id) && (() => {
+                                const op = pendingByCategoryId.get(c.id);
+                                const meta = op.action === 'add'    ? { c: 'var(--sync-warn)',    e: '🟡' } :
+                                             op.action === 'edit'   ? { c: 'orange',               e: '🟠' } :
+                                             op.action === 'delete' ? { c: 'var(--expense-soft)', e: '🔴' } :
+                                             null;
+                                return meta ? (
+                                  <span style={{
+                                    display: 'inline-block', marginLeft: 6, padding: '1px 6px',
+                                    borderRadius: 6, background: meta.c, color: '#fff',
+                                    fontSize: 10, fontWeight: 600, verticalAlign: 'middle',
+                                  }} title={`รอ deploy: ${op.action}`}>
+                                    {meta.e} pending
+                                  </span>
+                                ) : null;
+                              })()}
+                            </div>
                             <div className="meta">{usage > 0 ? `ใช้ ${usage} ครั้ง` : 'ยังไม่ถูกใช้'}</div>
                           </div>
                         </div>
