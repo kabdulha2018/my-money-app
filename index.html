@@ -3869,8 +3869,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.23';
-const APP_VERSION_TAG = 'Phase 5a: Foundation for Full Q (apply ทุก resource)';
+const APP_VERSION = 'v5.24';
+const APP_VERSION_TAG = 'Phase 5b: Accounts + Items ผ่าน Q + Deploy';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -5345,10 +5345,15 @@ function App() {
     const items = state.items || [];
     const exists = items.some(it => it.name.toLowerCase() === n.toLowerCase());
     if (exists) return false;
+    // v5.24 Phase 5b: build the item once, use it for BOTH the local
+    // mutate and the pending op record so the deploy step replays exactly
+    // what the user sees in their UI right now.
+    const newItem = { id: uid(), name: n, createdAt: new Date().toISOString() };
     mutate(prev => ({
       ...prev,
-      items: [...(prev.items || []), { id: uid(), name: n, createdAt: new Date().toISOString() }],
+      items: [...(prev.items || []), newItem],
     }));
+    addPendingOp({ resource: 'item', action: 'add', before: null, after: newItem }).catch(() => {});
     return true;
   };
   // Rename a master item — also updates all transactions referring to the old name
@@ -5362,16 +5367,28 @@ function App() {
     // Check duplicate (case-insensitive, excluding self)
     const dup = items.some(it => it.id !== id && it.name.toLowerCase() === n.toLowerCase());
     if (dup) return { ok: false, reason: 'duplicate' };
+    // v5.24 Phase 5b: cascade rename on the local transactions for snappy
+    // UI feedback, but ONLY record one pending op (the item rename itself).
+    // The cascaded tx changes will get pulled down from the freshly-deployed
+    // vault when other users' Deploy or our own auto-sync runs — we don't
+    // want to record N tx edits as separate pending ops, which would bloat
+    // the queue and confuse the user.
     const affected = renameMasterField('item', target.name, n);
+    const updated = { ...target, name: n };
     mutate(prev => ({
       ...prev,
-      items: (prev.items || []).map(it => it.id === id ? { ...it, name: n } : it),
+      items: (prev.items || []).map(it => it.id === id ? updated : it),
     }));
+    addPendingOp({ resource: 'item', action: 'edit', before: target, after: updated }).catch(() => {});
     return { ok: true, affectedTx: affected };
   };
   // Remove from master list only; leaves existing transactions alone
   const removeMasterItem = (id) => {
+    const target = (state.items || []).find(it => it.id === id);
     mutate(prev => ({ ...prev, items: (prev.items || []).filter(it => it.id !== id) }));
+    if (target) {
+      addPendingOp({ resource: 'item', action: 'delete', before: target, after: null }).catch(() => {});
+    }
   };
 
   // ============ Accounts Master List Handlers ============
@@ -5395,16 +5412,20 @@ function App() {
     if (currentUser && currentUser.role !== 'admin') {
       initialPerms[currentUser.id] = 'edit-own';
     }
+    // v5.24 Phase 5b: build the account once, use it for BOTH the local
+    // mutate and the pending op record.
+    const newAccount = {
+      id: uid(), name: n, decimals: d,
+      unitSymbol: sym, unitPosition: pos,
+      permissions: initialPerms,
+      createdBy: currentUser?.id || null,
+      createdAt: new Date().toISOString(),
+    };
     mutate(prev => ({
       ...prev,
-      accounts: [...(prev.accounts || []), {
-        id: uid(), name: n, decimals: d,
-        unitSymbol: sym, unitPosition: pos,
-        permissions: initialPerms,
-        createdBy: currentUser?.id || null,
-        createdAt: new Date().toISOString()
-      }],
+      accounts: [...(prev.accounts || []), newAccount],
     }));
+    addPendingOp({ resource: 'account', action: 'add', before: null, after: newAccount }).catch(() => {});
     return true;
   };
   const updateMasterAccount = (id, newName, newDecimals, newUnitSymbol, newUnitPosition) => {
@@ -5416,7 +5437,9 @@ function App() {
     if (!target) return { ok: false, reason: 'notfound' };
     const dup = accs.some(a => a.id !== id && (a.name || '').toLowerCase() === n.toLowerCase());
     if (dup) return { ok: false, reason: 'duplicate' };
-    // Cascade rename transactions if name changed
+    // Cascade rename transactions if name changed (local only; see comment
+    // in updateMasterItem above for why we only record the master rename
+    // as a pending op).
     let affected = 0;
     if (target.name !== n) {
       affected = renameMasterField('accountName', target.name, n);
@@ -5428,12 +5451,17 @@ function App() {
     const pos = newUnitPosition === undefined
       ? (target.unitPosition || guessUnitPosition(sym))
       : (newUnitPosition === 'after' ? 'after' : 'before');
+    // v5.24 Phase 5b: snapshot before/after for the pending op. We keep the
+    // existing permissions (this function doesn't touch them — that's
+    // setAccountPerm's job).
+    const updated = { ...target, name: n, decimals: d, unitSymbol: sym, unitPosition: pos };
     mutate(prev => ({
       ...prev,
       accounts: (prev.accounts || []).map(a =>
-        a.id === id ? { ...a, name: n, decimals: d, unitSymbol: sym, unitPosition: pos } : a
+        a.id === id ? updated : a
       ),
     }));
+    addPendingOp({ resource: 'account', action: 'edit', before: target, after: updated }).catch(() => {});
     return { ok: true, affectedTx: affected };
   };
   const removeMasterAccount = (id) => {
@@ -5448,22 +5476,29 @@ function App() {
       if (!isCreator) return { ok: false, reason: 'not-creator' };
     }
     mutate(prev => ({ ...prev, accounts: (prev.accounts || []).filter(a => a.id !== id) }));
+    addPendingOp({ resource: 'account', action: 'delete', before: target, after: null }).catch(() => {});
     return { ok: true };
   };
   // v5.0: set per-user permission on an account (admin only).
   // perm ∈ { 'none', 'view', 'edit-own' }
   const setAccountPerm = (accountId, userId, perm) => {
     if (!PERM_OPTS.some(p => p.id === perm)) return;
+    // v5.24 Phase 5b: setAccountPerm modifies account.permissions — the rest
+    // of the account stays the same. We record this as an account 'edit' op
+    // with before/after snapshots so drift detection still works: if someone
+    // else changed the account between when this admin saw it and when their
+    // Deploy fires, the apply step will catch it.
+    const target = (state.accounts || []).find(a => a.id === accountId);
+    if (!target) return;
+    const nextPerms = { ...(target.permissions || {}) };
+    if (perm === 'none') delete nextPerms[userId];
+    else nextPerms[userId] = perm;
+    const updated = { ...target, permissions: nextPerms };
     mutate(prev => ({
       ...prev,
-      accounts: (prev.accounts || []).map(a => {
-        if (a.id !== accountId) return a;
-        const nextPerms = { ...(a.permissions || {}) };
-        if (perm === 'none') delete nextPerms[userId];
-        else nextPerms[userId] = perm;
-        return { ...a, permissions: nextPerms };
-      }),
+      accounts: (prev.accounts || []).map(a => a.id === accountId ? updated : a),
     }));
+    addPendingOp({ resource: 'account', action: 'edit', before: target, after: updated }).catch(() => {});
   };
 
   // v5.0: user management (admin-only). All ops mutate state.users which syncs to OneDrive.
@@ -6185,6 +6220,7 @@ function App() {
             pushToast('ลบจากรายการแนะนำแล้ว');
           }}
           pushToast={pushToast}
+          pendingByItemId={pendingByResource.item}
         />
       )}
 
@@ -6225,6 +6261,7 @@ function App() {
           isAdmin={isAdmin}
           currentUserId={currentUser?.id}
           pushToast={pushToast}
+          pendingByAccountId={pendingByResource.account}
         />
       )}
 
@@ -7619,7 +7656,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.23 · Phase 5a: Foundation for Full Q 🧱</div>
+      <div className="vstrip">my money · v5.24 · Phase 5b: บัญชี + รายการชื่อ ผ่าน Q 🔐</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -9747,7 +9784,7 @@ function DeployResultScreen({ result, onClose }) {
   );
 }
 
-function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove, pushToast, isAdmin = true }) {
+function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove, pushToast, isAdmin = true, pendingByItemId }) {
   const [newName, setNewName] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editDraft, setEditDraft] = useState('');
@@ -9898,7 +9935,27 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
                       ) : (
                         <>
                           <div className="name-wrap">
-                            <div className="name">{it.name}</div>
+                            <div className="name" style={{
+                              textDecoration: pendingByItemId?.get(it.id)?.action === 'delete' ? 'line-through' : 'none',
+                            }}>
+                              {it.name}
+                              {pendingByItemId?.get(it.id) && (() => {
+                                const op = pendingByItemId.get(it.id);
+                                const meta = op.action === 'add'    ? { c: 'var(--sync-warn)',    e: '🟡' } :
+                                             op.action === 'edit'   ? { c: 'orange',               e: '🟠' } :
+                                             op.action === 'delete' ? { c: 'var(--expense-soft)', e: '🔴' } :
+                                             null;
+                                return meta ? (
+                                  <span style={{
+                                    display: 'inline-block', marginLeft: 6, padding: '1px 6px',
+                                    borderRadius: 6, background: meta.c, color: '#fff',
+                                    fontSize: 10, fontWeight: 600, verticalAlign: 'middle',
+                                  }} title={`รอ deploy: ${op.action}`}>
+                                    {meta.e} pending
+                                  </span>
+                                ) : null;
+                              })()}
+                            </div>
                             <div className="meta">
                               {usage > 0 ? `ใช้ ${usage} ครั้ง` : 'ยังไม่ถูกใช้'}
                             </div>
@@ -9941,7 +9998,7 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
 }
 
 // ============ Accounts Manager Modal ============
-function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpdate, onRemove, onSetPerm, isAdmin, currentUserId, pushToast }) {
+function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpdate, onRemove, onSetPerm, isAdmin, currentUserId, pushToast, pendingByAccountId }) {
   const [newName, setNewName] = useState('');
   const [newDecimals, setNewDecimals] = useState(2);
   // v5.6: unit symbol per account. '__custom' is a sentinel meaning "show custom input".
@@ -10237,7 +10294,9 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
                       ) : (
                         <>
                           <div className="name-wrap">
-                            <div className="name">
+                            <div className="name" style={{
+                              textDecoration: pendingByAccountId?.get(a.id)?.action === 'delete' ? 'line-through' : 'none',
+                            }}>
                               {(() => {
                                 // Show small badges for each member that has any access
                                 const perms = a.permissions || {};
@@ -10252,6 +10311,22 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
                               })()}
                               {a.name}
                               <span className="dec-badge">·{dec}d</span>
+                              {pendingByAccountId?.get(a.id) && (() => {
+                                const op = pendingByAccountId.get(a.id);
+                                const meta = op.action === 'add'    ? { c: 'var(--sync-warn)',    e: '🟡' } :
+                                             op.action === 'edit'   ? { c: 'orange',               e: '🟠' } :
+                                             op.action === 'delete' ? { c: 'var(--expense-soft)', e: '🔴' } :
+                                             null;
+                                return meta ? (
+                                  <span style={{
+                                    display: 'inline-block', marginLeft: 6, padding: '1px 6px',
+                                    borderRadius: 6, background: meta.c, color: '#fff',
+                                    fontSize: 10, fontWeight: 600, verticalAlign: 'middle',
+                                  }} title={`รอ deploy: ${op.action}`}>
+                                    {meta.e} pending
+                                  </span>
+                                ) : null;
+                              })()}
                             </div>
                             <div className="meta">
                               {usage > 0 ? `ใช้ ${usage} ครั้ง` : 'ยังไม่ถูกใช้'}
