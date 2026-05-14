@@ -12805,101 +12805,93 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App/>);
 </script>
 
-<button onclick="testReadQueue()" style="position: fixed; bottom: 20px; left: 20px; z-index: 99999; padding: 15px; background-color: #2e7d32; color: white; border-radius: 8px; border: none; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-  🔍 ดูรายละเอียดคิวทั้งหมด
+<button id="myQueueBtn" style="position: fixed; bottom: 20px; left: 20px; z-index: 999999; padding: 15px; background-color: #2e7d32; color: white; border-radius: 8px; border: none; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+  🔍 ดูข้อมูลคิวของแอปนี้
 </button>
 
 <script>
-function testReadQueue() {
-    const request = indexedDB.open("mymoney-photos"); 
-    
-    request.onsuccess = (event) => {
-        const db = event.target.result;
+document.getElementById('myQueueBtn').onclick = function() {
+    var req = indexedDB.open("mymoney-photos");
+    req.onsuccess = function(e) {
+        var db = e.target.result;
         try {
-            const transaction = db.transaction(["pending_ops"], "readonly");
-            const store = transaction.objectStore("pending_ops");
-            const getAllRequest = store.getAll();
-
-            getAllRequest.onsuccess = () => {
-                const allData = getAllRequest.result;
+            var tx = db.transaction(["pending_ops"], "readonly");
+            var store = tx.objectStore("pending_ops");
+            var getReq = store.getAll();
+            
+            getReq.onsuccess = function() {
+                var allData = getReq.result;
+                var html = "<div style='padding: 20px; font-family: sans-serif; padding-bottom: 50px;'>";
+                html += "<div style='display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px;'>";
+                html += "<h2 style='margin: 0;'>รายการรอดำเนินการ</h2>";
+                html += "<button onclick='document.getElementById(\"queueOverlay\").style.display=\"none\"' style='padding: 10px 20px; background: #d32f2f; color: white; border: none; border-radius: 5px; font-weight: bold;'>ปิดหน้าต่าง</button>";
+                html += "</div>";
                 
-                // 1. ลบหน้าต่างอันเก่าทิ้งถ้ามีค้างอยู่ (กันเปิดซ้ำ)
-                const existingOverlay = document.getElementById('my-queue-overlay');
-                if(existingOverlay) existingOverlay.remove();
-
-                // 2. สร้างหน้าต่าง Overlay ขึ้นมาใหม่สดๆ
-                const overlay = document.createElement('div');
-                overlay.id = 'my-queue-overlay';
-                overlay.style = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 100000; overflow-y: auto; padding: 20px; box-sizing: border-box; font-family: sans-serif;";
-                
-                // 3. เริ่มสร้างเนื้อหาข้างใน
-                let htmlContent = `
-                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px;">
-                        <h2 style="margin: 0; color: #333;">รายการรอดำเนินการ (Queue)</h2>
-                        <button onclick="document.getElementById('my-queue-overlay').remove()" style="padding: 10px 20px; background: #d32f2f; color: white; border: none; border-radius: 5px; font-weight: bold;">ปิดหน้าต่าง</button>
-                    </div>
-                    <div id="queue-content">
-                `;
-                
-                let hasData = false;
-
-                // 4. วนลูปดึงข้อมูลมาใส่ (เหมือนเดิม)
-                allData.forEach(userRecord => {
-                    if (userRecord && userRecord.operations && userRecord.operations.length > 0) {
-                        hasData = true;
-                        htmlContent += `<h3 style="background: #f5f5f5; padding: 10px; border-radius: 5px;">ผู้ใช้งาน: ${userRecord.userId}</h3>`;
-
-                        userRecord.operations.forEach((op, index) => {
-                            const typeColor = op.type === 'Add' ? '#2e7d32' : op.type === 'Edit' ? '#f57c00' : '#d32f2f';
-                            htmlContent += `
-                                <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                                        <span style="background: ${typeColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">${op.type}</span>
-                                        <span style="color: #888; font-size: 12px;">ID: ${op.id || index}</span>
-                                    </div>
-                                    <div style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">รายการ: ${op.after?.item || op.before?.item || '-'}</div>
-                                    <div style="color: #2e7d32; font-weight: bold;">จำนวนเงิน: ${op.after?.amount || op.before?.amount || 0} ฿</div>
-                                    <div style="font-size: 13px; color: #666; margin-top: 8px;">วันที่: ${op.after?.date || op.before?.date || '-'}</div>
-                            `;
+                var count = 0;
+                for (var i = 0; i < allData.length; i++) {
+                    var userRow = allData[i];
+                    if (userRow.operations && userRow.operations.length > 0) {
+                        html += "<h3 style='background: #f5f5f5; padding: 10px; border-radius: 5px;'>ผู้ใช้งาน: " + userRow.userId + "</h3>";
+                        
+                        for (var j = 0; j < userRow.operations.length; j++) {
+                            count++;
+                            var op = userRow.operations[j];
+                            var act = op.action || 'unknown';
+                            var color = act === 'add' ? '#2e7d32' : act === 'edit' ? '#f57c00' : '#d32f2f';
                             
-                            if(op.type === 'Edit') {
-                                htmlContent += `
-                                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #eee; font-size: 12px;">
-                                        <div style="color: #d32f2f;">🔴 ก่อนแก้: ${op.before?.amount} (${op.before?.item})</div>
-                                        <div style="color: #2e7d32;">🟢 หลังแก้: ${op.after?.amount} (${op.after?.item})</div>
-                                    </div>
-                                `;
+                            html += "<div style='border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); background: white;'>";
+                            html += "<div style='margin-bottom: 10px;'><span style='color: white; background: " + color + "; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-transform: uppercase;'>" + act + "</span> <span style='color: #888; font-size: 12px; margin-left: 10px;'>ID: " + op.id + "</span></div>";
+                            
+                            var afterItem = (op.after && op.after.item) ? op.after.item : (op.after && op.after.payee) ? op.after.payee : '-';
+                            var afterAmt = (op.after && op.after.amount) ? op.after.amount : 0;
+                            var beforeItem = (op.before && op.before.item) ? op.before.item : (op.before && op.before.payee) ? op.before.payee : '-';
+                            var beforeAmt = (op.before && op.before.amount) ? op.before.amount : 0;
+
+                            if (act === 'edit') {
+                                html += "<div style='color: #d32f2f; font-size: 14px;'>🔴 ก่อนแก้: <b>" + beforeItem + "</b> (" + beforeAmt + " ฿)</div>";
+                                html += "<div style='color: #2e7d32; font-size: 14px; margin-top: 5px;'>🟢 หลังแก้: <b>" + afterItem + "</b> (" + afterAmt + " ฿)</div>";
+                            } else if (act === 'add') {
+                                html += "<div style='color: #2e7d32; font-size: 16px; font-weight: bold;'>รายการ: " + afterItem + "</div>";
+                                html += "<div style='color: #555; font-size: 14px; margin-top: 5px;'>จำนวนเงิน: " + afterAmt + " ฿</div>";
+                            } else if (act === 'delete') {
+                                html += "<div style='color: #d32f2f; font-size: 16px; font-weight: bold;'>ลบรายการ: " + beforeItem + "</div>";
+                                html += "<div style='color: #555; font-size: 14px; margin-top: 5px;'>จำนวนเงิน: " + beforeAmt + " ฿</div>";
                             }
-                            htmlContent += `</div>`;
-                        });
+                            
+                            html += "</div>";
+                        }
                     }
-                });
-
-                if (!hasData) {
-                    htmlContent += "<p style='text-align:center; color:#999; margin-top:50px;'>ไม่มีข้อมูลค้างในคิวครับ</p>";
                 }
-
-                htmlContent += `</div>`; // ปิด queue-content
-                overlay.innerHTML = htmlContent;
-
-                // 5. เอาหน้าต่างไปแปะไว้บนสุดของเว็บไซต์ (รอดจากการโดน React ลบแน่นอน)
-                document.body.appendChild(overlay);
+                
+                if (count === 0) {
+                    html += "<p style='text-align:center; color:#999; margin-top: 40px;'>ไม่มีรายการค้างในคิวครับ</p>";
+                }
+                html += "</div>";
+                
+                var old = document.getElementById("queueOverlay");
+                if (old) old.parentNode.removeChild(old);
+                
+                var div = document.createElement("div");
+                div.id = "queueOverlay";
+                div.style.position = "fixed";
+                div.style.top = "0";
+                div.style.left = "0";
+                div.style.width = "100%";
+                div.style.height = "100%";
+                div.style.backgroundColor = "white";
+                div.style.zIndex = "1000000";
+                div.style.overflow = "auto";
+                div.innerHTML = html;
+                document.body.appendChild(div);
             };
-        } catch (e) {
-            alert("ไม่พบตารางข้อมูลคิวครับ");
+        } catch(err) {
+            alert("ไม่พบตารางเก็บคิว หรือยังไม่ได้สร้างข้อมูลครับ");
         }
     };
-    
-    request.onerror = () => alert("เปิดฐานข้อมูลไม่ได้ครับ");
-}
-
-// โค้ดรัน React ของแอปเดิม
-const container = document.getElementById('root');
-if (container) {
-    const root = ReactDOM.createRoot(container);
-    root.render(<App />);
-}
+    req.onerror = function() {
+        alert("เปิดฐานข้อมูลไม่ได้ครับ");
+    };
+};
 </script>
-
 </body>
 </html>
