@@ -12804,5 +12804,41 @@ _เริ่มเขียนเมื่อ ${new Date().toLocaleDateString('
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App/>);
 </script>
+<button onclick="testReadIndexedDB()" style="position: fixed; bottom: 20px; left: 20px; z-index: 9999; padding: 15px; background-color: #d32f2f; color: white; border-radius: 8px; border: none; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+  🔍 ทดสอบดึงคิว (IndexedDB)
+</button>
+
+<script>
+function testReadIndexedDB() {
+    // 1. เปิดฐานข้อมูล (เช็กชื่อ "MyMoneyDB" ให้ตรงกับในโค้ดแอปของคุณด้วยนะครับ)
+    const request = indexedDB.open("MyMoneyDB"); 
+    
+    request.onsuccess = (event) => {
+        const db = event.target.result;
+        try {
+            // 2. ขออ่านตาราง pending_ops
+            const transaction = db.transaction(["pending_ops"], "readonly");
+            const store = transaction.objectStore("pending_ops");
+            const getAllRequest = store.getAll();
+
+            // 3. เมื่อดึงข้อมูลสำเร็จ
+            getAllRequest.onsuccess = () => {
+                const allData = getAllRequest.result;
+                
+                // แสดงผลป๊อปอัปบนหน้าจอมือถือ
+                alert("พบข้อมูลค้างในคิว: " + allData.length + " รายการ\\n(ดูรายละเอียดเชิงลึกได้ใน Kiwi Browser F12)");
+                
+                // พิมพ์รายละเอียดลง Console ด้วย
+                console.log("=== ข้อมูลในคิวทั้งหมด ===");
+                console.log(allData);
+            };
+        } catch (e) {
+            alert("ไม่พบตาราง pending_ops หรือยังไม่มีการสร้างคิวเลยครับ");
+        }
+    };
+    
+    request.onerror = () => alert("เปิดฐานข้อมูลไม่ได้ครับ");
+}
+</script>
 </body>
 </html>
