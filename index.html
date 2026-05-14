@@ -12845,7 +12845,7 @@ root.render(<App/>);
         icon.style.scale = "1";
     });
 
-    // --- ฟังก์ชันแสดงข้อมูล (เอาเส้นขีดทับออกแล้ว) ---
+    // --- ฟังก์ชันแสดงข้อมูล (เปลี่ยน -/+ เป็น old/new) ---
     function openQueueOverlay() {
         var req = indexedDB.open("mymoney-photos");
         req.onsuccess = function(e) {
@@ -12897,13 +12897,17 @@ root.render(<App/>);
                                         html += "<span style='color:#9cdcfe;'>" + f + "</span>: ";
                                         
                                         if (action === 'EDIT' && valB !== valA) {
+                                            // จัดการค่าที่อาจจะเป็น 0, ติดลบ, หรือ null ให้แสดงผลถูกต้อง
+                                            var showB = (valB !== undefined && valB !== null && valB !== "") ? valB : 'null';
+                                            var showA = (valA !== undefined && valA !== null && valA !== "") ? valA : 'null';
+                                            
                                             html += "<div style='margin-left:10px; border-left:1px solid #444; padding-left:8px; margin-top:4px;'>";
-                                            // แก้ตรงนี้: เอา text-decoration:line-through; ออกไปแล้ว
-                                            html += "<div style='color:#f44336; font-size:11px;'>- " + (valB || 'null') + "</div>";
-                                            html += "<div style='color:#4caf50;'>+ " + (valA || 'null') + "</div>";
+                                            html += "<div style='color:#f44336; font-size:11px;'>old: " + showB + "</div>";
+                                            html += "<div style='color:#4caf50;'>new: " + showA + "</div>";
                                             html += "</div>";
                                         } else {
-                                            html += "<span style='color:#ce9178;'>\"" + (valA || valB || '') + "\"</span>";
+                                            var showVal = (valA !== undefined && valA !== null && valA !== "") ? valA : ((valB !== undefined && valB !== null && valB !== "") ? valB : '');
+                                            html += "<span style='color:#ce9178;'>\"" + showVal + "\"</span>";
                                         }
                                         html += "</div>";
                                     }
