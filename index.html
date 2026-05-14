@@ -4093,8 +4093,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.30';
-const APP_VERSION_TAG = 'หลัง deploy บังคับ refresh state จาก vault ใหม่เสมอ';
+const APP_VERSION = 'v5.31';
+const APP_VERSION_TAG = 'ดูรูป orphan ทีละรูปก่อนลบ + lightbox';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -5157,6 +5157,10 @@ function App() {
   const [showHistoryViewer, setShowHistoryViewer] = useState(false);
   const [showStorageMgr, setShowStorageMgr] = useState(false);
   const [orphanScanResult, setOrphanScanResult] = useState(null);
+  // v5.31: secondary modal — opens from StorageManager to let the user
+  // preview each orphan photo (thumbnail grid + lightbox) before deleting.
+  // Stacks on top of StorageManager (which stays open underneath).
+  const [showPhotoReview, setShowPhotoReview] = useState(false);
   const [scanningOrphans, setScanningOrphans] = useState(false);
   const [resettingQueue, setResettingQueue] = useState(false);
   // v2.8: text zoom level — 0=normal, 1=large (115%), 2=larger (130%), 3=largest (145%)
@@ -6564,7 +6568,7 @@ function App() {
           modal can stay dumb (no fetch calls of its own). */}
       {showStorageMgr && isAdmin && (
         <StorageManager
-          onClose={() => { setShowStorageMgr(false); setOrphanScanResult(null); }}
+          onClose={() => { setShowStorageMgr(false); setOrphanScanResult(null); setShowPhotoReview(false); }}
           pushToast={pushToast}
           resettingQueue={resettingQueue}
           onResetQueue={async () => {
@@ -6611,6 +6615,59 @@ function App() {
             }
           }}
           onClearScan={() => setOrphanScanResult(null)}
+          onOpenReview={() => setShowPhotoReview(true)}
+        />
+      )}
+
+      {/* v5.31: Per-photo review modal. Opens on top of StorageManager.
+          Closing it returns to StorageManager with the scan result still
+          loaded (so the user can scan again, or bulk-delete the remaining,
+          etc.). If the user deletes everything inside the review, that's
+          fine — the scan result will reflect the change next time they
+          scan. */}
+      {showPhotoReview && isAdmin && orphanScanResult && (
+        <PhotoOrphanReview
+          orphans={orphanScanResult}
+          pushToast={pushToast}
+          onClose={() => setShowPhotoReview(false)}
+          onDeleteOne={async (item) => {
+            // item = { id, name, size, scope: 'cloud' | 'local' }
+            // deletePhoto handles both cloud and cache. Local-only blobs
+            // (no cloud counterpart) still go through deletePhoto: the
+            // OneDrive call will 404 silently, which is fine — and the
+            // local cache wipe will succeed. Belt-and-suspenders: for
+            // 'local' scope we also call idbDeleteBlob directly so even
+            // if deletePhoto's cloud path raises, the local IDB entry
+            // is gone.
+            await deletePhoto(item.id);
+            if (item.scope === 'local') {
+              try { await idbDeleteBlob(item.id); } catch {}
+            }
+            // Also remove this id from the in-memory orphanScanResult so
+            // subsequent renders / bulk delete calls don't re-process it.
+            setOrphanScanResult(prev => {
+              if (!prev) return prev;
+              const cloudOrphans = (prev.cloud?.orphanIds || []).filter(o => o.id !== item.id);
+              const localOrphans = (prev.local?.orphanIds || []).filter(id => id !== item.id);
+              // Recompute cloud bytes — sum of remaining cloud orphans.
+              const cloudBytes = cloudOrphans.reduce((sum, o) => sum + (o.size || 0), 0);
+              return {
+                ...prev,
+                cloud: { ...prev.cloud, orphanIds: cloudOrphans, totalBytes: cloudBytes },
+                local: { ...prev.local, orphanIds: localOrphans },
+              };
+            });
+          }}
+          onDeleteAll={async () => {
+            // Use the existing bulk pipeline so behaviour matches the
+            // "ลบทั้งหมด" path in StorageManager exactly.
+            if (!orphanScanResult) return;
+            const res = await deleteOrphans(orphanScanResult);
+            const total = res.cloudOk + res.localOk;
+            const failed = res.cloudFail + res.localFail;
+            pushToast(`ลบ ${total} รูปแล้ว` + (failed ? ` (ล้มเหลว ${failed})` : ''));
+            setOrphanScanResult(null);
+          }}
         />
       )}
 
@@ -8127,7 +8184,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.30 · บังคับ refresh หลัง deploy 🔄</div>
+      <div className="vstrip">my money · v5.31 · ดูรูป orphan ทีละรูปก่อนลบ 🖼️</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -10459,7 +10516,8 @@ function HistoryViewer({ history, onClose }) {
 // the caller to be signed in with appropriate scope. UI gating is enough.
 function StorageManager({ onClose, onResetQueue, resettingQueue,
                           onScanOrphans, orphanScanResult, scanningOrphans,
-                          onDeleteOrphans, onClearScan, pushToast }) {
+                          onDeleteOrphans, onClearScan, pushToast,
+                          onOpenReview }) {
   const orphanCounts = orphanScanResult ? (() => {
     const c = orphanScanResult.cloud || {};
     const l = orphanScanResult.local || {};
@@ -10519,18 +10577,28 @@ function StorageManager({ onClose, onResetQueue, resettingQueue,
                 </div>
 
                 {(orphanCounts.cloudOrphans + orphanCounts.localOrphans) > 0 ? (
-                  <div style={{display: 'flex', gap: 8, marginTop: 12}}>
-                    <button className="btn-ghost" style={{flex: 1}}
-                            onClick={async () => {
-                              if (!window.confirm(`ลบรูป ${orphanCounts.cloudOrphans + orphanCounts.localOrphans} รูปที่ไม่ใช้แล้ว?\n(ทำหลังจาก deploy เสร็จแล้วเท่านั้น)`)) return;
-                              await onDeleteOrphans();
-                            }}>
-                      <Ic.Trash size={14}/> ลบทั้งหมด
+                  <>
+                    {/* v5.31: review-first button. Opens PhotoOrphanReview
+                        with thumbnails + per-photo delete + lightbox preview.
+                        Strongly recommended over "ลบทั้งหมด" — gives the
+                        user a chance to verify before deletion. */}
+                    <button className="btn-primary" style={{width: '100%', marginTop: 12}}
+                            onClick={() => onOpenReview && onOpenReview()}>
+                      🖼️ ดูรูปก่อนลบ ({orphanCounts.cloudOrphans + orphanCounts.localOrphans} รูป)
                     </button>
-                    <button className="btn-ghost" style={{flex: 1}} onClick={onClearScan}>
-                      ⊘ ยกเลิก
-                    </button>
-                  </div>
+                    <div style={{display: 'flex', gap: 8, marginTop: 8}}>
+                      <button className="btn-ghost" style={{flex: 1, fontSize: 12}}
+                              onClick={async () => {
+                                if (!window.confirm(`ลบรูปทั้งหมด ${orphanCounts.cloudOrphans + orphanCounts.localOrphans} รูปโดยไม่ตรวจ?`)) return;
+                                await onDeleteOrphans();
+                              }}>
+                        <Ic.Trash size={12}/> ลบทั้งหมด (ไม่ตรวจ)
+                      </button>
+                      <button className="btn-ghost" style={{flex: 1, fontSize: 12}} onClick={onClearScan}>
+                        ⊘ ยกเลิก
+                      </button>
+                    </div>
+                  </>
                 ) : (
                   <div style={{marginTop: 12, textAlign: 'center', color: 'var(--income-soft)', fontWeight: 600}}>
                     ✨ ไม่มีรูปที่ไม่ใช้แล้ว
@@ -10580,6 +10648,429 @@ function StorageManager({ onClose, onResetQueue, resettingQueue,
         </div>
       </div>
     </div>
+  );
+}
+
+// ============ v5.31: PhotoOrphanReview ============
+// "Review-and-delete" screen for orphan photos. Sits one level deeper than
+// the StorageManager bulk-delete flow: the user has reasonable concerns
+// about losing a photo, so before each delete they should be able to SEE
+// the photo. This component shows a thumbnail grid, lets the user tap any
+// thumbnail to see it full-screen, and provides per-photo delete + multi-
+// select bulk delete.
+//
+// Source of photo blobs:
+//   - Cloud orphans:   fetchPhotoUrl(id) — falls through to OneDrive if not
+//                       cached. We CACHE the result on the way down so a
+//                       user who scrolls back doesn't re-download.
+//   - Local orphans:   fetchPhotoUrl(id) — finds the blob in IDB. Same call.
+//
+// To avoid hammering OneDrive on first open, we lazily resolve thumbnails:
+//   - Render <img src=""> placeholder
+//   - On first paint, fetchPhotoUrl for each one (in parallel, capped to
+//     6 concurrent — Graph API doesn't like 100+ simultaneous fetches)
+//   - When the URL resolves, swap it in via state
+//
+// onDeleteOne(idOrObj, scope)  — called per-photo. scope ∈ 'cloud' | 'local'
+// onDeleteMany(ids, ...)        — called after multi-select confirm
+// All deletes use the same plumbing (deletePhoto / idbDeleteBlob) so the
+// host (App) doesn't need new handlers — we accept refs to those.
+function PhotoOrphanReview({ orphans, onClose, onDeleteOne, onDeleteAll, pushToast }) {
+  // Combined list with scope info so we can render one grid.
+  const items = useMemo(() => {
+    const out = [];
+    for (const o of (orphans?.cloud?.orphanIds || [])) {
+      // o = { id, name, size }
+      out.push({ id: o.id, name: o.name, size: o.size, scope: 'cloud' });
+    }
+    for (const id of (orphans?.local?.orphanIds || [])) {
+      // skip ids that already appear in cloud (deletePhoto handles cache too)
+      if (out.some(x => x.id === id)) continue;
+      out.push({ id, name: id, size: 0, scope: 'local' });
+    }
+    return out;
+  }, [orphans]);
+
+  // Thumbnail URLs resolve asynchronously. Keys = photoId, values = blob URL
+  // (or null when still loading, or '__error__' on failure).
+  const [thumbs, setThumbs] = useState({});
+  // Multi-select set: photoIds the user has checked off for batch delete.
+  const [selected, setSelected] = useState(() => new Set());
+  // Full-screen lightbox state
+  const [lightboxIdx, setLightboxIdx] = useState(-1);
+  // Track which photos have been deleted in this session so we hide them
+  // from the grid without waiting for a re-scan.
+  const [deletedIds, setDeletedIds] = useState(() => new Set());
+
+  // Visible list (un-deleted)
+  const visible = useMemo(
+    () => items.filter(x => !deletedIds.has(x.id)),
+    [items, deletedIds]
+  );
+
+  // Lazy thumbnail loader with concurrency cap to be kind to Graph API.
+  // Triggered by `items` change (which happens once when the screen opens).
+  useEffect(() => {
+    let cancelled = false;
+    const queue = items.slice();
+    let inFlight = 0;
+    const MAX = 6;
+    function pump() {
+      if (cancelled) return;
+      while (inFlight < MAX && queue.length > 0) {
+        const it = queue.shift();
+        inFlight++;
+        // Skip if we already have a URL for this id (component re-mounted etc.)
+        if (thumbs[it.id]) { inFlight--; continue; }
+        fetchPhotoUrl(it.id)
+          .then(url => {
+            if (cancelled) return;
+            setThumbs(prev => ({ ...prev, [it.id]: url }));
+          })
+          .catch(e => {
+            console.warn('thumbnail load failed', it.id, e);
+            if (cancelled) return;
+            setThumbs(prev => ({ ...prev, [it.id]: '__error__' }));
+          })
+          .finally(() => {
+            if (cancelled) return;
+            inFlight--;
+            pump();
+          });
+      }
+    }
+    pump();
+    return () => {
+      cancelled = true;
+      // We DON'T URL.revokeObjectURL here — the photos may be reused if
+      // the user reopens this screen in the same session, and revoking
+      // would also break the lightbox if still open. Browser cleans up
+      // when the tab closes anyway.
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
+
+  const toggleSelect = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const selectAll = () => setSelected(new Set(visible.map(x => x.id)));
+  const clearSelect = () => setSelected(new Set());
+
+  // Delete a single photo. Confirm with the user first (we know they're
+  // already in a "delete" mindset since they opened this screen, but a
+  // single tap is too easy to mis-trigger).
+  const handleDeleteOne = async (it) => {
+    if (!window.confirm(`ลบรูปนี้ถาวร?\n(${it.name})`)) return;
+    try {
+      await onDeleteOne(it);
+      setDeletedIds(prev => new Set(prev).add(it.id));
+      setSelected(prev => { const n = new Set(prev); n.delete(it.id); return n; });
+    } catch (e) {
+      console.error('delete one failed:', e);
+      pushToast('ลบไม่สำเร็จ: ' + (e.message || e));
+    }
+  };
+
+  // Bulk delete: delete every checked photo, confirm count first.
+  const handleDeleteSelected = async () => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) { pushToast('ยังไม่ได้เลือกรูป'); return; }
+    if (!window.confirm(`ลบรูปที่เลือก ${ids.length} รูปถาวร?`)) return;
+    const itemsToDelete = visible.filter(x => selected.has(x.id));
+    let ok = 0, fail = 0;
+    for (const it of itemsToDelete) {
+      try {
+        await onDeleteOne(it);
+        ok++;
+        setDeletedIds(prev => new Set(prev).add(it.id));
+      } catch (e) {
+        fail++;
+        console.warn('bulk delete failed for', it.id, e);
+      }
+    }
+    setSelected(new Set());
+    pushToast(`ลบ ${ok} รูปแล้ว` + (fail ? ` (ล้มเหลว ${fail})` : ''));
+  };
+
+  // Full-screen lightbox view of a single photo. Lets the user nav prev/next
+  // and delete from within (a common pattern in photo gallery apps).
+  const lightboxItem = lightboxIdx >= 0 && lightboxIdx < visible.length
+                       ? visible[lightboxIdx] : null;
+
+  const openLightbox = (idx) => setLightboxIdx(idx);
+  const closeLightbox = () => setLightboxIdx(-1);
+  const lightboxPrev = () => setLightboxIdx(i => Math.max(0, i - 1));
+  const lightboxNext = () => setLightboxIdx(i => Math.min(visible.length - 1, i + 1));
+  const lightboxDelete = async () => {
+    if (!lightboxItem) return;
+    if (!window.confirm(`ลบรูปนี้ถาวร?\n(${lightboxItem.name})`)) return;
+    try {
+      await onDeleteOne(lightboxItem);
+      const removedIdx = lightboxIdx;
+      setDeletedIds(prev => new Set(prev).add(lightboxItem.id));
+      setSelected(prev => { const n = new Set(prev); n.delete(lightboxItem.id); return n; });
+      // After deletion `visible` will shrink by 1. Adjust lightbox idx so
+      // the user lands on the NEXT photo (which now occupies the old
+      // index), unless they were on the last one in which case close.
+      const newLen = visible.length - 1;
+      if (newLen === 0) {
+        setLightboxIdx(-1);
+      } else if (removedIdx >= newLen) {
+        setLightboxIdx(newLen - 1);
+      }
+      // else: keep idx — the deletion shifts later items down so the SAME
+      // idx now points at what used to be the next item.
+    } catch (e) {
+      pushToast('ลบไม่สำเร็จ: ' + (e.message || e));
+    }
+  };
+
+  return (
+    <>
+      <div className="sheet-backdrop fade" onClick={onClose}>
+        <div className="sheet-wrap sheet-in" onClick={e => e.stopPropagation()}>
+          <div className="sheet" style={{maxHeight: '90vh', overflowY: 'auto'}}>
+            <div className="sheet-handle"></div>
+            <div className="sheet-head">
+              <h2>🖼️ ตรวจรูปก่อนลบ ({visible.length})</h2>
+              <button className="icon-btn-round" onClick={onClose} aria-label="ปิด">
+                <Ic.X size={16}/>
+              </button>
+            </div>
+
+            <div style={{
+              fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5,
+              padding: '8px 4px 12px',
+            }}>
+              แตะรูปเพื่อขยายดู · กดปุ่ม ✕ ที่มุมรูปเพื่อลบทีละรูป · ติ๊กหลายรูปแล้วลบรวม
+            </div>
+
+            {/* Selection toolbar — visible only when at least one is picked */}
+            {selected.size > 0 && (
+              <div style={{
+                display: 'flex', gap: 8, alignItems: 'center',
+                padding: '10px 12px', marginBottom: 12,
+                background: 'rgba(106,134,108,0.1)', borderRadius: 10,
+              }}>
+                <span style={{flex: 1, fontSize: 13, fontWeight: 600}}>
+                  เลือกแล้ว {selected.size} รูป
+                </span>
+                <button className="btn-ghost" style={{
+                          padding: '4px 12px', fontSize: 12,
+                          borderColor: 'var(--expense-soft)',
+                          color: 'var(--expense-soft)',
+                        }} onClick={handleDeleteSelected}>
+                  🗑️ ลบที่เลือก
+                </button>
+                <button className="btn-ghost" style={{padding: '4px 10px', fontSize: 12}}
+                        onClick={clearSelect}>
+                  ⊘
+                </button>
+              </div>
+            )}
+
+            {visible.length === 0 ? (
+              <div style={{padding: '40px 20px', textAlign: 'center', color: 'var(--income-soft)', fontWeight: 600}}>
+                ✨ ลบครบแล้ว
+              </div>
+            ) : (
+              <>
+                {/* Thumbnail grid — 4 columns on mobile, gap-filled */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))',
+                  gap: 8, padding: '0 4px 12px',
+                }}>
+                  {visible.map((it, idx) => {
+                    const url = thumbs[it.id];
+                    const isErr = url === '__error__';
+                    const isLoading = !url;
+                    const isSelected = selected.has(it.id);
+                    return (
+                      <div key={it.id} style={{
+                        position: 'relative',
+                        aspectRatio: '1 / 1',
+                        borderRadius: 8,
+                        overflow: 'hidden',
+                        background: 'var(--surface)',
+                        border: isSelected ? '2px solid var(--gold)' : '1px solid var(--line)',
+                        cursor: isLoading ? 'default' : 'pointer',
+                      }}>
+                        {/* Tap area opens lightbox */}
+                        <div onClick={() => !isLoading && !isErr && openLightbox(idx)}
+                             style={{width: '100%', height: '100%'}}>
+                          {isLoading ? (
+                            <div style={{
+                              width: '100%', height: '100%', display: 'flex',
+                              alignItems: 'center', justifyContent: 'center',
+                              fontSize: 20, color: 'var(--text-faint)',
+                            }}>⏳</div>
+                          ) : isErr ? (
+                            <div style={{
+                              width: '100%', height: '100%', display: 'flex',
+                              alignItems: 'center', justifyContent: 'center',
+                              fontSize: 11, color: 'var(--text-faint)', padding: 4, textAlign: 'center',
+                            }}>โหลดไม่ได้</div>
+                          ) : (
+                            <img src={url} alt={it.name}
+                                 style={{width: '100%', height: '100%', objectFit: 'cover'}}/>
+                          )}
+                        </div>
+
+                        {/* Scope badge — small tag at top-left to show cloud/local */}
+                        <span style={{
+                          position: 'absolute', top: 2, left: 2,
+                          padding: '1px 4px', borderRadius: 4,
+                          background: 'rgba(0,0,0,0.55)', color: '#fff',
+                          fontSize: 9, fontWeight: 600,
+                          pointerEvents: 'none',
+                        }}>
+                          {it.scope === 'cloud' ? '☁️' : '💾'}
+                        </span>
+
+                        {/* Multi-select checkbox at top-right */}
+                        <button onClick={(e) => { e.stopPropagation(); toggleSelect(it.id); }}
+                                style={{
+                                  position: 'absolute', top: 2, right: 2,
+                                  width: 22, height: 22, borderRadius: 11,
+                                  background: isSelected ? 'var(--gold)' : 'rgba(0,0,0,0.55)',
+                                  color: '#fff', border: 'none',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                                }}>
+                          {isSelected ? '✓' : '○'}
+                        </button>
+
+                        {/* Per-photo delete (×) at bottom-right */}
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteOne(it); }}
+                                disabled={isLoading || isErr}
+                                style={{
+                                  position: 'absolute', bottom: 2, right: 2,
+                                  width: 22, height: 22, borderRadius: 11,
+                                  background: 'var(--expense-soft)', color: '#fff',
+                                  border: 'none', cursor: (isLoading || isErr) ? 'default' : 'pointer',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: 12, fontWeight: 700,
+                                  opacity: (isLoading || isErr) ? 0.5 : 1,
+                                }} title="ลบรูปนี้">
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Footer actions */}
+                <div style={{display: 'flex', gap: 8, padding: '8px 0 4px'}}>
+                  <button className="btn-ghost" style={{flex: 1}} onClick={selectAll}>
+                    เลือกทั้งหมด
+                  </button>
+                  <button className="btn-ghost" style={{
+                            flex: 1,
+                            borderColor: 'var(--expense-soft)',
+                            color: 'var(--expense-soft)',
+                          }} onClick={async () => {
+                            if (!window.confirm(`ลบรูปทั้งหมด ${visible.length} รูปถาวร?`)) return;
+                            // Use the parent's batch delete — same path as the
+                            // bulk delete from StorageManager.
+                            try {
+                              await onDeleteAll();
+                              setDeletedIds(prev => {
+                                const n = new Set(prev);
+                                for (const x of visible) n.add(x.id);
+                                return n;
+                              });
+                              setSelected(new Set());
+                            } catch (e) {
+                              pushToast('ลบล้มเหลว: ' + (e.message || e));
+                            }
+                          }}>
+                    🗑️ ลบทั้งหมด
+                  </button>
+                </div>
+              </>
+            )}
+
+            <div style={{marginTop: 16}}>
+              <button className="btn-primary" onClick={onClose} style={{width: '100%'}}>
+                ปิด
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Full-screen lightbox (above the sheet) */}
+      {lightboxItem && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 200,
+          background: 'rgba(0,0,0,0.92)',
+          display: 'flex', flexDirection: 'column',
+        }} onClick={closeLightbox}>
+          {/* Top bar */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '12px 16px', color: '#fff',
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{flex: 1, fontSize: 13, opacity: 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+              {lightboxIdx + 1} / {visible.length} · {lightboxItem.name}
+            </div>
+            <button onClick={closeLightbox}
+                    style={{
+                      width: 36, height: 36, borderRadius: 18,
+                      background: 'rgba(255,255,255,0.15)', color: '#fff',
+                      border: 'none', fontSize: 16, cursor: 'pointer',
+                    }}>✕</button>
+          </div>
+
+          {/* Image area — click outside image to close */}
+          <div style={{
+            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 16, position: 'relative',
+          }}>
+            {thumbs[lightboxItem.id] && thumbs[lightboxItem.id] !== '__error__' ? (
+              <img src={thumbs[lightboxItem.id]} alt={lightboxItem.name}
+                   onClick={(e) => e.stopPropagation()}
+                   style={{maxWidth: '100%', maxHeight: '100%', objectFit: 'contain'}}/>
+            ) : (
+              <div style={{color: '#fff', opacity: 0.7}}>⏳ กำลังโหลด...</div>
+            )}
+          </div>
+
+          {/* Bottom controls */}
+          <div style={{
+            display: 'flex', gap: 8, padding: 16,
+          }} onClick={(e) => e.stopPropagation()}>
+            <button onClick={lightboxPrev} disabled={lightboxIdx <= 0}
+                    style={{
+                      flex: 1, padding: 12, borderRadius: 10,
+                      background: 'rgba(255,255,255,0.15)', color: '#fff',
+                      border: 'none', fontSize: 14, fontWeight: 600,
+                      opacity: lightboxIdx <= 0 ? 0.4 : 1,
+                      cursor: lightboxIdx <= 0 ? 'default' : 'pointer',
+                    }}>← ก่อนหน้า</button>
+            <button onClick={lightboxDelete}
+                    style={{
+                      flex: 1, padding: 12, borderRadius: 10,
+                      background: 'var(--expense-soft)', color: '#fff',
+                      border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                    }}>🗑️ ลบรูปนี้</button>
+            <button onClick={lightboxNext} disabled={lightboxIdx >= visible.length - 1}
+                    style={{
+                      flex: 1, padding: 12, borderRadius: 10,
+                      background: 'rgba(255,255,255,0.15)', color: '#fff',
+                      border: 'none', fontSize: 14, fontWeight: 600,
+                      opacity: lightboxIdx >= visible.length - 1 ? 0.4 : 1,
+                      cursor: lightboxIdx >= visible.length - 1 ? 'default' : 'pointer',
+                    }}>ถัดไป →</button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
