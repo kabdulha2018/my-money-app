@@ -12805,7 +12805,7 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App/>);
 </script>
 
-<div id="myQueueFloatingIcon" style="position: fixed; bottom: 80px; right: 20px; z-index: 999999; width: 52px; height: 52px; background-color: #2e7d32; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); cursor: pointer; touch-action: none; user-select: none; transition: transform 0.1s ease-out;">
+<div id="myQueueFloatingIcon" style="position: fixed; bottom: 80px; right: 20px; z-index: 999999; width: 54px; height: 54px; background-color: #2e7d32; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); cursor: pointer; touch-action: none; user-select: none; transition: transform 0.1s, scale 0.2s;">
   🔍
 </div>
 
@@ -12816,15 +12816,12 @@ root.render(<App/>);
     var dragTimeout;
     var startX, startY, xOffset = 0, yOffset = 0;
 
-    // --- ระบบตรวจสอบ: ต้องกดค้างถึงจะลากได้ ---
     icon.addEventListener('touchstart', function(e) {
         startX = e.touches[0].clientX - xOffset;
         startY = e.touches[0].clientY - yOffset;
-        
-        // ตั้งเวลา: ถ้ากดค้างเกิน 500ms ถึงจะอนุญาตให้ลาก (isDragging = true)
         dragTimeout = setTimeout(function() {
             isDragging = true;
-            icon.style.backgroundColor = "#1b5e20"; // เปลี่ยนสีเข้มขึ้นเพื่อให้รู้ว่าลากได้แล้ว
+            icon.style.backgroundColor = "#1b5e20";
             icon.style.scale = "1.1";
         }, 500);
     }, {passive: false});
@@ -12836,26 +12833,19 @@ root.render(<App/>);
             yOffset = e.touches[0].clientY - startY;
             icon.style.transform = "translate3d(" + xOffset + "px, " + yOffset + "px, 0)";
         } else {
-            // ถ้าขยับนิ้วก่อนจะครบ 500ms ให้ยกเลิกการเตรียมลากทันที (กันมันวิ่งตามตอนเราเลื่อนหน้าจอ)
             clearTimeout(dragTimeout);
         }
     }, {passive: false});
 
     icon.addEventListener('touchend', function(e) {
-        clearTimeout(dragTimeout); // ยกเลิกตัวจับเวลา
-        
-        if (!isDragging) {
-            // ถ้าปล่อยนิ้วก่อนจะเริ่มลาก แปลว่าเป็นการ "แตะ (Click)"
-            openQueueOverlay();
-        }
-        
-        // คืนค่าสถานะ
+        clearTimeout(dragTimeout);
+        if (!isDragging) { openQueueOverlay(); }
         isDragging = false;
         icon.style.backgroundColor = "#2e7d32";
         icon.style.scale = "1";
     });
 
-    // --- ฟังก์ชันแสดงข้อมูลละเอียด (เหมือนเดิม) ---
+    // --- ฟังก์ชันแสดงข้อมูลแบบละเอียดที่สุด ---
     function openQueueOverlay() {
         var req = indexedDB.open("mymoney-photos");
         req.onsuccess = function(e) {
@@ -12867,54 +12857,88 @@ root.render(<App/>);
                 
                 getReq.onsuccess = function() {
                     var allData = getReq.result;
-                    var html = "<div style='padding: 15px; font-family: sans-serif; background:#f4f1ea; min-height:100%; color:#333;'>";
-                    html += "<div style='display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #d4a574; padding-bottom: 10px; margin-bottom: 15px;'>";
-                    html += "<div><h2 style='margin: 0; font-size: 18px;'>รายละเอียดคิว</h2><small style='color:#666;'>ดึงจาก IndexedDB โดยตรง</small></div>";
-                    html += "<button onclick='document.getElementById(\"queueOverlay\").remove()' style='padding: 8px 15px; background: #d32f2f; color: white; border: none; border-radius: 5px; font-weight: bold;'>ปิด</button>";
+                    var html = "<div style='padding: 15px; font-family: monospace; background:#1e1e1e; min-height:100%; color:#d4d4d4;'>";
+                    
+                    // Header
+                    html += "<div style='display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 20px; position:sticky; top:0; background:#1e1e1e; z-index:10;'>";
+                    html += "<div><h2 style='margin:0; font-size:18px; color:#4ec9b0;'>DEBUG: Queue Operations</h2><small style='color:#888;'>Data Source: userx.json</small></div>";
+                    html += "<button onclick='document.getElementById(\"queueOverlay\").remove()' style='padding:8px 15px; background:#f44336; color:white; border:none; border-radius:4px; font-weight:bold;'>CLOSE</button>";
                     html += "</div>";
                     
                     var count = 0;
-                    for (var i = 0; i < allData.length; i++) {
-                        var userRow = allData[i];
-                        if (userRow.operations && userRow.operations.length > 0) {
-                            html += "<div style='margin-bottom: 10px; font-weight:bold;'>👤 User: " + userRow.userId + "</div>";
-                            for (var j = 0; j < userRow.operations.length; j++) {
+                    allData.forEach(function(userRecord) {
+                        if (userRecord.operations && userRecord.operations.length > 0) {
+                            html += "<div style='color:#ce9178; margin-bottom:10px;'>// UserID: " + userRecord.userId + "</div>";
+                            
+                            userRecord.operations.forEach(function(op, idx) {
                                 count++;
-                                var op = userRow.operations[j];
-                                var act = (op.action || op.type || "unknown").toLowerCase();
-                                var color = act === 'add' ? '#2e7d32' : act === 'edit' ? '#f57c00' : '#d32f2f';
-                                html += "<div style='background: white; border-radius: 12px; padding: 15px; margin-bottom: 15px; border-top: 5px solid " + color + "; box-shadow: 0 2px 8px rgba(0,0,0,0.1);'>";
-                                html += "<div style='font-size:11px; font-weight:bold; color:"+color+"; text-transform:uppercase;'>"+act+" | ID: "+(op.id||'-')+"</div>";
+                                var action = (op.action || op.type || "unknown").toUpperCase();
+                                var borderCol = action === 'ADD' ? '#4caf50' : action === 'EDIT' ? '#ff9800' : '#f44336';
                                 
-                                var b = op.before || {}; var a = op.after || {};
-                                var show = function(lbl, old, cur) {
-                                    if(!old && !cur) return "";
-                                    return "<div style='font-size:14px; margin-top:5px;'><span style='color:#777;'>"+lbl+":</span> <b>"+(cur||old||'-')+"</b></div>";
-                                };
-
-                                html += show("รายการ", b.item||b.payee, a.item||a.payee);
-                                html += show("จำนวน", b.amount, a.amount);
-                                html += show("หมวดหมู่", b.category, a.category);
+                                html += "<div style='border:1px solid #333; background:#252526; border-radius:8px; padding:12px; margin-bottom:20px; border-left: 6px solid " + borderCol + ";'>";
+                                
+                                // Meta Info
+                                html += "<div style='display:flex; justify-content:space-between; font-size:11px; margin-bottom:10px; color:#888;'>";
+                                html += "<span style='color:" + borderCol + "; font-weight:bold;'>[" + action + "]</span>";
+                                html += "<span>ID: " + (op.id || idx) + " | " + (op.timestamp || '') + "</span>";
                                 html += "</div>";
-                            }
+
+                                // Comparison Logic
+                                var b = op.before || {};
+                                var a = op.after || {};
+                                var fields = ["item", "amount", "category", "accountName", "date", "note", "project"];
+                                
+                                fields.forEach(function(f) {
+                                    var valB = b[f];
+                                    var valA = a[f];
+                                    
+                                    if (valB !== undefined || valA !== undefined) {
+                                        html += "<div style='margin-bottom:6px; font-size:13px;'>";
+                                        html += "<span style='color:#9cdcfe;'>" + f + "</span>: ";
+                                        
+                                        if (action === 'EDIT' && valB !== valA) {
+                                            html += "<div style='margin-left:10px; border-left:1px solid #444; padding-left:8px; margin-top:4px;'>";
+                                            html += "<div style='color:#f44336; text-decoration:line-through; font-size:11px;'>- " + (valB || 'null') + "</div>";
+                                            html += "<div style='color:#4caf50;'>+ " + (valA || 'null') + "</div>";
+                                            html += "</div>";
+                                        } else {
+                                            html += "<span style='color:#ce9178;'>\"" + (valA || valB || '') + "\"</span>";
+                                        }
+                                        html += "</div>";
+                                    }
+                                });
+
+                                // Raw Data Toggle (Optional)
+                                html += "<details style='margin-top:10px; font-size:10px; color:#666;'>";
+                                html += "<summary>View Full JSON Object</summary>";
+                                html += "<pre style='background:#000; padding:5px; overflow:auto; color:#b5cea8;'>" + JSON.stringify(op, null, 2) + "</pre>";
+                                html += "</details>";
+
+                                html += "</div>";
+                            });
                         }
+                    });
+
+                    if (count === 0) {
+                        html += "<div style='text-align:center; padding-top:100px; color:#666;'>// No pending operations found.</div>";
                     }
-                    if (count === 0) html += "<div style='text-align:center; padding-top:50px; color:#999;'>ไม่มีคิวค้าง</div>";
                     html += "</div>";
 
                     var old = document.getElementById("queueOverlay");
                     if (old) old.remove();
                     var div = document.createElement("div");
                     div.id = "queueOverlay";
-                    div.style = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f4f1ea; z-index: 2000000; overflow-y: auto;";
+                    div.style = "position:fixed; top:0; left:0; width:100%; height:100%; background:#1e1e1e; z-index:2000000; overflow-y:auto;";
                     div.innerHTML = html;
                     document.body.appendChild(div);
                 };
-            } catch(err) { alert(err.message); }
+            } catch(e) { alert("Error: " + e.message); }
         };
     }
 })();
 </script>
+
+
 
 </body>
 </html>
