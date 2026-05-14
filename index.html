@@ -12845,7 +12845,7 @@ root.render(<App/>);
         icon.style.scale = "1";
     });
 
-    // --- ฟังก์ชันแสดงข้อมูล (เปลี่ยน -/+ เป็น old/new) ---
+    // --- ฟังก์ชันหลัก (ดึงคิว + เตรียมช่องค้นหา Cloud) ---
     function openQueueOverlay() {
         var req = indexedDB.open("mymoney-photos");
         req.onsuccess = function(e) {
@@ -12857,11 +12857,11 @@ root.render(<App/>);
                 
                 getReq.onsuccess = function() {
                     var allData = getReq.result;
-                    var html = "<div style='padding: 15px; font-family: monospace; background:#1e1e1e; min-height:100%; color:#d4d4d4;'>";
+                    var searchQueue = []; // คิวสำหรับค้นหาข้อมูล Cloud
+                    var html = "<div style='padding: 15px; font-family: monospace; background:#1e1e1e; min-height:100%; color:#d4d4d4; padding-bottom:100px;'>";
                     
-                    // Header
                     html += "<div style='display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 20px; position:sticky; top:0; background:#1e1e1e; z-index:10;'>";
-                    html += "<div><h2 style='margin:0; font-size:18px; color:#4ec9b0;'>DEBUG: Queue Operations</h2><small style='color:#888;'>Data Source: userx.json</small></div>";
+                    html += "<div><h2 style='margin:0; font-size:18px; color:#4ec9b0;'>DEBUG: Queue + Cloud</h2><small style='color:#888;'>Data: userx.json & my-money.json</small></div>";
                     html += "<button onclick='document.getElementById(\"queueOverlay\").remove()' style='padding:8px 15px; background:#f44336; color:white; border:none; border-radius:4px; font-weight:bold;'>CLOSE</button>";
                     html += "</div>";
                     
@@ -12880,13 +12880,13 @@ root.render(<App/>);
                                 // Meta Info
                                 html += "<div style='display:flex; justify-content:space-between; font-size:11px; margin-bottom:10px; color:#888;'>";
                                 html += "<span style='color:" + borderCol + "; font-weight:bold;'>[" + action + "]</span>";
-                                html += "<span>ID: " + (op.id || idx) + " | " + (op.timestamp || '') + "</span>";
+                                html += "<span>ID: " + (op.id || idx) + "</span>";
                                 html += "</div>";
 
                                 // Comparison Logic
                                 var b = op.before || {};
                                 var a = op.after || {};
-                                var fields = ["item", "amount", "category", "accountName", "date", "note", "project"];
+                                var fields = ["item", "amount", "category", "accountName", "date"];
                                 
                                 fields.forEach(function(f) {
                                     var valB = b[f];
@@ -12897,7 +12897,6 @@ root.render(<App/>);
                                         html += "<span style='color:#9cdcfe;'>" + f + "</span>: ";
                                         
                                         if (action === 'EDIT' && valB !== valA) {
-                                            // จัดการค่าที่อาจจะเป็น 0, ติดลบ, หรือ null ให้แสดงผลถูกต้อง
                                             var showB = (valB !== undefined && valB !== null && valB !== "") ? valB : 'null';
                                             var showA = (valA !== undefined && valA !== null && valA !== "") ? valA : 'null';
                                             
@@ -12913,20 +12912,21 @@ root.render(<App/>);
                                     }
                                 });
 
-                                // Raw Data Toggle
-                                html += "<details style='margin-top:10px; font-size:10px; color:#666;'>";
-                                html += "<summary>View Full JSON Object</summary>";
-                                html += "<pre style='background:#000; padding:5px; overflow:auto; color:#b5cea8;'>" + JSON.stringify(op, null, 2) + "</pre>";
-                                html += "</details>";
+                                // === พื้นที่สำหรับแสดงข้อมูล Cloud ที่จะโหลดมาต่อท้าย ===
+                                var cloudDivId = "cloud_data_" + count;
+                                html += "<div id='" + cloudDivId + "' style='margin-top:15px; padding-top:12px; border-top:1px dashed #444; font-size:12px;'>";
+                                html += "<span style='color:#888;'>⏳ กำลังค้นหาข้อมูลออริจินัลจาก Cloud...</span>";
+                                html += "</div>";
+                                
+                                // เก็บ ID ไว้ให้ระบบตามไปค้นหา
+                                if (op.id) searchQueue.push({ divId: cloudDivId, itemId: op.id, action: action });
 
                                 html += "</div>";
                             });
                         }
                     });
 
-                    if (count === 0) {
-                        html += "<div style='text-align:center; padding-top:100px; color:#666;'>// No pending operations found.</div>";
-                    }
+                    if (count === 0) { html += "<div style='text-align:center; padding-top:100px; color:#666;'>// No pending operations found.</div>"; }
                     html += "</div>";
 
                     var old = document.getElementById("queueOverlay");
@@ -12936,9 +12936,111 @@ root.render(<App/>);
                     div.style = "position:fixed; top:0; left:0; width:100%; height:100%; background:#1e1e1e; z-index:2000000; overflow-y:auto;";
                     div.innerHTML = html;
                     document.body.appendChild(div);
+                    
+                    // สั่งให้ระบบค้นหาข้อมูล Cloud ทำงานหลังจากสร้างหน้าต่างเสร็จ
+                    processSearchQueue(searchQueue, db);
                 };
             } catch(e) { alert("Error: " + e.message); }
         };
+    }
+
+    // --- ระบบค้นหาข้อมูล Cloud อัจฉริยะ (ค้นทั้งแอป) ---
+    function processSearchQueue(queue, db) {
+        if (!queue || queue.length === 0) return;
+        var allCloudData = [];
+        
+        // 1. ค้นหาใน LocalStorage
+        for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if(k.toLowerCase().indexOf('queue') >= 0 || k.toLowerCase().indexOf('pending') >= 0) continue;
+            try {
+                var val = localStorage.getItem(k);
+                if (val && (val.indexOf('{') >= 0 || val.indexOf('[') >= 0)) {
+                    allCloudData.push(JSON.parse(val));
+                }
+            } catch(e) {}
+        }
+        
+        // 2. ค้นหาใน IndexedDB ทุกตาราง
+        try {
+            var storeNames = db.objectStoreNames;
+            var completed = 0;
+            var total = storeNames.length;
+            if(total === 0) { renderCloudData(queue, allCloudData); return; }
+            
+            for(var i=0; i<total; i++) {
+                (function(sName) {
+                    if(sName === "pending_ops") { checkDone(); return; }
+                    try {
+                        var tx = db.transaction(sName, "readonly");
+                        var store = tx.objectStore(sName);
+                        var getReq = store.getAll();
+                        getReq.onsuccess = function() { allCloudData.push(getReq.result); checkDone(); };
+                        getReq.onerror = checkDone;
+                    } catch(err) { checkDone(); }
+                    
+                    function checkDone() {
+                        completed++;
+                        if(completed === total) renderCloudData(queue, allCloudData);
+                    }
+                })(storeNames[i]);
+            }
+        } catch(err) { renderCloudData(queue, allCloudData); }
+    }
+
+    // --- นำข้อมูล Cloud มาแสดงผลต่อท้าย ---
+    function renderCloudData(queue, allCloudData) {
+        // ฟังก์ชันดำน้ำค้นหา ID ในก้อน JSON
+        function deepSearch(obj, targetId, depth) {
+            if (depth > 5 || !obj) return null;
+            // เช็กให้แน่ใจว่าเป็นข้อมูลจริง ไม่ใช่ตัวคิว
+            if (obj.id === targetId && obj.action === undefined && obj.before === undefined && obj.operations === undefined) return obj;
+            
+            if (Array.isArray(obj)) {
+                for(var j=0; j<obj.length; j++) {
+                    var res = deepSearch(obj[j], targetId, depth + 1);
+                    if (res) return res;
+                }
+            } else if (typeof obj === 'object') {
+                for (var k in obj) {
+                    var res = deepSearch(obj[k], targetId, depth + 1);
+                    if (res) return res;
+                }
+            }
+            return null;
+        }
+
+        queue.forEach(function(q) {
+            var div = document.getElementById(q.divId);
+            if(!div) return;
+            
+            var cloudObj = null;
+            for(var i=0; i<allCloudData.length; i++) {
+                cloudObj = deepSearch(allCloudData[i], q.itemId, 0);
+                if(cloudObj) break;
+            }
+            
+            if(cloudObj) {
+                // ถ้าเจอข้อมูลใน Cloud ให้แสดงเป็นสีฟ้า
+                var html = "<div style='color:#4ec9b0; font-weight:bold; margin-bottom:8px;'>☁️ ข้อมูลต้นฉบับบน Cloud (my-money.json):</div>";
+                html += "<div style='margin-left:5px; border-left:2px solid #4ec9b0; padding-left:10px;'>";
+                html += "<div style='color:#d4d4d4;'>Item: <span style='color:#ce9178;'>\"" + (cloudObj.item || cloudObj.payee || '-') + "\"</span></div>";
+                html += "<div style='color:#d4d4d4;'>Amount: <span style='color:#b5cea8;'>" + (cloudObj.amount !== undefined ? cloudObj.amount : '-') + "</span></div>";
+                html += "<div style='color:#d4d4d4;'>Date: <span style='color:#ce9178;'>\"" + (cloudObj.date || '-') + "\"</span></div>";
+                
+                // ปุ่มดู JSON ดิบของ Cloud (คลิกเพื่อกางได้)
+                html += "<details style='margin-top:8px; font-size:10px;'><summary style='color:#888; cursor:pointer;'>View Cloud JSON</summary><pre style='color:#888; background:#000; padding:5px; margin-top:5px;'>" + JSON.stringify(cloudObj, null, 2) + "</pre></details>";
+                html += "</div>";
+                div.innerHTML = html;
+            } else {
+                // ถ้าไม่เจอ หรือเป็นรายการที่เพิ่งสร้างใหม่
+                if(q.action === 'ADD') {
+                    div.innerHTML = "<div style='color:#888;'>☁️ (เป็นรายการใหม่ ยังไม่มีข้อมูลบน Cloud)</div>";
+                } else {
+                    div.innerHTML = "<div style='color:#f44336;'>☁️ ไม่พบข้อมูลอ้างอิงบน Cloud (อาจถูกลบไปแล้ว หรือเป็นข้อมูลจำลอง)</div>";
+                }
+            }
+        });
     }
 })();
 </script>
