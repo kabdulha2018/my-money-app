@@ -12805,7 +12805,7 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App/>);
 </script>
 
-<div id="myQueueFloatingIcon" style="position: fixed; bottom: 80px; right: 20px; z-index: 999999; width: 52px; height: 52px; background-color: #2e7d32; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); cursor: pointer; touch-action: none; user-select: none;">
+<div id="myQueueFloatingIcon" style="position: fixed; bottom: 80px; right: 20px; z-index: 999999; width: 52px; height: 52px; background-color: #2e7d32; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); cursor: pointer; touch-action: none; user-select: none; transition: transform 0.1s ease-out;">
   🔍
 </div>
 
@@ -12813,35 +12813,49 @@ root.render(<App/>);
 (function() {
     var icon = document.getElementById('myQueueFloatingIcon');
     var isDragging = false;
-    var startTime, startX, startY;
-    var xOffset = 0, yOffset = 0;
+    var dragTimeout;
+    var startX, startY, xOffset = 0, yOffset = 0;
 
+    // --- ระบบตรวจสอบ: ต้องกดค้างถึงจะลากได้ ---
     icon.addEventListener('touchstart', function(e) {
-        startTime = new Date().getTime();
         startX = e.touches[0].clientX - xOffset;
         startY = e.touches[0].clientY - yOffset;
-        isDragging = false;
+        
+        // ตั้งเวลา: ถ้ากดค้างเกิน 500ms ถึงจะอนุญาตให้ลาก (isDragging = true)
+        dragTimeout = setTimeout(function() {
+            isDragging = true;
+            icon.style.backgroundColor = "#1b5e20"; // เปลี่ยนสีเข้มขึ้นเพื่อให้รู้ว่าลากได้แล้ว
+            icon.style.scale = "1.1";
+        }, 500);
     }, {passive: false});
 
     document.addEventListener('touchmove', function(e) {
-        var currentX = e.touches[0].clientX - startX;
-        var currentY = e.touches[0].clientY - startY;
-        if (Math.abs(currentX - xOffset) > 5 || Math.abs(currentY - yOffset) > 5) {
-            isDragging = true;
-            xOffset = currentX;
-            yOffset = currentY;
-            icon.style.transform = "translate3d(" + xOffset + "px, " + yOffset + "px, 0)";
+        if (isDragging) {
             e.preventDefault();
+            xOffset = e.touches[0].clientX - startX;
+            yOffset = e.touches[0].clientY - startY;
+            icon.style.transform = "translate3d(" + xOffset + "px, " + yOffset + "px, 0)";
+        } else {
+            // ถ้าขยับนิ้วก่อนจะครบ 500ms ให้ยกเลิกการเตรียมลากทันที (กันมันวิ่งตามตอนเราเลื่อนหน้าจอ)
+            clearTimeout(dragTimeout);
         }
     }, {passive: false});
 
     icon.addEventListener('touchend', function(e) {
-        var duration = new Date().getTime() - startTime;
-        if (!isDragging && duration < 300) {
+        clearTimeout(dragTimeout); // ยกเลิกตัวจับเวลา
+        
+        if (!isDragging) {
+            // ถ้าปล่อยนิ้วก่อนจะเริ่มลาก แปลว่าเป็นการ "แตะ (Click)"
             openQueueOverlay();
         }
+        
+        // คืนค่าสถานะ
+        isDragging = false;
+        icon.style.backgroundColor = "#2e7d32";
+        icon.style.scale = "1";
     });
 
+    // --- ฟังก์ชันแสดงข้อมูลละเอียด (เหมือนเดิม) ---
     function openQueueOverlay() {
         var req = indexedDB.open("mymoney-photos");
         req.onsuccess = function(e) {
@@ -12854,10 +12868,8 @@ root.render(<App/>);
                 getReq.onsuccess = function() {
                     var allData = getReq.result;
                     var html = "<div style='padding: 15px; font-family: sans-serif; background:#f4f1ea; min-height:100%; color:#333;'>";
-                    
-                    // Header
                     html += "<div style='display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #d4a574; padding-bottom: 10px; margin-bottom: 15px;'>";
-                    html += "<div><h2 style='margin: 0; font-size: 18px;'>รายละเอียดคิวสูงสุด</h2><small style='color:#666;'>ข้อมูลจาก userx.json (IndexedDB)</small></div>";
+                    html += "<div><h2 style='margin: 0; font-size: 18px;'>รายละเอียดคิว</h2><small style='color:#666;'>ดึงจาก IndexedDB โดยตรง</small></div>";
                     html += "<button onclick='document.getElementById(\"queueOverlay\").remove()' style='padding: 8px 15px; background: #d32f2f; color: white; border: none; border-radius: 5px; font-weight: bold;'>ปิด</button>";
                     html += "</div>";
                     
@@ -12865,76 +12877,44 @@ root.render(<App/>);
                     for (var i = 0; i < allData.length; i++) {
                         var userRow = allData[i];
                         if (userRow.operations && userRow.operations.length > 0) {
-                            html += "<div style='margin-bottom: 10px; font-weight:bold; color:#5d4037;'>👤 ผู้ใช้: " + userRow.userId + "</div>";
-                            
+                            html += "<div style='margin-bottom: 10px; font-weight:bold;'>👤 User: " + userRow.userId + "</div>";
                             for (var j = 0; j < userRow.operations.length; j++) {
                                 count++;
                                 var op = userRow.operations[j];
                                 var act = (op.action || op.type || "unknown").toLowerCase();
                                 var color = act === 'add' ? '#2e7d32' : act === 'edit' ? '#f57c00' : '#d32f2f';
+                                html += "<div style='background: white; border-radius: 12px; padding: 15px; margin-bottom: 15px; border-top: 5px solid " + color + "; box-shadow: 0 2px 8px rgba(0,0,0,0.1);'>";
+                                html += "<div style='font-size:11px; font-weight:bold; color:"+color+"; text-transform:uppercase;'>"+act+" | ID: "+(op.id||'-')+"</div>";
                                 
-                                html += "<div style='background: white; border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-top: 5px solid " + color + ";'>";
-                                
-                                // Action Header
-                                html += "<div style='display:flex; justify-content:space-between; margin-bottom:10px;'>";
-                                html += "<span style='background:" + color + "; color:white; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:bold; text-transform:uppercase;'>" + act + "</span>";
-                                html += "<span style='font-size:11px; color:#999;'>Timestamp: " + (op.timestamp || '-') + "</span>";
-                                html += "</div>";
-
-                                // Detailed Display Logic
-                                var showDetail = function(label, beforeVal, afterVal, isEdit) {
-                                    if (!beforeVal && !afterVal) return "";
-                                    var row = "<div style='margin-bottom:8px; font-size:14px;'>";
-                                    row += "<span style='color:#777;'>" + label + ":</span> ";
-                                    if (isEdit && beforeVal !== afterVal) {
-                                        row += "<div style='padding-left:10px; margin-top:2px;'>";
-                                        row += "<div style='color:#d32f2f; font-size:12px;'>⬅️ " + (beforeVal || '(ว่าง)') + "</div>";
-                                        row += "<div style='color:#2e7d32; font-weight:bold;'>➡️ " + (afterVal || '(ว่าง)') + "</div>";
-                                        row += "</div>";
-                                    } else {
-                                        row += "<span style='font-weight:bold; color:#333;'>" + (afterVal || beforeVal || '-') + "</span>";
-                                    }
-                                    row += "</div>";
-                                    return row;
+                                var b = op.before || {}; var a = op.after || {};
+                                var show = function(lbl, old, cur) {
+                                    if(!old && !cur) return "";
+                                    return "<div style='font-size:14px; margin-top:5px;'><span style='color:#777;'>"+lbl+":</span> <b>"+(cur||old||'-')+"</b></div>";
                                 };
 
-                                var isEdit = (act === 'edit');
-                                var b = op.before || {};
-                                var a = op.after || {};
-
-                                html += showDetail("รายการ (Item)", b.item || b.payee, a.item || a.payee, isEdit);
-                                html += showDetail("จำนวนเงิน (Amount)", b.amount ? b.amount + " ฿" : null, a.amount ? a.amount + " ฿" : null, isEdit);
-                                html += showDetail("หมวดหมู่ (Category)", b.category, a.category, isEdit);
-                                html += showDetail("บัญชี (Account)", b.accountName, a.accountName, isEdit);
-                                html += showDetail("วันที่ (Date)", b.date, a.date, isEdit);
-                                html += showDetail("โปรเจกต์ (Project)", b.project, a.project, isEdit);
-                                html += showDetail("หมายเหตุ (Note)", b.note, a.note, isEdit);
-
+                                html += show("รายการ", b.item||b.payee, a.item||a.payee);
+                                html += show("จำนวน", b.amount, a.amount);
+                                html += show("หมวดหมู่", b.category, a.category);
                                 html += "</div>";
                             }
                         }
                     }
-                    
-                    if (count === 0) {
-                        html += "<div style='text-align:center; padding:50px 20px; color:#999;'><div style='font-size:40px; margin-bottom:10px;'>📦</div>ไม่มีข้อมูลค้างในคิว</div>";
-                    }
+                    if (count === 0) html += "<div style='text-align:center; padding-top:50px; color:#999;'>ไม่มีคิวค้าง</div>";
                     html += "</div>";
-                    
+
                     var old = document.getElementById("queueOverlay");
                     if (old) old.remove();
-                    
                     var div = document.createElement("div");
                     div.id = "queueOverlay";
                     div.style = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f4f1ea; z-index: 2000000; overflow-y: auto;";
                     div.innerHTML = html;
                     document.body.appendChild(div);
                 };
-            } catch(err) { alert("Error: " + err.message); }
+            } catch(err) { alert(err.message); }
         };
     }
 })();
 </script>
-
 
 </body>
 </html>
