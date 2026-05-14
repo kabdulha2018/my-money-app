@@ -12811,7 +12811,7 @@ root.render(<App/>);
 
 <script>
 function testReadQueue() {
-    // ใช้ชื่อฐานข้อมูลจริงของแอปคุณคือ "mymoney-photos"
+    // 1. ใช้ชื่อฐานข้อมูลที่ถูกต้องของแอป
     const request = indexedDB.open("mymoney-photos"); 
     
     request.onsuccess = (event) => {
@@ -12826,6 +12826,7 @@ function testReadQueue() {
                 let totalPending = 0;
                 let detailsMsg = "";
                 
+                // 2. วนลูปนับรายการคิวที่ซ่อนอยู่ใน operations ของแต่ละ User
                 allData.forEach(userRecord => {
                     if (userRecord && userRecord.operations) {
                         totalPending += userRecord.operations.length;
@@ -12833,11 +12834,14 @@ function testReadQueue() {
                     }
                 });
                 
-                alert("ดึงข้อมูลคิวสำเร็จ!\nพบข้อมูลค้างทั้งหมด: " + totalPending + " รายการ\n\n" + detailsMsg);
-                console.log("=== ข้อมูลคิวรอดำเนินการ ===", allData);
+                alert("ดึงข้อมูลคิวสำเร็จ!\nพบข้อมูลค้างทั้งหมด: " + totalPending + " รายการ\n\n" + detailsMsg + "\n(ดูข้อมูลแบบเจาะลึกได้ใน F12 Console)");
+                
+                // พิมพ์รายละเอียดกางออกมาให้ดูใน Console
+                console.log("=== ข้อมูลคิวรอดำเนินการ (pending_ops) ===");
+                console.log(allData);
             };
         } catch (e) {
-            alert("ไม่พบตาราง pending_ops หรือแอปยังไม่ได้สร้างข้อมูลครับ");
+            alert("ไม่พบตาราง pending_ops ครับ");
         }
     };
     
@@ -12845,15 +12849,8 @@ function testReadQueue() {
         alert("เปิดฐานข้อมูลไม่ได้: " + e.target.error);
     };
 }
-
-// --- ส่วนที่ขาดหายไปเพื่อให้แอปทำงานได้ (สำคัญมาก) ---
-const container = document.getElementById('root');
-if (container) {
-    const root = ReactDOM.createRoot(container);
-    root.render(<App />);
-}
 </script>
+
 
 </body>
 </html>
-
