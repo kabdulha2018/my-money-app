@@ -12803,53 +12803,57 @@ _เริ่มเขียนเมื่อ ${new Date().toLocaleDateString('
 // ============ Mount ============
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App/>);
-<<button onclick="scanStorage()" style="position: fixed; bottom: 20px; left: 20px; z-index: 9999; padding: 15px; background-color: #1976d2; color: white; border-radius: 8px; border: none; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-  🔍 สแกนหาข้อมูลค้าง (Storage Scanner)
+</script>
+
+<button onclick="testReadQueue()" style="position: fixed; bottom: 20px; left: 20px; z-index: 9999; padding: 15px; background-color: #2e7d32; color: white; border-radius: 8px; border: none; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+  🔍 ดูข้อมูลคิวของแอปนี้
 </button>
 
 <script>
-async function scanStorage() {
-    let resultMsg = "=== 1. ค้นหาใน LocalStorage ===\n";
-    let foundLS = 0;
+function testReadQueue() {
+    // ใช้ชื่อฐานข้อมูลจริงของแอปคุณคือ "mymoney-photos"
+    const request = indexedDB.open("mymoney-photos"); 
     
-    // ค้นหาใน LocalStorage
-    for(let i=0; i<localStorage.length; i++) {
-        let key = localStorage.key(i);
-        // ดึงคีย์ที่น่าจะเกี่ยวกับ user หรือ queue
-        if(key.toLowerCase().includes("user") || key.toLowerCase().includes("pending") || key.toLowerCase().includes("queue") || key.toLowerCase().includes("sync") || key.toLowerCase().includes("money")) {
-            resultMsg += `🔑 พบ Key: ${key}\n`;
-            foundLS++;
-        }
-    }
-    if(foundLS === 0) resultMsg += "- ไม่พบข้อมูลที่เกี่ยวข้อง-\n";
-
-    resultMsg += "\n=== 2. ค้นหาชื่อ IndexedDB ===\n";
-    // ค้นหารายชื่อ IndexedDB ทั้งหมด
-    if (indexedDB.databases) {
+    request.onsuccess = (event) => {
+        const db = event.target.result;
         try {
-            const dbs = await indexedDB.databases();
-            if(dbs.length > 0) {
-                dbs.forEach(db => {
-                    resultMsg += `🗄️ พบ Database: "${db.name}"\n`;
+            const transaction = db.transaction(["pending_ops"], "readonly");
+            const store = transaction.objectStore("pending_ops");
+            const getAllRequest = store.getAll();
+
+            getAllRequest.onsuccess = () => {
+                const allData = getAllRequest.result;
+                let totalPending = 0;
+                let detailsMsg = "";
+                
+                allData.forEach(userRecord => {
+                    if (userRecord && userRecord.operations) {
+                        totalPending += userRecord.operations.length;
+                        detailsMsg += "• User: " + userRecord.userId + " มี " + userRecord.operations.length + " คิว\n";
+                    }
                 });
-            } else {
-                resultMsg += "- ไม่พบฐานข้อมูล IndexedDB -\n";
-            }
-        } catch(e) {
-            resultMsg += "- ไม่สามารถอ่านรายชื่อ DB ได้ -\n";
+                
+                alert("ดึงข้อมูลคิวสำเร็จ!\nพบข้อมูลค้างทั้งหมด: " + totalPending + " รายการ\n\n" + detailsMsg);
+                console.log("=== ข้อมูลคิวรอดำเนินการ ===", allData);
+            };
+        } catch (e) {
+            alert("ไม่พบตาราง pending_ops หรือแอปยังไม่ได้สร้างข้อมูลครับ");
         }
-    } else {
-        resultMsg += "- เบราว์เซอร์ไม่รองรับการสแกนชื่อ -\n";
-    }
-
-    resultMsg += "\n(กรุณาดูชื่อที่ค้นพบ แล้วเอามาแก้ในโค้ดดึงข้อมูลครับ)";
-    alert(resultMsg);
+    };
     
-    // พิมพ์ข้อมูล LocalStorage ทั้งหมดลง Console เผื่อเข้าไปดูใน Kiwi Browser
-    console.log("=== ข้อมูล LocalStorage ทั้งหมด ===", localStorage);
+    request.onerror = (e) => {
+        alert("เปิดฐานข้อมูลไม่ได้: " + e.target.error);
+    };
 }
-</script>/script>
 
+// --- ส่วนที่ขาดหายไปเพื่อให้แอปทำงานได้ (สำคัญมาก) ---
+const container = document.getElementById('root');
+if (container) {
+    const root = ReactDOM.createRoot(container);
+    root.render(<App />);
+}
+</script>
 
 </body>
 </html>
+
