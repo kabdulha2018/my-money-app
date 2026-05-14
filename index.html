@@ -12805,93 +12805,132 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App/>);
 </script>
 
-<button id="myQueueBtn" style="position: fixed; bottom: 20px; left: 20px; z-index: 999999; padding: 15px; background-color: #2e7d32; color: white; border-radius: 8px; border: none; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-  🔍 ดูข้อมูลคิวของแอปนี้
-</button>
+<div id="myQueueFloatingIcon" style="position: fixed; bottom: 80px; right: 20px; z-index: 999999; width: 50px; height: 50px; background-color: #2e7d32; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); cursor: move; touch-action: none; user-select: none;">
+  🔍
+</div>
 
 <script>
-document.getElementById('myQueueBtn').onclick = function() {
-    var req = indexedDB.open("mymoney-photos");
-    req.onsuccess = function(e) {
-        var db = e.target.result;
-        try {
-            var tx = db.transaction(["pending_ops"], "readonly");
-            var store = tx.objectStore("pending_ops");
-            var getReq = store.getAll();
-            
-            getReq.onsuccess = function() {
-                var allData = getReq.result;
-                var html = "<div style='padding: 20px; font-family: sans-serif; padding-bottom: 50px;'>";
-                html += "<div style='display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px;'>";
-                html += "<h2 style='margin: 0;'>รายการรอดำเนินการ</h2>";
-                html += "<button onclick='document.getElementById(\"queueOverlay\").style.display=\"none\"' style='padding: 10px 20px; background: #d32f2f; color: white; border: none; border-radius: 5px; font-weight: bold;'>ปิดหน้าต่าง</button>";
-                html += "</div>";
-                
-                var count = 0;
-                for (var i = 0; i < allData.length; i++) {
-                    var userRow = allData[i];
-                    if (userRow.operations && userRow.operations.length > 0) {
-                        html += "<h3 style='background: #f5f5f5; padding: 10px; border-radius: 5px;'>ผู้ใช้งาน: " + userRow.userId + "</h3>";
-                        
-                        for (var j = 0; j < userRow.operations.length; j++) {
-                            count++;
-                            var op = userRow.operations[j];
-                            var act = op.action || 'unknown';
-                            var color = act === 'add' ? '#2e7d32' : act === 'edit' ? '#f57c00' : '#d32f2f';
-                            
-                            html += "<div style='border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); background: white;'>";
-                            html += "<div style='margin-bottom: 10px;'><span style='color: white; background: " + color + "; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-transform: uppercase;'>" + act + "</span> <span style='color: #888; font-size: 12px; margin-left: 10px;'>ID: " + op.id + "</span></div>";
-                            
-                            var afterItem = (op.after && op.after.item) ? op.after.item : (op.after && op.after.payee) ? op.after.payee : '-';
-                            var afterAmt = (op.after && op.after.amount) ? op.after.amount : 0;
-                            var beforeItem = (op.before && op.before.item) ? op.before.item : (op.before && op.before.payee) ? op.before.payee : '-';
-                            var beforeAmt = (op.before && op.before.amount) ? op.before.amount : 0;
+(function() {
+    var icon = document.getElementById('myQueueFloatingIcon');
+    var isDragging = false;
+    var currentX, currentY, initialX, initialY;
+    var xOffset = 0, yOffset = 0;
 
-                            if (act === 'edit') {
-                                html += "<div style='color: #d32f2f; font-size: 14px;'>🔴 ก่อนแก้: <b>" + beforeItem + "</b> (" + beforeAmt + " ฿)</div>";
-                                html += "<div style='color: #2e7d32; font-size: 14px; margin-top: 5px;'>🟢 หลังแก้: <b>" + afterItem + "</b> (" + afterAmt + " ฿)</div>";
-                            } else if (act === 'add') {
-                                html += "<div style='color: #2e7d32; font-size: 16px; font-weight: bold;'>รายการ: " + afterItem + "</div>";
-                                html += "<div style='color: #555; font-size: 14px; margin-top: 5px;'>จำนวนเงิน: " + afterAmt + " ฿</div>";
-                            } else if (act === 'delete') {
-                                html += "<div style='color: #d32f2f; font-size: 16px; font-weight: bold;'>ลบรายการ: " + beforeItem + "</div>";
-                                html += "<div style='color: #555; font-size: 14px; margin-top: 5px;'>จำนวนเงิน: " + beforeAmt + " ฿</div>";
-                            }
+    // --- ส่วนทำให้ลากได้ (Draggable Logic) ---
+    icon.addEventListener('touchstart', dragStart, false);
+    document.addEventListener('touchend', dragEnd, false);
+    document.addEventListener('touchmove', drag, false);
+
+    function dragStart(e) {
+        initialX = e.touches[0].clientX - xOffset;
+        initialY = e.touches[0].clientY - yOffset;
+        if (e.target === icon) { isDragging = true; }
+    }
+
+    function dragEnd(e) {
+        initialX = currentX;
+        initialY = currentY;
+        isDragging = false;
+    }
+
+    function drag(e) {
+        if (isDragging) {
+            e.preventDefault();
+            currentX = e.touches[0].clientX - initialX;
+            currentY = e.touches[0].clientY - initialY;
+            xOffset = currentX;
+            yOffset = currentY;
+            setTranslate(currentX, currentY, icon);
+        }
+    }
+
+    function setTranslate(xPos, yPos, el) {
+        el.style.transform = "translate3d(" + xPos + "px, " + yPos + "px, 0)";
+    }
+
+    // --- ส่วนคลิกเพื่อเปิดดูข้อมูล (Core Logic) ---
+    // ใช้ touchend เช็กว่าเป็นการคลิก ไม่ใช่การลาก
+    icon.addEventListener('touchend', function(e) {
+        // ถ้าเป็นการลากระยะทางสั้นมากๆ ถือว่าเป็นคลิก
+        if (Math.abs(currentX - initialX) < 5 && Math.abs(currentY - initialY) < 5) {
+            openQueueOverlay();
+        }
+    });
+
+    function openQueueOverlay() {
+        var req = indexedDB.open("mymoney-photos");
+        req.onsuccess = function(e) {
+            var db = e.target.result;
+            try {
+                var tx = db.transaction(["pending_ops"], "readonly");
+                var store = tx.objectStore("pending_ops");
+                var getReq = store.getAll();
+                
+                getReq.onsuccess = function() {
+                    var allData = getReq.result;
+                    var html = "<div style='padding: 20px; font-family: sans-serif; padding-bottom: 50px; background:#fff;'>";
+                    html += "<div style='display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px;'>";
+                    html += "<h2 style='margin: 0; font-size: 20px;'>รายการรอดำเนินการ</h2>";
+                    html += "<button onclick='document.getElementById(\"queueOverlay\").remove()' style='padding: 10px 20px; background: #d32f2f; color: white; border: none; border-radius: 5px; font-weight: bold;'>ปิด</button>";
+                    html += "</div>";
+                    
+                    var count = 0;
+                    for (var i = 0; i < allData.length; i++) {
+                        var userRow = allData[i];
+                        if (userRow.operations && userRow.operations.length > 0) {
+                            html += "<h3 style='background: #f5f5f5; padding: 10px; border-radius: 5px; font-size: 16px;'>User: " + userRow.userId + "</h3>";
                             
-                            html += "</div>";
+                            for (var j = 0; j < userRow.operations.length; j++) {
+                                count++;
+                                var op = userRow.operations[j];
+                                var act = op.action || op.type || 'unknown';
+                                var actLower = act.toLowerCase();
+                                var color = actLower === 'add' ? '#2e7d32' : actLower === 'edit' ? '#f57c00' : '#d32f2f';
+                                
+                                html += "<div style='border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); background: white;'>";
+                                html += "<div style='margin-bottom: 10px;'><span style='color: white; background: " + color + "; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; text-transform: uppercase;'>" + act + "</span></div>";
+                                
+                                var afterItem = (op.after && op.after.item) ? op.after.item : (op.after && op.after.payee) ? op.after.payee : '-';
+                                var afterAmt = (op.after && op.after.amount) ? op.after.amount : 0;
+                                var beforeItem = (op.before && op.before.item) ? op.before.item : (op.before && op.before.payee) ? op.before.payee : '-';
+                                var beforeAmt = (op.before && op.before.amount) ? op.before.amount : 0;
+
+                                if (actLower === 'edit') {
+                                    html += "<div style='color: #d32f2f; font-size: 13px;'>🔴 " + beforeItem + " (" + beforeAmt + " ฿)</div>";
+                                    html += "<div style='color: #2e7d32; font-size: 13px; margin-top: 3px;'>🟢 " + afterItem + " (" + afterAmt + " ฿)</div>";
+                                } else if (actLower === 'add') {
+                                    html += "<div style='color: #333; font-size: 14px; font-weight: bold;'>" + afterItem + "</div>";
+                                    html += "<div style='color: #2e7d32; font-size: 14px; font-weight: bold; margin-top: 3px;'>" + afterAmt + " ฿</div>";
+                                } else {
+                                    html += "<div style='color: #d32f2f; font-size: 14px; font-weight: bold;'>ลบ: " + beforeItem + "</div>";
+                                }
+                                
+                                html += "</div>";
+                            }
                         }
                     }
-                }
-                
-                if (count === 0) {
-                    html += "<p style='text-align:center; color:#999; margin-top: 40px;'>ไม่มีรายการค้างในคิวครับ</p>";
-                }
-                html += "</div>";
-                
-                var old = document.getElementById("queueOverlay");
-                if (old) old.parentNode.removeChild(old);
-                
-                var div = document.createElement("div");
-                div.id = "queueOverlay";
-                div.style.position = "fixed";
-                div.style.top = "0";
-                div.style.left = "0";
-                div.style.width = "100%";
-                div.style.height = "100%";
-                div.style.backgroundColor = "white";
-                div.style.zIndex = "1000000";
-                div.style.overflow = "auto";
-                div.innerHTML = html;
-                document.body.appendChild(div);
-            };
-        } catch(err) {
-            alert("ไม่พบตารางเก็บคิว หรือยังไม่ได้สร้างข้อมูลครับ");
-        }
-    };
-    req.onerror = function() {
-        alert("เปิดฐานข้อมูลไม่ได้ครับ");
-    };
-};
+                    
+                    if (count === 0) {
+                        html += "<p style='text-align:center; color:#999; margin-top: 40px;'>ไม่มีรายการค้างในคิวครับ</p>";
+                    }
+                    html += "</div>";
+                    
+                    var old = document.getElementById("queueOverlay");
+                    if (old) old.remove();
+                    
+                    var div = document.createElement("div");
+                    div.id = "queueOverlay";
+                    div.style = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 1000000; overflow: auto;";
+                    div.innerHTML = html;
+                    document.body.appendChild(div);
+                };
+            } catch(err) { alert("ไม่พบตารางเก็บคิวครับ"); }
+        };
+        req.onerror = function() { alert("เปิดฐานข้อมูลไม่ได้ครับ"); };
+    }
+})();
 </script>
+
+
 </body>
 </html>
