@@ -4093,8 +4093,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.36';
-const APP_VERSION_TAG = 'Search: pending badge เท่านั้น (revert ป้าย "รอ deploy")';
+const APP_VERSION = 'v5.38';
+const APP_VERSION_TAG = 'รับค่าติดลบในฟิลด์จำนวน (refund/correction)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -8271,7 +8271,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.36 · Search pending badge (revert ป้าย v5.35) 🟡</div>
+      <div className="vstrip">my money · v5.38 · จำนวนติดลบได้ ±</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -8846,7 +8846,18 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
   const accountTrimmed = accountName.trim();
   const itemMissing = !itemTrimmed;
   const accountMissing = !accountTrimmed;
-  const canSave = parseFloat(amount) > 0 && !itemMissing && !accountMissing;
+  // v5.37: allow 0 in amount/count field. Previously canSave required
+  // parseFloat(amount) > 0 which blocked valid zero entries.
+  // v5.38: also allow negative values. The amount field is a free-form
+  // numeric input — the user knows the meaning of the sign in their own
+  // accounting context (e.g. a refund recorded as a negative expense, an
+  // adjustment, a negative inventory count). The app does NOT reinterpret
+  // sign based on the tx type; the displayed +/- prefix elsewhere comes
+  // from tx.type (income vs expense), not from the amount's sign. So we
+  // accept any finite number, empty/NaN still blocks save.
+  const amountNum = parseFloat(amount);
+  const amountValid = Number.isFinite(amountNum);
+  const canSave = amountValid && !itemMissing && !accountMissing;
 
   // --- Photo handlers ---
   // v5.10: handle multiple photos in one pick. Uploads sequentially so we don't
@@ -8933,7 +8944,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
     if (!canSave) {
       if (accountMissing) pushToast?.('กรุณากรอก "บัญชี/กระเป๋า"');
       else if (itemMissing) pushToast?.('กรุณากรอก "ชื่อรายการ"');
-      else if (!(parseFloat(amount) > 0)) pushToast?.('กรุณากรอกจำนวนเงิน');
+      else if (!amountValid) pushToast?.('กรุณากรอกจำนวน');
       return;
     }
     // Normalize item (prevent case-insensitive duplicates in suggestions)
@@ -8982,7 +8993,14 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
   }, [accountName, currentDecimals, initial, amount]);
 
   const handleAmount = (e) => {
-    let v = e.target.value.replace(/[^\d.]/g, '');
+    // v5.38: allow a leading minus sign so users can enter negative values
+    // (refunds, corrections, signed counts). Regex strips everything that
+    // isn't a digit, dot, or minus; then we keep at most ONE minus at the
+    // very front to disallow things like "5-3" or "--5".
+    let v = e.target.value.replace(/[^\d.\-]/g, '');
+    const isNeg = v.startsWith('-');
+    v = v.replace(/-/g, '');
+    if (isNeg) v = '-' + v;
     const parts = v.split('.');
     if (parts.length > 2) v = parts[0] + '.' + parts.slice(1).join('');
     // Truncate decimal places to the account's allowed precision
@@ -8998,10 +9016,11 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
   // We do the math with rounding on the integer scale to avoid float drift,
   // then re-format using the account's decimals so the displayed value
   // always shows trailing zeros (e.g. "2.00" instead of "2").
+  // v5.38: removed the `next < 0` clamp so the spinner can step into
+  // negative territory just like manual entry now allows.
   const stepAmount = (delta) => {
     const cur = parseFloat(amount) || 0;
     const next = cur + delta;
-    if (next < 0) return; // never go negative
     // Round to current account precision, then format with that many decimals.
     const factor = Math.pow(10, currentDecimals);
     const rounded = Math.round(next * factor) / factor;
