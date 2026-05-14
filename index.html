@@ -12845,7 +12845,7 @@ root.render(<App/>);
         icon.style.scale = "1";
     });
 
-    // --- ฟังก์ชันแสดงข้อมูลแบบละเอียดที่สุด ---
+    // --- ฟังก์ชันแสดงข้อมูล (เอาเส้นขีดทับออกแล้ว) ---
     function openQueueOverlay() {
         var req = indexedDB.open("mymoney-photos");
         req.onsuccess = function(e) {
@@ -12898,7 +12898,8 @@ root.render(<App/>);
                                         
                                         if (action === 'EDIT' && valB !== valA) {
                                             html += "<div style='margin-left:10px; border-left:1px solid #444; padding-left:8px; margin-top:4px;'>";
-                                            html += "<div style='color:#f44336; text-decoration:line-through; font-size:11px;'>- " + (valB || 'null') + "</div>";
+                                            // แก้ตรงนี้: เอา text-decoration:line-through; ออกไปแล้ว
+                                            html += "<div style='color:#f44336; font-size:11px;'>- " + (valB || 'null') + "</div>";
                                             html += "<div style='color:#4caf50;'>+ " + (valA || 'null') + "</div>";
                                             html += "</div>";
                                         } else {
@@ -12908,7 +12909,7 @@ root.render(<App/>);
                                     }
                                 });
 
-                                // Raw Data Toggle (Optional)
+                                // Raw Data Toggle
                                 html += "<details style='margin-top:10px; font-size:10px; color:#666;'>";
                                 html += "<summary>View Full JSON Object</summary>";
                                 html += "<pre style='background:#000; padding:5px; overflow:auto; color:#b5cea8;'>" + JSON.stringify(op, null, 2) + "</pre>";
@@ -12937,8 +12938,6 @@ root.render(<App/>);
     }
 })();
 </script>
-
-
 
 </body>
 </html>
