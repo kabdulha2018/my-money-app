@@ -4093,8 +4093,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.34';
-const APP_VERSION_TAG = 'หน้าค้นหา — ไม่ปิดอัตโนมัติหลังแตะผลลัพธ์';
+const APP_VERSION = 'v5.35';
+const APP_VERSION_TAG = 'Search: pending badge + ป้าย "รอ deploy" ใน editor';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -6889,6 +6889,11 @@ function App() {
           accounts={visibleState.accounts}
           projects={state.projects || []}
           categories={state.categories || []}
+          /* v5.35: forward the pending-ops map so search results can
+             display the same yellow/orange/red pending badge that Home
+             and List use. Without this the user couldn't tell whether a
+             row they were about to edit was already in the deploy queue. */
+          pendingByTxId={pendingByTxId}
           onClose={() => setShowSearch(false)}
           /* v5.34: do NOT close the search modal when the user picks a
              result — they may want to edit several tx in a row, or look
@@ -8266,7 +8271,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.34 · ค้นหา: results คงอยู่หลังแก้ tx 🔍</div>
+      <div className="vstrip">my money · v5.35 · Pending badge ใน search + ป้ายรอ deploy 🟡</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -9048,7 +9053,24 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
         <div className="sheet">
           <div className="sheet-handle"></div>
           <div className="sheet-head">
-            <h2>{initial?.id ? 'แก้ไขรายการ' : 'เพิ่มรายการใหม่'}</h2>
+            <div style={{display: 'flex', alignItems: 'baseline', gap: 8}}>
+              <h2>{initial?.id ? 'แก้ไขรายการ' : 'เพิ่มรายการใหม่'}</h2>
+              {/* v5.35: pending-deploy hint. Always shown for new entries
+                  (they'll need a Deploy before reaching OneDrive). Also
+                  shown when editing a row that already has a pending op,
+                  so the user knows they're stacking another change. The
+                  hint is suppressed only when the row exists on OneDrive
+                  already AND has no pending op — i.e. a "real" edit that
+                  WILL queue once they save. We can't know the latter ahead
+                  of time, so to keep the rule simple: ALWAYS show this
+                  hint in TxSheet — every save here goes through Q. */}
+              <span style={{
+                fontSize: 11, color: 'var(--sync-warn)', fontWeight: 600,
+                padding: '1px 6px', borderRadius: 6,
+                background: 'rgba(251,191,36,0.12)',
+                border: '1px solid var(--sync-warn)',
+              }}>(รอ deploy)</span>
+            </div>
             <button className="icon-btn-round" onClick={onClose}><Ic.X size={16}/></button>
           </div>
 
@@ -9921,7 +9943,7 @@ function UsersManager({ users, currentUserId, onClose, onAdd, onUpdate, onChange
         <div className="sheet">
           <div className="sheet-handle"></div>
           <div className="sheet-head">
-            <h2>👥 จัดการผู้ใช้</h2>
+            <h2>👥 จัดการผู้ใช้ <span style={{fontSize: 11, color: 'var(--sync-warn)', fontWeight: 600, padding: '1px 6px', borderRadius: 6, background: 'rgba(251,191,36,0.12)', border: '1px solid var(--sync-warn)', marginLeft: 6, verticalAlign: 'middle'}}>(รอ deploy)</span></h2>
             <button className="icon-btn-round" onClick={onClose}><Ic.X size={16}/></button>
           </div>
           <div style={{fontSize: 11, color: 'var(--text-faint)', marginTop: 6, marginBottom: 12}}>
@@ -11359,7 +11381,7 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
         <div className="sheet">
           <div className="sheet-handle"></div>
           <div className="sheet-head">
-            <h2>จัดการรายการ</h2>
+            <h2>จัดการรายการ <span style={{fontSize: 11, color: 'var(--sync-warn)', fontWeight: 600, padding: '1px 6px', borderRadius: 6, background: 'rgba(251,191,36,0.12)', border: '1px solid var(--sync-warn)', marginLeft: 6, verticalAlign: 'middle'}}>(รอ deploy)</span></h2>
             <button className="icon-btn-round" onClick={onClose}><Ic.X size={16}/></button>
           </div>
 
@@ -11614,7 +11636,7 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
         <div className="sheet">
           <div className="sheet-handle"></div>
           <div className="sheet-head">
-            <h2>จัดการบัญชี</h2>
+            <h2>จัดการบัญชี <span style={{fontSize: 11, color: 'var(--sync-warn)', fontWeight: 600, padding: '1px 6px', borderRadius: 6, background: 'rgba(251,191,36,0.12)', border: '1px solid var(--sync-warn)', marginLeft: 6, verticalAlign: 'middle'}}>(รอ deploy)</span></h2>
             <button className="icon-btn-round" onClick={onClose}><Ic.X size={16}/></button>
           </div>
 
@@ -11976,7 +11998,7 @@ function ProjectsManager({ projects, transactions, onClose, onAdd, onUpdate, onR
         <div className="sheet">
           <div className="sheet-handle"></div>
           <div className="sheet-head">
-            <h2>จัดการโครงการ</h2>
+            <h2>จัดการโครงการ <span style={{fontSize: 11, color: 'var(--sync-warn)', fontWeight: 600, padding: '1px 6px', borderRadius: 6, background: 'rgba(251,191,36,0.12)', border: '1px solid var(--sync-warn)', marginLeft: 6, verticalAlign: 'middle'}}>(รอ deploy)</span></h2>
             <button className="icon-btn-round" onClick={onClose}><Ic.X size={16}/></button>
           </div>
 
@@ -12155,7 +12177,7 @@ function CategoriesManager({ categories, transactions, onClose, onAdd, onUpdate,
         <div className="sheet">
           <div className="sheet-handle"></div>
           <div className="sheet-head">
-            <h2>จัดการหมวดหมู่</h2>
+            <h2>จัดการหมวดหมู่ <span style={{fontSize: 11, color: 'var(--sync-warn)', fontWeight: 600, padding: '1px 6px', borderRadius: 6, background: 'rgba(251,191,36,0.12)', border: '1px solid var(--sync-warn)', marginLeft: 6, verticalAlign: 'middle'}}>(รอ deploy)</span></h2>
             <button className="icon-btn-round" onClick={onClose}><Ic.X size={16}/></button>
           </div>
 
@@ -12451,7 +12473,7 @@ function OfflineStoragePanel({ account, isOnline, cacheStatus, pendingCount, pus
 // account, and date range. Each non-empty keyword must appear (substring,
 // case-insensitive, whitespace-trimmed) somewhere in any field of the transaction.
 // Results are tappable — opens TxActionMenu like the regular list.
-function SearchSheet({ allTransactions, accounts, projects, categories, onClose, onPickTx, zIndexOverride = 90 }) {
+function SearchSheet({ allTransactions, accounts, projects, categories, onClose, onPickTx, zIndexOverride = 90, pendingByTxId }) {
   const [k1, setK1] = useState('');
   const [k2, setK2] = useState('');
   const [k3, setK3] = useState('');
@@ -12617,6 +12639,7 @@ function SearchSheet({ allTransactions, accounts, projects, categories, onClose,
                          delay={Math.min(i * 20, 200)}
                          accounts={accounts}
                          customCats={categories || []}
+                         pendingOp={pendingByTxId?.get(t.id)}
                          onClick={() => onPickTx(t)}/>
                 ))}
               </div>
