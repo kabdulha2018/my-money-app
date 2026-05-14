@@ -12805,7 +12805,7 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App/>);
 </script>
 
-<div id="myQueueFloatingIcon" style="position: fixed; bottom: 80px; right: 20px; z-index: 999999; width: 50px; height: 50px; background-color: #2e7d32; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); cursor: move; touch-action: none; user-select: none;">
+<div id="myQueueFloatingIcon" style="position: fixed; bottom: 80px; right: 20px; z-index: 999999; width: 50px; height: 50px; background-color: #2e7d32; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); cursor: pointer; touch-action: none; user-select: none;">
   🔍
 </div>
 
@@ -12813,50 +12813,42 @@ root.render(<App/>);
 (function() {
     var icon = document.getElementById('myQueueFloatingIcon');
     var isDragging = false;
-    var currentX, currentY, initialX, initialY;
+    var startTime, startX, startY;
     var xOffset = 0, yOffset = 0;
 
-    // --- ส่วนทำให้ลากได้ (Draggable Logic) ---
-    icon.addEventListener('touchstart', dragStart, false);
-    document.addEventListener('touchend', dragEnd, false);
-    document.addEventListener('touchmove', drag, false);
+    // --- ระบบตรวจจับการลากและการแตะ ---
+    icon.addEventListener('touchstart', function(e) {
+        startTime = new Date().getTime();
+        startX = e.touches[0].clientX - xOffset;
+        startY = e.touches[0].clientY - yOffset;
+        isDragging = false; // เริ่มต้นยังไม่ถือว่าลาก
+    }, {passive: false});
 
-    function dragStart(e) {
-        initialX = e.touches[0].clientX - xOffset;
-        initialY = e.touches[0].clientY - yOffset;
-        if (e.target === icon) { isDragging = true; }
-    }
-
-    function dragEnd(e) {
-        initialX = currentX;
-        initialY = currentY;
-        isDragging = false;
-    }
-
-    function drag(e) {
-        if (isDragging) {
-            e.preventDefault();
-            currentX = e.touches[0].clientX - initialX;
-            currentY = e.touches[0].clientY - initialY;
+    document.addEventListener('touchmove', function(e) {
+        var currentX = e.touches[0].clientX - startX;
+        var currentY = e.touches[0].clientY - startY;
+        
+        // ถ้าขยับนิ้วเกิน 5 พิกเซล ถือว่าเป็นการลาก
+        if (Math.abs(currentX - xOffset) > 5 || Math.abs(currentY - yOffset) > 5) {
+            isDragging = true;
             xOffset = currentX;
             yOffset = currentY;
-            setTranslate(currentX, currentY, icon);
+            icon.style.transform = "translate3d(" + xOffset + "px, " + yOffset + "px, 0)";
+            e.preventDefault(); // กันหน้าจอสั่นขณะลาก
         }
-    }
+    }, {passive: false});
 
-    function setTranslate(xPos, yPos, el) {
-        el.style.transform = "translate3d(" + xPos + "px, " + yPos + "px, 0)";
-    }
-
-    // --- ส่วนคลิกเพื่อเปิดดูข้อมูล (Core Logic) ---
-    // ใช้ touchend เช็กว่าเป็นการคลิก ไม่ใช่การลาก
     icon.addEventListener('touchend', function(e) {
-        // ถ้าเป็นการลากระยะทางสั้นมากๆ ถือว่าเป็นคลิก
-        if (Math.abs(currentX - initialX) < 5 && Math.abs(currentY - initialY) < 5) {
+        var endTime = new Date().getTime();
+        var duration = endTime - startTime;
+
+        // เงื่อนไข: ถ้าไม่ได้ลาก และแตะค้างไม่นานเกินไป (น้อยกว่า 300ms) ให้ถือว่าเป็น "การแตะ (Click)"
+        if (!isDragging && duration < 300) {
             openQueueOverlay();
         }
     });
 
+    // --- ฟังก์ชันดึงข้อมูลและสร้างหน้าต่าง (แก้ไขให้เสถียรขึ้น) ---
     function openQueueOverlay() {
         var req = indexedDB.open("mymoney-photos");
         req.onsuccess = function(e) {
@@ -12868,50 +12860,41 @@ root.render(<App/>);
                 
                 getReq.onsuccess = function() {
                     var allData = getReq.result;
-                    var html = "<div style='padding: 20px; font-family: sans-serif; padding-bottom: 50px; background:#fff;'>";
+                    var html = "<div style='padding: 20px; font-family: sans-serif; background:#fff; min-height:100%;'>";
                     html += "<div style='display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px;'>";
-                    html += "<h2 style='margin: 0; font-size: 20px;'>รายการรอดำเนินการ</h2>";
-                    html += "<button onclick='document.getElementById(\"queueOverlay\").remove()' style='padding: 10px 20px; background: #d32f2f; color: white; border: none; border-radius: 5px; font-weight: bold;'>ปิด</button>";
+                    html += "<h2 style='margin: 0; font-size: 18px; color: #333;'>รายการรอดำเนินการ</h2>";
+                    html += "<button onclick='document.getElementById(\"queueOverlay\").remove()' style='padding: 8px 15px; background: #d32f2f; color: white; border: none; border-radius: 5px; font-weight: bold;'>ปิด</button>";
                     html += "</div>";
                     
                     var count = 0;
                     for (var i = 0; i < allData.length; i++) {
                         var userRow = allData[i];
                         if (userRow.operations && userRow.operations.length > 0) {
-                            html += "<h3 style='background: #f5f5f5; padding: 10px; border-radius: 5px; font-size: 16px;'>User: " + userRow.userId + "</h3>";
+                            html += "<div style='margin-bottom: 20px;'>";
+                            html += "<div style='font-size: 12px; color: #666; margin-bottom: 8px;'>ID: " + userRow.userId + "</div>";
                             
                             for (var j = 0; j < userRow.operations.length; j++) {
                                 count++;
                                 var op = userRow.operations[j];
-                                var act = op.action || op.type || 'unknown';
-                                var actLower = act.toLowerCase();
-                                var color = actLower === 'add' ? '#2e7d32' : actLower === 'edit' ? '#f57c00' : '#d32f2f';
+                                var act = (op.action || op.type || "unknown").toLowerCase();
+                                var color = act === 'add' ? '#2e7d32' : act === 'edit' ? '#f57c00' : '#d32f2f';
                                 
-                                html += "<div style='border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); background: white;'>";
-                                html += "<div style='margin-bottom: 10px;'><span style='color: white; background: " + color + "; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; text-transform: uppercase;'>" + act + "</span></div>";
+                                html += "<div style='border-left: 4px solid " + color + "; padding: 12px; margin-bottom: 10px; background: #f9f9f9; border-radius: 0 8px 8px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1);'>";
+                                html += "<div style='font-weight:bold; font-size:11px; color:" + color + "; text-transform:uppercase; margin-bottom:4px;'>" + act + "</div>";
                                 
-                                var afterItem = (op.after && op.after.item) ? op.after.item : (op.after && op.after.payee) ? op.after.payee : '-';
-                                var afterAmt = (op.after && op.after.amount) ? op.after.amount : 0;
-                                var beforeItem = (op.before && op.before.item) ? op.before.item : (op.before && op.before.payee) ? op.before.payee : '-';
-                                var beforeAmt = (op.before && op.before.amount) ? op.before.amount : 0;
-
-                                if (actLower === 'edit') {
-                                    html += "<div style='color: #d32f2f; font-size: 13px;'>🔴 " + beforeItem + " (" + beforeAmt + " ฿)</div>";
-                                    html += "<div style='color: #2e7d32; font-size: 13px; margin-top: 3px;'>🟢 " + afterItem + " (" + afterAmt + " ฿)</div>";
-                                } else if (actLower === 'add') {
-                                    html += "<div style='color: #333; font-size: 14px; font-weight: bold;'>" + afterItem + "</div>";
-                                    html += "<div style='color: #2e7d32; font-size: 14px; font-weight: bold; margin-top: 3px;'>" + afterAmt + " ฿</div>";
-                                } else {
-                                    html += "<div style='color: #d32f2f; font-size: 14px; font-weight: bold;'>ลบ: " + beforeItem + "</div>";
-                                }
+                                var item = (op.after && op.after.item) ? op.after.item : (op.before && op.before.item) ? op.before.item : "-";
+                                var amt = (op.after && op.after.amount) ? op.after.amount : (op.before && op.before.amount) ? op.before.amount : 0;
                                 
+                                html += "<div style='font-size: 15px; color: #333;'>" + item + "</div>";
+                                html += "<div style='font-size: 14px; color: #2e7d32; font-weight: bold;'>" + amt + " ฿</div>";
                                 html += "</div>";
                             }
+                            html += "</div>";
                         }
                     }
                     
                     if (count === 0) {
-                        html += "<p style='text-align:center; color:#999; margin-top: 40px;'>ไม่มีรายการค้างในคิวครับ</p>";
+                        html += "<p style='text-align:center; color:#999; margin-top: 50px;'>ไม่มีรายการค้างในคิว</p>";
                     }
                     html += "</div>";
                     
@@ -12920,17 +12903,15 @@ root.render(<App/>);
                     
                     var div = document.createElement("div");
                     div.id = "queueOverlay";
-                    div.style = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 1000000; overflow: auto;";
+                    div.style = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 1000000; overflow-y: auto;";
                     div.innerHTML = html;
                     document.body.appendChild(div);
                 };
-            } catch(err) { alert("ไม่พบตารางเก็บคิวครับ"); }
+            } catch(err) { console.error(err); }
         };
-        req.onerror = function() { alert("เปิดฐานข้อมูลไม่ได้ครับ"); };
     }
 })();
 </script>
-
 
 </body>
 </html>
