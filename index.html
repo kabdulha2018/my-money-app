@@ -4093,8 +4093,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.33';
-const APP_VERSION_TAG = 'Photo Review เป็น Tab — สลับใช้งานกับแอปได้';
+const APP_VERSION = 'v5.34';
+const APP_VERSION_TAG = 'หน้าค้นหา — ไม่ปิดอัตโนมัติหลังแตะผลลัพธ์';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -6890,7 +6890,25 @@ function App() {
           projects={state.projects || []}
           categories={state.categories || []}
           onClose={() => setShowSearch(false)}
-          onPickTx={(t) => { setActionTx(t); setShowSearch(false); }}
+          /* v5.34: do NOT close the search modal when the user picks a
+             result — they may want to edit several tx in a row, or look
+             back at their result list after closing the action menu/edit
+             sheet. The auto-close was a UX bug: user would search, tap
+             a result to edit/delete, finish the action, and find
+             themselves dumped back on Home with no way to return to
+             their results except by re-running the search. Now they
+             leave the modal explicitly via the ✕ button. */
+          onPickTx={(t) => setActionTx(t)}
+          /* v5.34: SearchSheet runs at zIndex 90 by default (above the
+             standard 70 used by other sheets). When the user picks a
+             result and we open an action menu or edit sheet — both
+             rendered with zIndex 70 elsewhere in the tree — those would
+             be hidden behind Search's backdrop. Push Search BELOW the
+             default while any action overlay is open so the action UI
+             shows on top. Search content itself stays visible faintly
+             through its backdrop, which is actually the desired UX:
+             user can see they're "inside" the search context. */
+          zIndexOverride={(actionTx || editing || showAdd || confirmDeleteTx) ? 60 : 90}
         />
       )}
 
@@ -8248,7 +8266,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.33 · Tab ตรวจรูป — สลับ tab ได้ 🔀</div>
+      <div className="vstrip">my money · v5.34 · ค้นหา: results คงอยู่หลังแก้ tx 🔍</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -12433,7 +12451,7 @@ function OfflineStoragePanel({ account, isOnline, cacheStatus, pendingCount, pus
 // account, and date range. Each non-empty keyword must appear (substring,
 // case-insensitive, whitespace-trimmed) somewhere in any field of the transaction.
 // Results are tappable — opens TxActionMenu like the regular list.
-function SearchSheet({ allTransactions, accounts, projects, categories, onClose, onPickTx }) {
+function SearchSheet({ allTransactions, accounts, projects, categories, onClose, onPickTx, zIndexOverride = 90 }) {
   const [k1, setK1] = useState('');
   const [k2, setK2] = useState('');
   const [k3, setK3] = useState('');
@@ -12494,7 +12512,7 @@ function SearchSheet({ allTransactions, accounts, projects, categories, onClose,
   // No results yet & not yet submitted → show only the form
   // Submitted → show results list below the form
   return (
-    <div className="sheet-backdrop fade" onClick={onClose} style={{zIndex: 90}}>
+    <div className="sheet-backdrop fade" onClick={onClose} style={{zIndex: zIndexOverride}}>
       <div className="sheet-wrap sheet-in" onClick={e => e.stopPropagation()}>
         <div className="sheet">
           <div className="sheet-handle"></div>
