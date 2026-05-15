@@ -4093,8 +4093,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.38';
-const APP_VERSION_TAG = 'รับค่าติดลบในฟิลด์จำนวน (refund/correction)';
+const APP_VERSION = 'v5.41';
+const APP_VERSION_TAG = 'Diff inline: ลบ line-through (กับเครื่องหมายลบ สับสน)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -4940,6 +4940,277 @@ function PinScreen({ profile, onBack, onSuccess }) {
   );
 }
 
+// ============ v5.39: Debug Floating Icon (admin only) ============
+// Inspector for the Q + Drift system. Shows the active user's pending
+// operations alongside the matching transactions from the OneDrive vault,
+// so an admin can spot exactly which field is triggering the
+// "retry-later / มีการแก้ไขจากอุปกรณ์อื่นก่อน" loop.
+//
+// Drag-to-move: long-press (500ms) on the icon engages drag mode; releasing
+// without dragging opens the overlay. Position is persisted to localStorage
+// so the icon stays where the admin parks it across reloads.
+//
+// Data sources (all real, no LocalStorage scan unlike the original script):
+//   - Pending ops:  idbGetUserOps(currentUserId) — same store the deploy
+//                    flow uses, so what the admin sees IS what will deploy.
+//   - Vault:        remoteFetch() — pulls the freshest my-money.json from
+//                    OneDrive. We fetch once when the overlay opens.
+// For each EDIT op we compare op.before vs the freshly-fetched vault row
+// using the SAME drift fields the apply step checks, and highlight any
+// mismatch in red — that's the field causing retry-later.
+function DebugFloatingIcon({ currentUserId, pushToast }) {
+  const [pos, setPos] = useState(() => {
+    try {
+      const saved = localStorage.getItem('mymoney:debug-icon-pos');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return { x: 0, y: 0 };
+  });
+  const [open, setOpen] = useState(false);
+  const draggingRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
+  const longPressRef = useRef(null);
+
+  const onTouchStart = (e) => {
+    const t = e.touches[0];
+    dragStartRef.current = { x: t.clientX, y: t.clientY, ox: pos.x, oy: pos.y };
+    longPressRef.current = setTimeout(() => { draggingRef.current = true; }, 500);
+  };
+  const onTouchMove = (e) => {
+    if (!draggingRef.current) {
+      clearTimeout(longPressRef.current);
+      return;
+    }
+    e.preventDefault();
+    const t = e.touches[0];
+    const dx = t.clientX - dragStartRef.current.x;
+    const dy = t.clientY - dragStartRef.current.y;
+    setPos({ x: dragStartRef.current.ox + dx, y: dragStartRef.current.oy + dy });
+  };
+  const onTouchEnd = () => {
+    clearTimeout(longPressRef.current);
+    if (!draggingRef.current) {
+      setOpen(true);
+    } else {
+      try { localStorage.setItem('mymoney:debug-icon-pos', JSON.stringify(pos)); } catch {}
+    }
+    draggingRef.current = false;
+  };
+  // Mouse support so we can also test on desktop
+  const onClick = () => { if (!draggingRef.current) setOpen(true); };
+
+  return (
+    <>
+      <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+           onClick={onClick}
+           style={{
+             position: 'fixed', bottom: 80, right: 20,
+             transform: `translate3d(${pos.x}px, ${pos.y}px, 0)`,
+             zIndex: 999999, width: 54, height: 54,
+             background: draggingRef.current ? '#1b5e20' : '#2e7d32',
+             color: '#fff', borderRadius: '50%',
+             display: 'flex', alignItems: 'center', justifyContent: 'center',
+             fontSize: 26, boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+             cursor: 'pointer', touchAction: 'none', userSelect: 'none',
+             transition: 'background 0.1s',
+           }}>
+        🔍
+      </div>
+      {open && <DebugOverlay currentUserId={currentUserId} onClose={() => setOpen(false)} pushToast={pushToast}/>}
+    </>
+  );
+}
+
+function DebugOverlay({ currentUserId, onClose, pushToast }) {
+  const [ops, setOps] = useState(null);
+  const [vault, setVault] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [doc, remote] = await Promise.all([
+          currentUserId ? idbGetUserOps(currentUserId) : Promise.resolve({ operations: [] }),
+          remoteFetch().catch(e => { console.warn('debug remoteFetch:', e); return null; }),
+        ]);
+        if (cancelled) return;
+        setOps(doc?.operations || []);
+        setVault(remote);
+        setLoading(false);
+      } catch (e) {
+        if (cancelled) return;
+        setErr(String(e.message || e));
+        setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [currentUserId]);
+
+  // Find the vault row matching an op's before snapshot. Uses op.before.id
+  // (same key the deploy step uses) so the comparison matches reality.
+  const findInVault = (op) => {
+    if (!vault) return null;
+    const resource = op.resource || 'tx';
+    const collKey = (typeof RESOURCE_VAULT_KEY !== 'undefined' && RESOURCE_VAULT_KEY[resource]) || 'transactions';
+    const coll = vault[collKey] || [];
+    const id = op.before?.id || op.after?.id;
+    if (!id) return null;
+    return coll.find(r => r.id === id) || null;
+  };
+
+  // Per-field comparison using the same drift-field list as applyOpsToVault.
+  // Returns rows = [{field, beforeVal, vaultVal, drift}]
+  const diffRows = (op, vaultRow) => {
+    const resource = op.resource || 'tx';
+    const fields = (typeof RESOURCE_DRIFT_FIELDS !== 'undefined' && RESOURCE_DRIFT_FIELDS[resource])
+                    || ['type','amount','item','payee','note','category','project','accountName','date'];
+    const rows = [];
+    for (const f of fields) {
+      const b = op.before?.[f];
+      const v = vaultRow?.[f];
+      const bn = b == null ? '' : b;
+      const vn = v == null ? '' : v;
+      const drift = (typeof bn === 'object' || typeof vn === 'object')
+                      ? JSON.stringify(bn) !== JSON.stringify(vn)
+                      : bn !== vn;
+      rows.push({ field: f, beforeVal: b, vaultVal: v, drift });
+    }
+    return rows;
+  };
+
+  const fmt = (v) => v == null ? <span style={{color:'#888'}}>null</span>
+                  : v === '' ? <span style={{color:'#888'}}>""</span>
+                  : typeof v === 'object' ? <code style={{fontSize:10}}>{JSON.stringify(v)}</code>
+                  : <span style={{color:'#ce9178'}}>{String(v)}</span>;
+
+  return (
+    <div style={{
+      position:'fixed', inset:0, zIndex:2000000,
+      background:'#1e1e1e', color:'#d4d4d4',
+      overflowY:'auto', fontFamily:'monospace', padding:'15px',
+    }}>
+      <div style={{
+        display:'flex', justifyContent:'space-between', alignItems:'center',
+        borderBottom:'1px solid #444', paddingBottom:10, marginBottom:20,
+        position:'sticky', top:0, background:'#1e1e1e', zIndex:10,
+      }}>
+        <div>
+          <h2 style={{margin:0, fontSize:18, color:'#4ec9b0'}}>DEBUG: Queue + Vault</h2>
+          <small style={{color:'#888'}}>userx.json (IDB) vs my-money.json (OneDrive)</small>
+        </div>
+        <button onClick={onClose} style={{
+          padding:'8px 15px', background:'#f44336', color:'#fff',
+          border:'none', borderRadius:4, fontWeight:'bold', cursor:'pointer',
+        }}>CLOSE</button>
+      </div>
+
+      {loading && <div style={{padding:'80px 0', textAlign:'center', color:'#888'}}>⏳ Loading...</div>}
+      {err && <div style={{padding:20, color:'#f44336'}}>Error: {err}</div>}
+
+      {!loading && !err && (
+        <>
+          <div style={{marginBottom:12, fontSize:12, color:'#888'}}>
+            UserID: <span style={{color:'#9cdcfe'}}>{currentUserId || '(none)'}</span> ·
+            Vault: <span style={{color:'#4ec9b0'}}>{vault ? `${(vault.transactions||[]).length} tx, ${(vault.accounts||[]).length} acc` : '(not loaded)'}</span> ·
+            Pending: <span style={{color:'#ff9800'}}>{ops.length}</span>
+          </div>
+
+          {ops.length === 0 && (
+            <div style={{textAlign:'center', padding:80, color:'#666'}}>// No pending operations</div>
+          )}
+
+          {ops.map((op, idx) => {
+            const action = (op.action || '').toUpperCase();
+            const resource = op.resource || 'tx';
+            const borderCol = action === 'ADD' ? '#4caf50' : action === 'EDIT' ? '#ff9800' : '#f44336';
+            const vaultRow = findInVault(op);
+            const rows = action === 'EDIT' || action === 'DELETE' ? diffRows(op, vaultRow) : [];
+            const driftCount = rows.filter(r => r.drift).length;
+            return (
+              <div key={op.id || idx} style={{
+                border:'1px solid #333', background:'#252526', borderRadius:8,
+                padding:12, marginBottom:20, borderLeft:`6px solid ${borderCol}`,
+              }}>
+                <div style={{display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:10, color:'#888'}}>
+                  <span style={{color:borderCol, fontWeight:'bold'}}>[{action}] {resource}</span>
+                  <span>op: {op.id || idx}</span>
+                </div>
+                <div style={{fontSize:11, marginBottom:8, color:'#888'}}>
+                  target id: <span style={{color:'#9cdcfe'}}>{op.before?.id || op.after?.id || '?'}</span>
+                </div>
+
+                {action === 'ADD' && (
+                  <div style={{fontSize:12}}>
+                    <div style={{color:'#4caf50', marginBottom:4}}>new row (after):</div>
+                    {['item','amount','accountName','date','category'].map(f => (
+                      <div key={f} style={{marginLeft:10, fontSize:12}}>
+                        <span style={{color:'#9cdcfe'}}>{f}</span>: {fmt(op.after?.[f])}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {(action === 'EDIT' || action === 'DELETE') && (
+                  <>
+                    {!vaultRow && (
+                      <div style={{padding:8, background:'#3a1a1a', color:'#f44336', borderRadius:4, marginBottom:8}}>
+                        ⚠️ Target row NOT FOUND in vault → will be CANCELLED on deploy
+                      </div>
+                    )}
+                    {vaultRow && driftCount > 0 && (
+                      <div style={{padding:8, background:'#3a2a1a', color:'#ff9800', borderRadius:4, marginBottom:8, fontWeight:'bold'}}>
+                        ⚠️ DRIFT on {driftCount} field(s) → will be RETRY-LATER
+                      </div>
+                    )}
+                    {vaultRow && driftCount === 0 && action === 'EDIT' && (
+                      <div style={{padding:8, background:'#1a3a1a', color:'#4caf50', borderRadius:4, marginBottom:8}}>
+                        ✅ No drift → will SUCCEED
+                      </div>
+                    )}
+                    <table style={{width:'100%', fontSize:11, borderCollapse:'collapse'}}>
+                      <thead>
+                        <tr style={{color:'#888'}}>
+                          <th style={{textAlign:'left', padding:'4px 6px'}}>field</th>
+                          <th style={{textAlign:'left', padding:'4px 6px'}}>op.before</th>
+                          <th style={{textAlign:'left', padding:'4px 6px'}}>vault row</th>
+                          {action === 'EDIT' && <th style={{textAlign:'left', padding:'4px 6px'}}>op.after</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map(r => (
+                          <tr key={r.field} style={{background: r.drift ? 'rgba(244,67,54,0.15)' : 'transparent'}}>
+                            <td style={{padding:'3px 6px', color:'#9cdcfe'}}>{r.field}{r.drift && ' ⚠️'}</td>
+                            <td style={{padding:'3px 6px'}}>{fmt(r.beforeVal)}</td>
+                            <td style={{padding:'3px 6px'}}>{fmt(r.vaultVal)}</td>
+                            {action === 'EDIT' && <td style={{padding:'3px 6px'}}>{fmt(op.after?.[r.field])}</td>}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                )}
+
+                <details style={{marginTop:8, fontSize:10}}>
+                  <summary style={{color:'#888', cursor:'pointer'}}>raw op JSON</summary>
+                  <pre style={{background:'#000', color:'#888', padding:6, marginTop:4, fontSize:10, overflow:'auto'}}>{JSON.stringify(op, null, 2)}</pre>
+                </details>
+                {vaultRow && (
+                  <details style={{marginTop:4, fontSize:10}}>
+                    <summary style={{color:'#888', cursor:'pointer'}}>vault row JSON</summary>
+                    <pre style={{background:'#000', color:'#888', padding:6, marginTop:4, fontSize:10, overflow:'auto'}}>{JSON.stringify(vaultRow, null, 2)}</pre>
+                  </details>
+                )}
+              </div>
+            );
+          })}
+        </>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const [booting, setBooting] = useState(true);
   const [account, setAccount] = useState(null);
@@ -5236,14 +5507,15 @@ function App() {
         const minutesAway = (Date.now() - hiddenSince) / 60000;
         // v5.15: If there's a pending push that may have been frozen by the
         // browser while the tab was hidden, fire it now while we're in the
-        // foreground. This covers the scenario the user described: "auto-
-        // sync ไม่เคยสำเร็จ ต้องกดซิงค์เอง" — the debounced setTimeout was
-        // killed when the OS suspended the tab. forcePush() respects the
-        // same guards as schedulePush, so it's safe to call even if the
-        // pending save was already flushed elsewhere.
-        if (status === 'pending' && account && !booting && !skipSync) {
-          forcePush();
-        }
+        // foreground.
+        // v5.40: disabled in the new Q+Deploy model — see the long comment
+        // on the schedulePush-trigger useEffect above. Master/tx state may
+        // not auto-push to OneDrive anymore; everything routes through the
+        // explicit Deploy flow. The pending pendingOps in IDB are durable
+        // and will be picked up on next Deploy regardless of tab state.
+        // if (status === 'pending' && account && !booting && !skipSync) {
+        //   forcePush();
+        // }
         if (minutesAway > 5 && account && !booting && !skipSync) {
           // Tab was hidden long enough that the OS likely froze us — re-pull
           // before the user starts editing on top of stale state.
@@ -5374,7 +5646,25 @@ function App() {
     // remote vault, which will trigger this effect again — but by that
     // point deploy.phase is back to 'idle' so we'll push normally.
     if (deploy.phase === 'waiting' || deploy.phase === 'editing' || deploy.phase === 'releasing') return;
-    if (isOnline && didPullRef.current) schedulePush();
+    // v5.40 CRITICAL FIX: do NOT auto-push state changes to OneDrive. Every
+    // mutation in the app now records a pending op via addPendingOp(), and
+    // the only legitimate way to update my-money.json is through Deploy.
+    // The old schedulePush call here meant the vault could be silently
+    // overwritten with local state *before* the user pressed Deploy —
+    // which is exactly the bug the user reported (edit a tx from search,
+    // delete the queue entry, but OneDrive already has the new value).
+    // It was also the root cause of the retry-later loop: an aborted
+    // edit silently committed to OneDrive made the next Deploy see drift.
+    //
+    // Photo uploads are NOT affected by this: they use their own IndexedDB
+    // upload queue (uploadPhoto / flushPendingUploads), which writes directly
+    // to /photos/<id> files in OneDrive — never to my-money.json. The Q
+    // governs my-money.json writes; photos are independent.
+    //
+    // The schedulePush function itself is left intact (still exported by
+    // useSync) so any future legitimate use can call it explicitly — we
+    // just removed the implicit "every state change pushes" wiring.
+    // if (isOnline && didPullRef.current) schedulePush();
   }, [state.transactions, state.items, state.accounts, state.projects, state.categories, state.users, state.lastModified, isOnline, booting, schedulePush, deploy.phase]);
 
   // Migration: backfill master lists (accounts/projects/items) from existing transactions.
@@ -6497,6 +6787,13 @@ function App() {
                      (orphanScanResult.local?.orphanIds || []).length)
                   : 0
               } />
+
+      {/* v5.39: Debug floating icon — admin-only inspector for the queue +
+          vault. Shows pending ops with before/after diff, and fetches the
+          corresponding tx from OneDrive to highlight which field is causing
+          drift (the retry-later loop bug from v5.38). Port of a user-supplied
+          inspector script, integrated with the app's React state. */}
+      {isAdmin && <DebugFloatingIcon currentUserId={currentUser?.id} pushToast={pushToast} />}
 
       {(showAdd || editing) && (() => {
         // v5.15 (rule 1ข): for non-admin members, the item dropdown should
@@ -8271,7 +8568,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.38 · จำนวนติดลบได้ ±</div>
+      <div className="vstrip">my money · v5.41 · diff: สีแดงเท่านั้น ไม่ขีดทับ 🔴</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -8405,6 +8702,58 @@ function TxRow({ t, onClick, delay = 0, accounts, customCats, pendingOp = null }
         {noteText && (
           <div className="note-ln">{noteText}</div>
         )}
+        {/* v5.40: per-field diff for pending edit ops. The row already
+            shows the AFTER state (because pending ops are applied to local
+            state immediately), so the user can't tell what was changed
+            without opening the row. This block makes the change visible
+            inline: each field that differs between op.before and op.after
+            renders as <red old> → (<green new>). Acts as a built-in
+            drift check too — if a field on the row doesn't match op.after
+            here, something has gone wrong with the local cache. */}
+        {pendingOp && pendingOp.action === 'edit' && pendingOp.before && pendingOp.after && (() => {
+          const fields = [
+            { k: 'item',        label: 'รายการ' },
+            { k: 'amount',      label: 'จำนวน' },
+            { k: 'type',        label: 'ประเภท' },
+            { k: 'category',    label: 'หมวด' },
+            { k: 'project',     label: 'โครงการ' },
+            { k: 'accountName', label: 'บัญชี' },
+            { k: 'date',        label: 'วันที่' },
+            { k: 'note',        label: 'บันทึก' },
+            { k: 'payee',       label: 'ผู้รับ' },
+          ];
+          const diffs = [];
+          for (const { k, label } of fields) {
+            const bv = pendingOp.before[k];
+            const av = pendingOp.after[k];
+            const bn = bv == null ? '' : bv;
+            const an = av == null ? '' : av;
+            if (String(bn) !== String(an)) diffs.push({ k, label, old: bv, neu: av });
+          }
+          if (diffs.length === 0) return null;
+          const showVal = (v) => {
+            if (v == null || v === '') return '∅';
+            return String(v);
+          };
+          return (
+            <div style={{
+              marginTop: 6, padding: '6px 8px',
+              background: 'rgba(251,191,36,0.08)',
+              border: '1px solid rgba(251,191,36,0.3)',
+              borderRadius: 6, fontSize: 11, lineHeight: 1.5,
+              textAlign: 'left', whiteSpace: 'normal',
+            }} onClick={(e) => e.stopPropagation()}>
+              {diffs.map((d, i) => (
+                <div key={d.k} style={{display: 'flex', gap: 4, flexWrap: 'wrap'}}>
+                  <span style={{color: 'var(--text-faint)', minWidth: 50}}>{d.label}:</span>
+                  <span style={{color: 'var(--expense-soft)'}}>{showVal(d.old)}</span>
+                  <span style={{color: 'var(--text-faint)'}}>→</span>
+                  <span style={{color: 'var(--income-soft)'}}>({showVal(d.neu)})</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 6, gap: 10}}>
           <div className="sub-ln" style={{marginTop: 0, textAlign: 'left'}}>{subText || ''}</div>
           <div style={{display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0}}>
@@ -12804,246 +13153,5 @@ _เริ่มเขียนเมื่อ ${new Date().toLocaleDateString('
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App/>);
 </script>
-
-<div id="myQueueFloatingIcon" style="position: fixed; bottom: 80px; right: 20px; z-index: 999999; width: 54px; height: 54px; background-color: #2e7d32; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); cursor: pointer; touch-action: none; user-select: none; transition: transform 0.1s, scale 0.2s;">
-  🔍
-</div>
-
-<script>
-(function() {
-    var icon = document.getElementById('myQueueFloatingIcon');
-    var isDragging = false;
-    var dragTimeout;
-    var startX, startY, xOffset = 0, yOffset = 0;
-
-    icon.addEventListener('touchstart', function(e) {
-        startX = e.touches[0].clientX - xOffset;
-        startY = e.touches[0].clientY - yOffset;
-        dragTimeout = setTimeout(function() {
-            isDragging = true;
-            icon.style.backgroundColor = "#1b5e20";
-            icon.style.scale = "1.1";
-        }, 500);
-    }, {passive: false});
-
-    document.addEventListener('touchmove', function(e) {
-        if (isDragging) {
-            e.preventDefault();
-            xOffset = e.touches[0].clientX - startX;
-            yOffset = e.touches[0].clientY - startY;
-            icon.style.transform = "translate3d(" + xOffset + "px, " + yOffset + "px, 0)";
-        } else {
-            clearTimeout(dragTimeout);
-        }
-    }, {passive: false});
-
-    icon.addEventListener('touchend', function(e) {
-        clearTimeout(dragTimeout);
-        if (!isDragging) { openQueueOverlay(); }
-        isDragging = false;
-        icon.style.backgroundColor = "#2e7d32";
-        icon.style.scale = "1";
-    });
-
-    // --- ฟังก์ชันหลัก (ดึงคิว + เตรียมช่องค้นหา Cloud) ---
-    function openQueueOverlay() {
-        var req = indexedDB.open("mymoney-photos");
-        req.onsuccess = function(e) {
-            var db = e.target.result;
-            try {
-                var tx = db.transaction(["pending_ops"], "readonly");
-                var store = tx.objectStore("pending_ops");
-                var getReq = store.getAll();
-                
-                getReq.onsuccess = function() {
-                    var allData = getReq.result;
-                    var searchQueue = []; // คิวสำหรับค้นหาข้อมูล Cloud
-                    var html = "<div style='padding: 15px; font-family: monospace; background:#1e1e1e; min-height:100%; color:#d4d4d4; padding-bottom:100px;'>";
-                    
-                    html += "<div style='display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 20px; position:sticky; top:0; background:#1e1e1e; z-index:10;'>";
-                    html += "<div><h2 style='margin:0; font-size:18px; color:#4ec9b0;'>DEBUG: Queue + Cloud</h2><small style='color:#888;'>Data: userx.json & my-money.json</small></div>";
-                    html += "<button onclick='document.getElementById(\"queueOverlay\").remove()' style='padding:8px 15px; background:#f44336; color:white; border:none; border-radius:4px; font-weight:bold;'>CLOSE</button>";
-                    html += "</div>";
-                    
-                    var count = 0;
-                    allData.forEach(function(userRecord) {
-                        if (userRecord.operations && userRecord.operations.length > 0) {
-                            html += "<div style='color:#ce9178; margin-bottom:10px;'>// UserID: " + userRecord.userId + "</div>";
-                            
-                            userRecord.operations.forEach(function(op, idx) {
-                                count++;
-                                var action = (op.action || op.type || "unknown").toUpperCase();
-                                var borderCol = action === 'ADD' ? '#4caf50' : action === 'EDIT' ? '#ff9800' : '#f44336';
-                                
-                                html += "<div style='border:1px solid #333; background:#252526; border-radius:8px; padding:12px; margin-bottom:20px; border-left: 6px solid " + borderCol + ";'>";
-                                
-                                // Meta Info
-                                html += "<div style='display:flex; justify-content:space-between; font-size:11px; margin-bottom:10px; color:#888;'>";
-                                html += "<span style='color:" + borderCol + "; font-weight:bold;'>[" + action + "]</span>";
-                                html += "<span>ID: " + (op.id || idx) + "</span>";
-                                html += "</div>";
-
-                                // Comparison Logic
-                                var b = op.before || {};
-                                var a = op.after || {};
-                                var fields = ["item", "amount", "category", "accountName", "date"];
-                                
-                                fields.forEach(function(f) {
-                                    var valB = b[f];
-                                    var valA = a[f];
-                                    
-                                    if (valB !== undefined || valA !== undefined) {
-                                        html += "<div style='margin-bottom:6px; font-size:13px;'>";
-                                        html += "<span style='color:#9cdcfe;'>" + f + "</span>: ";
-                                        
-                                        if (action === 'EDIT' && valB !== valA) {
-                                            var showB = (valB !== undefined && valB !== null && valB !== "") ? valB : 'null';
-                                            var showA = (valA !== undefined && valA !== null && valA !== "") ? valA : 'null';
-                                            
-                                            html += "<div style='margin-left:10px; border-left:1px solid #444; padding-left:8px; margin-top:4px;'>";
-                                            html += "<div style='color:#f44336; font-size:11px;'>old: " + showB + "</div>";
-                                            html += "<div style='color:#4caf50;'>new: " + showA + "</div>";
-                                            html += "</div>";
-                                        } else {
-                                            var showVal = (valA !== undefined && valA !== null && valA !== "") ? valA : ((valB !== undefined && valB !== null && valB !== "") ? valB : '');
-                                            html += "<span style='color:#ce9178;'>\"" + showVal + "\"</span>";
-                                        }
-                                        html += "</div>";
-                                    }
-                                });
-
-                                // === พื้นที่สำหรับแสดงข้อมูล Cloud ที่จะโหลดมาต่อท้าย ===
-                                var cloudDivId = "cloud_data_" + count;
-                                html += "<div id='" + cloudDivId + "' style='margin-top:15px; padding-top:12px; border-top:1px dashed #444; font-size:12px;'>";
-                                html += "<span style='color:#888;'>⏳ กำลังค้นหาข้อมูลออริจินัลจาก Cloud...</span>";
-                                html += "</div>";
-                                
-                                // เก็บ ID ไว้ให้ระบบตามไปค้นหา
-                                if (op.id) searchQueue.push({ divId: cloudDivId, itemId: op.id, action: action });
-
-                                html += "</div>";
-                            });
-                        }
-                    });
-
-                    if (count === 0) { html += "<div style='text-align:center; padding-top:100px; color:#666;'>// No pending operations found.</div>"; }
-                    html += "</div>";
-
-                    var old = document.getElementById("queueOverlay");
-                    if (old) old.remove();
-                    var div = document.createElement("div");
-                    div.id = "queueOverlay";
-                    div.style = "position:fixed; top:0; left:0; width:100%; height:100%; background:#1e1e1e; z-index:2000000; overflow-y:auto;";
-                    div.innerHTML = html;
-                    document.body.appendChild(div);
-                    
-                    // สั่งให้ระบบค้นหาข้อมูล Cloud ทำงานหลังจากสร้างหน้าต่างเสร็จ
-                    processSearchQueue(searchQueue, db);
-                };
-            } catch(e) { alert("Error: " + e.message); }
-        };
-    }
-
-    // --- ระบบค้นหาข้อมูล Cloud อัจฉริยะ (ค้นทั้งแอป) ---
-    function processSearchQueue(queue, db) {
-        if (!queue || queue.length === 0) return;
-        var allCloudData = [];
-        
-        // 1. ค้นหาใน LocalStorage
-        for (var i = 0; i < localStorage.length; i++) {
-            var k = localStorage.key(i);
-            if(k.toLowerCase().indexOf('queue') >= 0 || k.toLowerCase().indexOf('pending') >= 0) continue;
-            try {
-                var val = localStorage.getItem(k);
-                if (val && (val.indexOf('{') >= 0 || val.indexOf('[') >= 0)) {
-                    allCloudData.push(JSON.parse(val));
-                }
-            } catch(e) {}
-        }
-        
-        // 2. ค้นหาใน IndexedDB ทุกตาราง
-        try {
-            var storeNames = db.objectStoreNames;
-            var completed = 0;
-            var total = storeNames.length;
-            if(total === 0) { renderCloudData(queue, allCloudData); return; }
-            
-            for(var i=0; i<total; i++) {
-                (function(sName) {
-                    if(sName === "pending_ops") { checkDone(); return; }
-                    try {
-                        var tx = db.transaction(sName, "readonly");
-                        var store = tx.objectStore(sName);
-                        var getReq = store.getAll();
-                        getReq.onsuccess = function() { allCloudData.push(getReq.result); checkDone(); };
-                        getReq.onerror = checkDone;
-                    } catch(err) { checkDone(); }
-                    
-                    function checkDone() {
-                        completed++;
-                        if(completed === total) renderCloudData(queue, allCloudData);
-                    }
-                })(storeNames[i]);
-            }
-        } catch(err) { renderCloudData(queue, allCloudData); }
-    }
-
-    // --- นำข้อมูล Cloud มาแสดงผลต่อท้าย ---
-    function renderCloudData(queue, allCloudData) {
-        // ฟังก์ชันดำน้ำค้นหา ID ในก้อน JSON
-        function deepSearch(obj, targetId, depth) {
-            if (depth > 5 || !obj) return null;
-            // เช็กให้แน่ใจว่าเป็นข้อมูลจริง ไม่ใช่ตัวคิว
-            if (obj.id === targetId && obj.action === undefined && obj.before === undefined && obj.operations === undefined) return obj;
-            
-            if (Array.isArray(obj)) {
-                for(var j=0; j<obj.length; j++) {
-                    var res = deepSearch(obj[j], targetId, depth + 1);
-                    if (res) return res;
-                }
-            } else if (typeof obj === 'object') {
-                for (var k in obj) {
-                    var res = deepSearch(obj[k], targetId, depth + 1);
-                    if (res) return res;
-                }
-            }
-            return null;
-        }
-
-        queue.forEach(function(q) {
-            var div = document.getElementById(q.divId);
-            if(!div) return;
-            
-            var cloudObj = null;
-            for(var i=0; i<allCloudData.length; i++) {
-                cloudObj = deepSearch(allCloudData[i], q.itemId, 0);
-                if(cloudObj) break;
-            }
-            
-            if(cloudObj) {
-                // ถ้าเจอข้อมูลใน Cloud ให้แสดงเป็นสีฟ้า
-                var html = "<div style='color:#4ec9b0; font-weight:bold; margin-bottom:8px;'>☁️ ข้อมูลต้นฉบับบน Cloud (my-money.json):</div>";
-                html += "<div style='margin-left:5px; border-left:2px solid #4ec9b0; padding-left:10px;'>";
-                html += "<div style='color:#d4d4d4;'>Item: <span style='color:#ce9178;'>\"" + (cloudObj.item || cloudObj.payee || '-') + "\"</span></div>";
-                html += "<div style='color:#d4d4d4;'>Amount: <span style='color:#b5cea8;'>" + (cloudObj.amount !== undefined ? cloudObj.amount : '-') + "</span></div>";
-                html += "<div style='color:#d4d4d4;'>Date: <span style='color:#ce9178;'>\"" + (cloudObj.date || '-') + "\"</span></div>";
-                
-                // ปุ่มดู JSON ดิบของ Cloud (คลิกเพื่อกางได้)
-                html += "<details style='margin-top:8px; font-size:10px;'><summary style='color:#888; cursor:pointer;'>View Cloud JSON</summary><pre style='color:#888; background:#000; padding:5px; margin-top:5px;'>" + JSON.stringify(cloudObj, null, 2) + "</pre></details>";
-                html += "</div>";
-                div.innerHTML = html;
-            } else {
-                // ถ้าไม่เจอ หรือเป็นรายการที่เพิ่งสร้างใหม่
-                if(q.action === 'ADD') {
-                    div.innerHTML = "<div style='color:#888;'>☁️ (เป็นรายการใหม่ ยังไม่มีข้อมูลบน Cloud)</div>";
-                } else {
-                    div.innerHTML = "<div style='color:#f44336;'>☁️ ไม่พบข้อมูลอ้างอิงบน Cloud (อาจถูกลบไปแล้ว หรือเป็นข้อมูลจำลอง)</div>";
-                }
-            }
-        });
-    }
-})();
-</script>
-
 </body>
 </html>
