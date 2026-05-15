@@ -4178,8 +4178,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.46';
-const APP_VERSION_TAG = 'Deploy: master ops ก่อน tx ops + cascade rename ใน vault';
+const APP_VERSION = 'v5.48';
+const APP_VERSION_TAG = 'Items/Accounts/Projects Manager: ตรงเป๊ะอยู่บนสุด';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -8761,7 +8761,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.46 · Master ops ก่อน + vault cascade 🔝</div>
+      <div className="vstrip">my money · v5.48 · Manager: ตรงเป๊ะอยู่บนสุด 🎯</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -9341,13 +9341,29 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
   const accountMatches = useMemo(() => {
     const q = accountName.trim().toLowerCase();
     const entries = Array.from(accountMap.entries()).map(([label, count]) => ({ label, count }));
-    const sorted = entries.sort((a, b) => {
-      if (b.count !== a.count) return b.count - a.count;
-      return a.label.localeCompare(b.label, 'th');
-    });
-    if (!q) return sorted; // show all permitted accounts on open
-    return sorted
+    if (!q) {
+      // No query — show all permitted accounts, most-used first
+      return entries.sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return a.label.localeCompare(b.label, 'th');
+      });
+    }
+    // v5.47: rank by match-quality (exact > prefix > substring), then usage
+    const rank = (label) => {
+      const l = label.toLowerCase();
+      if (l === q) return 0;
+      if (l.startsWith(q)) return 1;
+      return 2;
+    };
+    return entries
       .filter(e => e.label.toLowerCase().includes(q))
+      .sort((a, b) => {
+        const ra = rank(a.label);
+        const rb = rank(b.label);
+        if (ra !== rb) return ra - rb;
+        if (b.count !== a.count) return b.count - a.count;
+        return a.label.localeCompare(b.label, 'th');
+      })
       .slice(0, 8);
   }, [accountName, accountMap]);
   const accountExactExists = useMemo(() => {
@@ -9362,9 +9378,27 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
     const entries = Array.from(itemMap.entries())
       .map(([label, count]) => ({ label, count }));
     if (!q) return entries.sort((a, b) => b.count - a.count).slice(0, 6);
+    // v5.47: rank by match-quality first, usage-count second. The previous
+    // sort was count-only, so a high-use item that merely *contained* the
+    // query mid-string would float above an exact or prefix match. Now:
+    //   tier 0 = exact match  (label === q)
+    //   tier 1 = prefix match (label starts with q)
+    //   tier 2 = substring    (label contains q somewhere else)
+    // Within the same tier, more-used items win.
+    const rank = (label) => {
+      const l = label.toLowerCase();
+      if (l === q) return 0;
+      if (l.startsWith(q)) return 1;
+      return 2;
+    };
     return entries
       .filter(e => e.label.toLowerCase().includes(q))
-      .sort((a, b) => b.count - a.count)
+      .sort((a, b) => {
+        const ra = rank(a.label);
+        const rb = rank(b.label);
+        if (ra !== rb) return ra - rb;
+        return b.count - a.count;
+      })
       .slice(0, 6);
   }, [item, itemMap]);
   const itemExactExists = useMemo(() => {
@@ -9376,9 +9410,21 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
   const noteMatches = useMemo(() => {
     const q = note.trim().toLowerCase();
     if (!q) return [];
+    // v5.47: prefix matches above substring; exact match excluded (no point
+    // in suggesting what the user already typed). Within tier, more-used wins.
+    const rank = (label) => {
+      const l = label.toLowerCase();
+      if (l.startsWith(q)) return 0;
+      return 1;
+    };
     return Array.from(noteMap.entries())
       .filter(([label]) => label.toLowerCase().includes(q) && label.toLowerCase() !== q)
-      .sort((a, b) => b[1] - a[1])
+      .sort(([la, ca], [lb, cb]) => {
+        const ra = rank(la);
+        const rb = rank(lb);
+        if (ra !== rb) return ra - rb;
+        return cb - ca;
+      })
       .slice(0, 5)
       .map(([label, count]) => ({ label, count }));
   }, [note, noteMap]);
@@ -11878,15 +11924,25 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
   // Sort: when the user is typing in the "เพิ่มรายการใหม่" box, push items
   // that contain that substring to the top so they can spot existing entries
   // and avoid duplicates. Otherwise: most-used first, then alphabetical.
+  // v5.48: within matches, prioritise exact > starts-with > contains so a
+  // perfectly-typed name is always the first row. Before this, all matches
+  // were lumped into a single "matched" bucket and re-ordered by usage
+  // count — so an exact-typed name could end up several rows down.
   const sortedItems = useMemo(() => {
     const list = [...(items || [])];
     const q = newName.trim().toLowerCase();
+    const matchTier = (name) => {
+      const n = (name || '').toLowerCase();
+      if (!n.includes(q)) return 3;   // no match
+      if (n === q)        return 0;   // exact
+      if (n.startsWith(q)) return 1;  // prefix
+      return 2;                        // substring
+    };
     list.sort((a, b) => {
-      // When typing, items matching the query come first
       if (q) {
-        const aMatch = (a.name || '').toLowerCase().includes(q);
-        const bMatch = (b.name || '').toLowerCase().includes(q);
-        if (aMatch !== bMatch) return aMatch ? -1 : 1;
+        const ta = matchTier(a.name);
+        const tb = matchTier(b.name);
+        if (ta !== tb) return ta - tb;
       }
       const ca = usageMap.get(a.name) || 0;
       const cb = usageMap.get(b.name) || 0;
@@ -12118,15 +12174,24 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
     return m;
   }, [transactions]);
 
-  // Sort: most-used first, then alphabetical
+  // Sort: most-used first, then alphabetical.
+  // v5.48: same 3-tier match ranking as ItemsManager — exact > prefix > contains
+  // so a perfectly-typed name lands at the top.
   const sortedAccounts = useMemo(() => {
     const list = [...(accounts || [])];
     const q = newName.trim().toLowerCase();
+    const matchTier = (name) => {
+      const n = (name || '').toLowerCase();
+      if (!n.includes(q)) return 3;
+      if (n === q)        return 0;
+      if (n.startsWith(q)) return 1;
+      return 2;
+    };
     list.sort((a, b) => {
       if (q) {
-        const aMatch = (a.name || '').toLowerCase().includes(q);
-        const bMatch = (b.name || '').toLowerCase().includes(q);
-        if (aMatch !== bMatch) return aMatch ? -1 : 1;
+        const ta = matchTier(a.name);
+        const tb = matchTier(b.name);
+        if (ta !== tb) return ta - tb;
       }
       const ca = usageMap.get(a.name) || 0;
       const cb = usageMap.get(b.name) || 0;
@@ -12503,11 +12568,19 @@ function ProjectsManager({ projects, transactions, onClose, onAdd, onUpdate, onR
   const sortedProjects = useMemo(() => {
     const list = [...(projects || [])];
     const q = newName.trim().toLowerCase();
+    // v5.48: exact > prefix > contains
+    const matchTier = (name) => {
+      const n = (name || '').toLowerCase();
+      if (!n.includes(q)) return 3;
+      if (n === q)        return 0;
+      if (n.startsWith(q)) return 1;
+      return 2;
+    };
     list.sort((a, b) => {
       if (q) {
-        const aMatch = (a.name || '').toLowerCase().includes(q);
-        const bMatch = (b.name || '').toLowerCase().includes(q);
-        if (aMatch !== bMatch) return aMatch ? -1 : 1;
+        const ta = matchTier(a.name);
+        const tb = matchTier(b.name);
+        if (ta !== tb) return ta - tb;
       }
       const ca = usageMap.get(a.name) || 0;
       const cb = usageMap.get(b.name) || 0;
