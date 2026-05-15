@@ -4093,8 +4093,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.42';
-const APP_VERSION_TAG = 'CRITICAL: ปิดทุก auto-push → Q+Deploy เป็นทางเดียวเขียน vault';
+const APP_VERSION = 'v5.43';
+const APP_VERSION_TAG = 'Debug overlay: ตาราง 3-4 column สำหรับ ADD/EDIT/DELETE';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -5087,9 +5087,15 @@ function DebugOverlay({ currentUserId, onClose, pushToast }) {
     const resource = op.resource || 'tx';
     const fields = (typeof RESOURCE_DRIFT_FIELDS !== 'undefined' && RESOURCE_DRIFT_FIELDS[resource])
                     || ['type','amount','item','payee','note','category','project','accountName','date'];
+    const action = (op.action || '').toUpperCase();
+    // v5.43: For ADD compare op.after to vault (id collision check). For
+    // EDIT/DELETE compare op.before (the original drift check). The result
+    // shape keeps beforeVal as the relevant "source" value either way so the
+    // table renderer doesn't need to branch.
+    const source = action === 'ADD' ? op.after : op.before;
     const rows = [];
     for (const f of fields) {
-      const b = op.before?.[f];
+      const b = source?.[f];
       const v = vaultRow?.[f];
       const bn = b == null ? '' : b;
       const vn = v == null ? '' : v;
@@ -5147,7 +5153,12 @@ function DebugOverlay({ currentUserId, onClose, pushToast }) {
             const resource = op.resource || 'tx';
             const borderCol = action === 'ADD' ? '#4caf50' : action === 'EDIT' ? '#ff9800' : '#f44336';
             const vaultRow = findInVault(op);
-            const rows = action === 'EDIT' || action === 'DELETE' ? diffRows(op, vaultRow) : [];
+            // v5.43: compute the field-comparison rows for ALL action types.
+            // For ADD we diff op.after vs vaultRow (if any) — so we can flag
+            // an id collision where the existing vault row's content differs.
+            // For EDIT/DELETE we diff op.before vs vaultRow — the original
+            // drift check. diffRows() chooses based on action internally.
+            const rows = diffRows(op, vaultRow);
             const driftCount = rows.filter(r => r.drift).length;
             return (
               <div key={op.id || idx} style={{
@@ -5162,15 +5173,47 @@ function DebugOverlay({ currentUserId, onClose, pushToast }) {
                   target id: <span style={{color:'#9cdcfe'}}>{op.before?.id || op.after?.id || '?'}</span>
                 </div>
 
+                {/* v5.43: unified table view for ALL action types (ADD/EDIT/
+                    DELETE). User asked for the detailed format from the EDIT
+                    case to apply to ADD as well, so they can see every field
+                    side-by-side and spot anomalies like "all fields null" or
+                    "id collides with an existing vault row" at a glance. */}
                 {action === 'ADD' && (
-                  <div style={{fontSize:12}}>
-                    <div style={{color:'#4caf50', marginBottom:4}}>new row (after):</div>
-                    {['item','amount','accountName','date','category'].map(f => (
-                      <div key={f} style={{marginLeft:10, fontSize:12}}>
-                        <span style={{color:'#9cdcfe'}}>{f}</span>: {fmt(op.after?.[f])}
+                  <>
+                    {/* Status banner: an ADD with a target id that ALREADY
+                        exists in the vault means someone else (another device
+                        or merged duplicate) inserted the same id — apply will
+                        either clobber or skip depending on the merge rules.
+                        Worth surfacing. */}
+                    {vaultRow && (
+                      <div style={{padding:8, background:'#3a2a1a', color:'#ff9800', borderRadius:4, marginBottom:8, fontWeight:'bold'}}>
+                        ⚠️ id already EXISTS in vault → ADD may collide/no-op
                       </div>
-                    ))}
-                  </div>
+                    )}
+                    {!vaultRow && (
+                      <div style={{padding:8, background:'#1a3a1a', color:'#4caf50', borderRadius:4, marginBottom:8}}>
+                        ✅ New id, not in vault → will be INSERTED
+                      </div>
+                    )}
+                    <table style={{width:'100%', fontSize:11, borderCollapse:'collapse'}}>
+                      <thead>
+                        <tr style={{color:'#888'}}>
+                          <th style={{textAlign:'left', padding:'4px 6px'}}>field</th>
+                          <th style={{textAlign:'left', padding:'4px 6px'}}>op.after (new)</th>
+                          <th style={{textAlign:'left', padding:'4px 6px'}}>vault row</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map(r => (
+                          <tr key={r.field} style={{background: vaultRow && r.drift ? 'rgba(255,152,0,0.15)' : 'transparent'}}>
+                            <td style={{padding:'3px 6px', color:'#9cdcfe'}}>{r.field}{vaultRow && r.drift && ' ⚠️'}</td>
+                            <td style={{padding:'3px 6px'}}>{fmt(op.after?.[r.field])}</td>
+                            <td style={{padding:'3px 6px'}}>{fmt(r.vaultVal)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
                 )}
 
                 {(action === 'EDIT' || action === 'DELETE') && (
@@ -8589,7 +8632,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.42 · Q+Deploy = ทางเดียวเขียน vault 🔐</div>
+      <div className="vstrip">my money · v5.43 · Debug: ตารางละเอียดทุก op 🔬</div>
 
       {showLessonsEditor && (
         <LessonsEditor
