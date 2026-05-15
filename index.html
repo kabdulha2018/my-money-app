@@ -3001,12 +3001,44 @@ async function applyOpsToVault(operations) {
     if (!Array.isArray(vault[key])) vault[key] = [];
   }
 
-  // 2) Walk operations IN ORDER. Each op transforms `vault` in place. The
-  //    op's `resource` field tells us which collection to touch; if it's
-  //    missing (legacy ops written before Phase 5a) we default to 'tx' for
-  //    backwards compatibility.
+  // v5.46: Priority sort + master cascade. Two related fixes for the
+  // "drift on item/account/etc after master rename" bug.
+  //
+  // Problem: when a user renames a master row (e.g. "id4mm" → "id4mm(เมตร)")
+  // in ItemsManager, the app's local cascadeRename updates every tx that
+  // references the old name — so the user's NEXT edit on one of those tx
+  // captures op.before.item = "id4mm(เมตร)". But vault.tx.item is still
+  // "id4mm" (the master rename hasn't been deployed yet). If we apply the
+  // tx-edit op first, the drift check fails.
+  //
+  // Fix part 1 (priority sort): re-order the deploy queue so master-list
+  // ops always apply before tx ops. Within each priority tier, original
+  // FIFO order is preserved. The user's mental model is "make master
+  // changes, then any tx that depended on them" — which is what they get
+  // automatically now.
+  //
+  // Fix part 2 (vault cascade): when applying a master EDIT, also propagate
+  // the new name into every tx in the vault that references the old name.
+  // This keeps the vault internally consistent so the subsequent tx-edit
+  // ops in the same deploy see a vault where item names already match
+  // their op.before snapshot.
+  const PRIORITY = { account: 1, item: 1, category: 1, project: 1, user: 1, tx: 2 };
+  const orderedOperations = [...operations]
+    .map((op, i) => ({ op, i }))
+    .sort((a, b) => {
+      const pa = PRIORITY[a.op.resource || 'tx'] || 2;
+      const pb = PRIORITY[b.op.resource || 'tx'] || 2;
+      if (pa !== pb) return pa - pb;
+      return a.i - b.i; // stable FIFO within the same tier
+    })
+    .map(x => x.op);
+
+  // 2) Walk operations IN ORDER (priority-sorted from v5.46). Each op
+  //    transforms `vault` in place. The op's `resource` field tells us
+  //    which collection to touch; if it's missing (legacy ops written
+  //    before Phase 5a) we default to 'tx' for backwards compatibility.
   const results = [];
-  for (const op of operations) {
+  for (const op of orderedOperations) {
     let status = 'success';
     let reason = null;
     const resource = op.resource || 'tx';
@@ -3058,6 +3090,39 @@ async function applyOpsToVault(operations) {
         reason = 'มีการแก้ไขจากอุปกรณ์อื่นก่อน';
       } else {
         coll[idx] = { ...op.after };
+        // v5.46: Master-edit cascade. When the master row that just got
+        // renamed is one that tx rows reference by name (item, account,
+        // category, project), propagate the new name into every tx in
+        // the vault. Without this, the next tx-edit op in this same
+        // deploy would drift-fail because op.before.<field> = "new name"
+        // (captured after local cascade) but vault.tx.<field> = "old name".
+        //
+        // Note: user.label isn't a denormalized field on tx — tx stores
+        // createdBy = user.id (immutable) — so user renames don't need
+        // any cascade and are excluded here.
+        if (resource === 'item' || resource === 'account' || resource === 'category' || resource === 'project') {
+          const oldName = (op.before?.name || '').trim();
+          const newName = (op.after?.name  || '').trim();
+          if (oldName && newName && oldName !== newName) {
+            // Map resource → which tx field references it by name
+            const txField = resource === 'item'    ? 'item'
+                         : resource === 'account' ? 'accountName'
+                         : resource === 'category'? 'category'
+                         :                          'project';
+            const txs = vault.transactions || [];
+            for (let ti = 0; ti < txs.length; ti++) {
+              const t = txs[ti];
+              if (resource === 'item') {
+                // legacy: tx may have used `payee` before v1.4
+                if ((t.item || t.payee || '').trim() === oldName) {
+                  txs[ti] = { ...t, item: newName, payee: undefined };
+                }
+              } else if ((t[txField] || '').trim() === oldName) {
+                txs[ti] = { ...t, [txField]: newName };
+              }
+            }
+          }
+        }
       }
     } else if (op.action === 'delete') {
       const idx = coll.findIndex(r => r.id === op.before?.id);
@@ -4113,8 +4178,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.45';
-const APP_VERSION_TAG = 'ป้องกันปิดแอประหว่าง deploy + มี pending ops (beforeunload + back-btn trap)';
+const APP_VERSION = 'v5.46';
+const APP_VERSION_TAG = 'Deploy: master ops ก่อน tx ops + cascade rename ใน vault';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -8696,7 +8761,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.45 · กันปิดแอประหว่าง deploy 🚫</div>
+      <div className="vstrip">my money · v5.46 · Master ops ก่อน + vault cascade 🔝</div>
 
       {showLessonsEditor && (
         <LessonsEditor
