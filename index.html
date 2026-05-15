@@ -3022,12 +3022,32 @@ async function applyOpsToVault(operations) {
     const coll = vault[collKey];
 
     if (op.action === 'add') {
-      // Always succeed — duplicate ids are theoretically possible but our
-      // `uid()` generator makes collisions astronomically unlikely. We put
-      // tx at the FRONT (newest first, matches existing app behaviour) but
-      // master-list rows at the END (preserves their natural creation order).
-      if (resource === 'tx') coll.unshift(op.after);
-      else coll.push(op.after);
+      // v5.44: idempotency guard. Before this, ADD always unshifted into
+      // the collection without checking whether the id was already there.
+      // That created a duplicate-row bug when a deploy partially completed:
+      //
+      //   1. user kicks off deploy
+      //   2. applyOpsToVault writes vault with the new rows to OneDrive ✅
+      //   3. user closes the tab / loses network BEFORE commitDeployResults
+      //      runs — so the ops stay in IDB with status='pending'
+      //   4. user reopens app, sees "N รายการรอ deploy" banner, taps Deploy
+      //   5. applyOpsToVault pulls vault (which now ALREADY has the rows
+      //      from step 2), then unshifts them AGAIN → duplicate rows
+      //
+      // Now: if a row with the same id is already in the vault, treat the
+      // op as already-applied (cancelled w/ a benign reason). The user
+      // gets the same end state either way and we move the op out of the
+      // pending queue when commitDeployResults runs.
+      const dup = coll.find(r => r.id === op.after?.id);
+      if (dup) {
+        status = 'cancelled';
+        reason = 'มีอยู่แล้วใน vault (deploy ก่อนหน้า)';
+      } else {
+        // Put tx at the FRONT (newest first, matches existing app
+        // behaviour) but master-list rows at the END.
+        if (resource === 'tx') coll.unshift(op.after);
+        else coll.push(op.after);
+      }
     } else if (op.action === 'edit') {
       const idx = coll.findIndex(r => r.id === op.before?.id);
       if (idx === -1) {
@@ -4093,8 +4113,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.43';
-const APP_VERSION_TAG = 'Debug overlay: ตาราง 3-4 column สำหรับ ADD/EDIT/DELETE';
+const APP_VERSION = 'v5.45';
+const APP_VERSION_TAG = 'ป้องกันปิดแอประหว่าง deploy + มี pending ops (beforeunload + back-btn trap)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -5588,8 +5608,28 @@ function App() {
       }
     };
     const onBeforeUnload = (e) => {
-      // Only block close if there is actually unsaved work in flight.
-      if (status === 'pending' || status === 'syncing') {
+      // v5.45: stronger close-prevention. The old guard only blocked when
+      // the legacy sync hook was 'pending' or 'syncing' — both of which
+      // v5.42 made into no-ops, so in practice it never fired anymore.
+      //
+      // Two real reasons to warn now:
+      //   1. A Deploy is mid-flight (phase ∈ {waiting, editing, releasing}).
+      //      Closing the tab during 'editing' is the exact scenario that
+      //      caused the duplicate-tx bug in v5.44 — applyOpsToVault
+      //      finished uploading the new vault, but commitDeployResults
+      //      hadn't run yet, leaving the ops still pending. Reopen, deploy
+      //      again, vault gets duplicates. v5.44 now guards via idempotent
+      //      ADDs, but we still want the user to consciously confirm they
+      //      really mean to close mid-deploy.
+      //   2. There are pending ops in the queue that haven't been deployed.
+      //      If the user closes here, those ops are durable in IDB and will
+      //      be flagged on next open via the recovery toast — but they
+      //      should know they're walking away with unsaved-to-cloud work.
+      //
+      // Both checks use the new Q+Deploy state, not the disabled sync hook.
+      const isDeploying = deploy.phase === 'waiting' || deploy.phase === 'editing' || deploy.phase === 'releasing';
+      const hasPending = (pendingOps?.length || 0) > 0;
+      if (isDeploying || hasPending) {
         e.preventDefault();
         e.returnValue = '';
         return '';
@@ -5597,11 +5637,35 @@ function App() {
     };
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('beforeunload', onBeforeUnload);
+
+    // v5.45: Android back button trap during deploy. beforeunload alone is
+    // unreliable on mobile Chrome — Android's back gesture often skips it
+    // and dispatches `popstate` instead. We push a sentinel history entry
+    // while a deploy is in flight; if the user hits back, popstate fires,
+    // we re-push the sentinel and show a toast asking them to wait.
+    // The sentinel is removed when the deploy finishes or when guarding
+    // becomes unnecessary.
+    let pushedSentinel = false;
+    const isDeploying = () => deploy.phase === 'waiting' || deploy.phase === 'editing' || deploy.phase === 'releasing';
+    const onPopState = (e) => {
+      if (isDeploying()) {
+        // Re-push so the user can't navigate away mid-deploy
+        history.pushState({ _mymoneyGuard: true }, '');
+        pushToast?.('กำลัง deploy — กรุณารอสักครู่');
+      }
+    };
+    if (isDeploying() && !pushedSentinel) {
+      history.pushState({ _mymoneyGuard: true }, '');
+      pushedSentinel = true;
+    }
+    window.addEventListener('popstate', onPopState);
+
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('popstate', onPopState);
     };
-  }, [account, booting, skipSync, pullOnce, forcePush, status]);
+  }, [account, booting, skipSync, pullOnce, forcePush, status, deploy.phase, pendingOps, pushToast]);
 
   // v2.9: Archive this index.html into OneDrive once per version, after login
   const didArchiveRef = useRef(false);
@@ -8632,7 +8696,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.43 · Debug: ตารางละเอียดทุก op 🔬</div>
+      <div className="vstrip">my money · v5.45 · กันปิดแอประหว่าง deploy 🚫</div>
 
       {showLessonsEditor && (
         <LessonsEditor
