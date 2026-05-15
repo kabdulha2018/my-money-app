@@ -776,7 +776,7 @@ body:has(.sheet-backdrop) nav.tabbar {
 /* Toast */
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%); bottom: 112px;
-  padding: 10px 16px; font-size: 13px; border-radius: 999px; z-index: 80;
+  padding: 10px 16px; font-size: 13px; border-radius: 999px; z-index: 999999;
   background: var(--surface2); color: var(--text);
   border: 1px solid var(--line);
   box-shadow: 0 10px 30px rgba(0,0,0,.45);
@@ -4178,8 +4178,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.49';
-const APP_VERSION_TAG = 'Deploy → อัพโหลด (UI), ค้นหา: toast เมื่อไม่เจอ + scroll เมื่อเจอ';
+const APP_VERSION = 'v5.50';
+const APP_VERSION_TAG = 'Toast แสดงเหนือ modal + ค้นซ้ำ trigger ใหม่';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -8762,7 +8762,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.49 · "อัพโหลด" + ค้นหา UX 📤🔍</div>
+      <div className="vstrip">my money · v5.50 · Toast เหนือ modal + ค้นซ้ำ trigger 🔝</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -13100,6 +13100,12 @@ function SearchSheet({ allTransactions, accounts, projects, categories, onClose,
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [submitted, setSubmitted] = useState(false); // run search after first click
+  // v5.50: tick counter so the toast/scroll effect re-fires every submit,
+  // even when the keyword string is identical to last time. Without this,
+  // a user who tweaks one keyword and ends up searching the SAME query
+  // again (e.g. corrected a typo back) would see no feedback because
+  // `results` (a useMemo result) keeps the same reference.
+  const [submitTick, setSubmitTick] = useState(0);
 
   // Build a flat searchable string for a transaction across every meaningful field.
   // We deliberately include numbers (amount), dates, ids — same as the user expects
@@ -13147,14 +13153,17 @@ function SearchSheet({ allTransactions, accounts, projects, categories, onClose,
 
   const onSubmit = () => {
     setSubmitted(true);
+    setSubmitTick(t => t + 1);  // v5.50: force the toast/scroll effect to re-run
   };
 
-  // v5.49: scroll the results into view + toast on empty results.
+  // v5.49/50: scroll the results into view + toast on empty results.
   // We can't know `results.length` until the next render (it's a useMemo),
-  // so this effect watches the `submitted + results` change and reacts.
+  // so this effect watches the `submitTick` change and reacts to whatever
+  // `results` happens to be at that point.
   const resultsRef = useRef(null);
   useEffect(() => {
     if (!submitted || results === null) return;
+    if (submitTick === 0) return;  // first mount, no submit yet
     if (results.length === 0) {
       pushToast?.('ไม่พบรายการที่ตรงกับเงื่อนไข');
       return;
@@ -13166,7 +13175,7 @@ function SearchSheet({ allTransactions, accounts, projects, categories, onClose,
       }
     }, 50);
     return () => clearTimeout(t);
-  }, [submitted, results, pushToast]);
+  }, [submitTick]);
 
   // No results yet & not yet submitted → show only the form
   // Submitted → show results list below the form
