@@ -4093,8 +4093,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.41';
-const APP_VERSION_TAG = 'Diff inline: ลบ line-through (กับเครื่องหมายลบ สับสน)';
+const APP_VERSION = 'v5.42';
+const APP_VERSION_TAG = 'CRITICAL: ปิดทุก auto-push → Q+Deploy เป็นทางเดียวเขียน vault';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -4289,22 +4289,32 @@ function useSync(state, setState, isOnline) {
             users:      remote.users || [],  // v5.0
             lastModified: remoteTime,
           });
-        } else if (localTime > remoteTime) {
-          // push local up — this is the rare case where the user edited
-          // offline and we're now reconnected. Pass the remote's timestamp
-          // as the optimistic-lock baseline so we don't clobber a write
-          // that landed in between.
-          const result = await remoteSave(buildPayload(state), {
-            expectedLastModified: remoteTime || null,
-          });
-          remoteBaselineRef.current = result?.lastModifiedDateTime || new Date().toISOString();
         }
-      } else if (state.transactions.length > 0 || (state.items || []).length > 0 || (state.accounts || []).length > 0 || (state.projects || []).length > 0 || (state.categories || []).length > 0 || (state.users || []).length > 0) {
-        // remote is empty but we have local data → push it. This is the
-        // first-ever save for this account, so allow the empty-state guard
-        // to be lenient (there's nothing to overwrite).
-        const result = await remoteSave(buildPayload(state), { force: true });
-        remoteBaselineRef.current = result?.lastModifiedDateTime || new Date().toISOString();
+        // v5.42 CRITICAL: do NOT push local state to OneDrive even when
+        // localTime > remoteTime. The new Q+Deploy model means local state
+        // mutations are intentional in-memory work that hasn't been
+        // committed yet — pushing here silently overwrites OneDrive with
+        // the user's UNCOMMITTED edits, producing the retry-later bug:
+        //
+        //   1. User edits tx in Search → addPendingOp + setState (local
+        //      lastModified bumps to T2)
+        //   2. Auto-sync fires → pullOnce → remote.lastModified is T1
+        //      → "localTime > remoteTime" branch was triggered
+        //      → remoteSave(buildPayload(state)) wrote the edited tx to
+        //         my-money.json BEFORE the user pressed Deploy.
+        //   3. User hits Deploy → applyOpsToVault pulls fresh vault →
+        //      finds tx.amount already == op.after (because of step 2),
+        //      not op.before → drift detected → retry-later.
+        //
+        // The Q+Deploy flow is the only legitimate path to update
+        // my-money.json. The local state diverging from remote is now
+        // EXPECTED between edit and deploy — it's the whole point of
+        // pending ops.
+        //
+        // The other "push" branch (remote empty but local has data) is
+        // also disabled: a fresh install will have empty local state too,
+        // so there's nothing legitimate to push from pullOnce. The first
+        // real write to OneDrive happens via the user's first Deploy.
       }
       // v5.17: avoid the false-green race Gemini flagged. If a debounced push
       // is currently mid-flight (syncingRef is true), claiming 'ok' here would
@@ -4328,18 +4338,21 @@ function useSync(state, setState, isOnline) {
 
   // Scheduled push (debounced on state change)
   const schedulePush = useCallback(() => {
+    // v5.42: schedulePush is now a no-op. The Q+Deploy flow is the only
+    // sanctioned path to update my-money.json. Any caller that triggers a
+    // push silently produces the retry-later drift bug (see pullOnce
+    // comments above for the full timeline). We keep the function as a
+    // named export so callers don't crash, but it intentionally does
+    // nothing. The status indicator is wired through other paths.
+    return;
+  }, []);
+  // v5.42: original implementation kept below in a comment for reference.
+  // Restoring it would re-introduce the silent-overwrite bug.
+  /*
+  const schedulePush_DISABLED = useCallback(() => {
     if (!isOnline) return;
-    // v5.14: hold all pushes until the first pull has confirmed what's on the
-    // server. Pushing a fresh empty state on top of a real vault is exactly
-    // how data got nuked — the first tab to load on a slow network would
-    // overwrite everything before the pull finished.
     if (!initialSyncDoneRef.current) return;
-
-    // v5.15: Mark the indicator as 'pending' the instant a save is queued so
-    // the green "ok" badge can never linger over an unsaved edit. The badge
-    // only flips back to green after Graph confirms the PUT (see below).
     setStatus('pending');
-
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
       if (syncingRef.current) return;
@@ -4349,18 +4362,12 @@ function useSync(state, setState, isOnline) {
         const result = await remoteSave(buildPayload(state), {
           expectedLastModified: remoteBaselineRef.current,
         });
-        // Update our baseline so subsequent saves don't false-positive on the
-        // optimistic-lock check. We use our own stamp because Graph's response
-        // lastModifiedDateTime occasionally lags the body we just wrote.
         remoteBaselineRef.current = new Date().toISOString();
-        // v5.15: Only set 'ok' AFTER Graph returned 200. The contract: a
-        // green light means the server has the data, not "we plan to send it".
         setStatus('ok');
         setLastSync(new Date());
         setErrMsg(null);
       } catch (e) {
         console.error(e);
-        // Translate the v5.14 error codes into user-readable status messages.
         if (e && e.code === 'EMPTY_OVERWRITE_REFUSED') {
           setStatus('error');
           setErrMsg('ปลอดภัย: ปฏิเสธการเขียนข้อมูลว่างทับ — กรุณารีเฟรช');
@@ -4376,6 +4383,7 @@ function useSync(state, setState, isOnline) {
       }
     }, 2500);
   }, [isOnline, state]);
+  */
 
   // v5.15: Manual immediate sync, bypassing the 2.5s debounce. Powers the
   // tap-to-sync behaviour on the SyncPill and any explicit "ซิงค์ตอนนี้"
@@ -4384,19 +4392,31 @@ function useSync(state, setState, isOnline) {
   // press the pill while the tab is foregrounded to fire the PUT immediately.
   // All the v5.14 guards (empty-state, optimistic-lock) still apply.
   const forcePush = useCallback(async () => {
+    // v5.42: forcePush is now a no-op stub. The Sync Pill at the top of
+    // Home/List/Chart used to call this on tap, and the Settings "ซิงค์
+    // ตอนนี้" button did too. Either of those would overwrite my-money.json
+    // with the current local state — including any pending edits the user
+    // had made via Search → edit → save but not yet deployed — and that
+    // silently committed write was the root cause of the retry-later loop.
+    // The new model: only Deploy may write to my-money.json. We return ok
+    // so the existing UI doesn't show an error toast on what is now a
+    // harmless click.
+    setStatus('ok');
+    setLastSync(new Date());
+    return { ok: true, reason: 'no-op' };
+  }, []);
+  // v5.42: original implementation preserved below in a comment.
+  /*
+  const forcePush_DISABLED = useCallback(async () => {
     if (!isOnline) {
       setStatus('offline');
       return { ok: false, reason: 'offline' };
     }
     if (!initialSyncDoneRef.current) {
-      // No initial pull yet → safest is to do that first so we don't overwrite
-      // remote data with our default empty state.
       return { ok: false, reason: 'not-ready' };
     }
     if (syncingRef.current) return { ok: false, reason: 'busy' };
-
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
-
     syncingRef.current = true;
     setStatus('syncing');
     try {
@@ -4425,6 +4445,7 @@ function useSync(state, setState, isOnline) {
       syncingRef.current = false;
     }
   }, [isOnline, state]);
+  */
 
   return { status, lastSync, errMsg, pullOnce, schedulePush, forcePush, setStatus };
 }
@@ -8568,7 +8589,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.41 · diff: สีแดงเท่านั้น ไม่ขีดทับ 🔴</div>
+      <div className="vstrip">my money · v5.42 · Q+Deploy = ทางเดียวเขียน vault 🔐</div>
 
       {showLessonsEditor && (
         <LessonsEditor
