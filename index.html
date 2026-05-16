@@ -4178,8 +4178,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.50';
-const APP_VERSION_TAG = 'Toast แสดงเหนือ modal + ค้นซ้ำ trigger ใหม่';
+const APP_VERSION = 'v5.51';
+const APP_VERSION_TAG = 'Single-tab lock — กันเปิดซ้อน 2 หน้าต่าง';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -5362,6 +5362,18 @@ function DebugOverlay({ currentUserId, onClose, pushToast }) {
 
 function App() {
   const [booting, setBooting] = useState(true);
+  // v5.51: single-tab guard. Two tabs of the same app would share the same
+  // IndexedDB + OneDrive vault, racing each other:
+  //   - Tab A starts a Deploy, Tab B adds a tx mid-deploy → pending_ops
+  //     contention, possible duplicate writes.
+  //   - visibilitychange handlers both pull vault → concurrent overwrites.
+  //   - Q.json sees the same userId in two "deviceIds" → confusing locks.
+  // Defense: when this tab boots it claims a per-tab id, announces itself
+  // on a BroadcastChannel, and writes a heartbeat to localStorage. If
+  // another tab is already heartbeating it loses and shows a "another tab
+  // is open" screen until the user closes one. Heartbeat staleness fallback
+  // covers the case where a crashed tab left stale state behind.
+  const [tabBlocked, setTabBlocked] = useState(false);
   const [account, setAccount] = useState(null);
   const [authError, setAuthError] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -5401,6 +5413,119 @@ function App() {
     [state.users, appProfileId]
   );
   const isAdmin = currentUser?.role === 'admin';
+
+  // v5.51: single-tab guard. See declaration of tabBlocked above for
+  // rationale. Implementation:
+  //   - On mount, generate a per-tab id and check localStorage for an
+  //     active heartbeat from another tab.
+  //   - If another tab is heartbeating (within last 5s), block this tab
+  //     and tell the other tab via BroadcastChannel.
+  //   - Otherwise claim the slot and start our own heartbeat (every 2s).
+  //   - Listen on BroadcastChannel for "i-am-here" pings from new tabs.
+  //     If they ping us, reply so they can confirm and decide who blocks.
+  //   - When the user closes this tab, clear the heartbeat slot.
+  useEffect(() => {
+    const TAB_KEY = 'mymoney:active-tab';
+    const CHANNEL = 'mymoney-tabs';
+    const HEARTBEAT_MS = 2000;
+    const STALE_MS = 5000;
+    const myId = `tab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    // Read whatever is currently claimed
+    const readSlot = () => {
+      try {
+        const v = localStorage.getItem(TAB_KEY);
+        if (!v) return null;
+        return JSON.parse(v);
+      } catch { return null; }
+    };
+    const writeSlot = () => {
+      try {
+        localStorage.setItem(TAB_KEY, JSON.stringify({ id: myId, ts: Date.now() }));
+      } catch {}
+    };
+    const clearSlot = () => {
+      try {
+        const v = readSlot();
+        if (v?.id === myId) localStorage.removeItem(TAB_KEY);
+      } catch {}
+    };
+
+    const existing = readSlot();
+    const fresh = existing && (Date.now() - existing.ts) < STALE_MS;
+    let isOwner = !fresh;
+    let heartbeatTimer = null;
+    let bc = null;
+
+    try { bc = new BroadcastChannel(CHANNEL); } catch { bc = null; }
+
+    if (isOwner) {
+      // Claim it
+      writeSlot();
+      setTabBlocked(false);
+      // Heartbeat loop
+      heartbeatTimer = setInterval(() => {
+        // Defensive: another tab may have stolen the slot if our writes
+        // got dropped. If so, give up gracefully.
+        const cur = readSlot();
+        if (cur && cur.id !== myId && (Date.now() - cur.ts) < STALE_MS) {
+          setTabBlocked(true);
+          if (heartbeatTimer) clearInterval(heartbeatTimer);
+          return;
+        }
+        writeSlot();
+      }, HEARTBEAT_MS);
+      // Announce
+      try { bc?.postMessage({ type: 'claim', id: myId }); } catch {}
+    } else {
+      // Another tab owns it — we lose
+      setTabBlocked(true);
+      // Ping the owner so it knows we tried (optional)
+      try { bc?.postMessage({ type: 'ping', from: myId, target: existing?.id }); } catch {}
+    }
+
+    // Listen for messages from other tabs
+    if (bc) {
+      bc.onmessage = (ev) => {
+        const msg = ev.data || {};
+        if (msg.type === 'claim' && msg.id !== myId) {
+          // Another tab just claimed. If we thought we owned it but were
+          // slow to heartbeat, defer to them so we don't both run.
+          const cur = readSlot();
+          if (cur && cur.id === msg.id) {
+            // They wrote after us → they own → we block.
+            setTabBlocked(true);
+            if (heartbeatTimer) clearInterval(heartbeatTimer);
+          }
+        }
+        if (msg.type === 'release' && msg.id === existing?.id) {
+          // Owner closed. Try to claim.
+          const cur = readSlot();
+          if (!cur || (Date.now() - cur.ts) >= STALE_MS) {
+            writeSlot();
+            setTabBlocked(false);
+            heartbeatTimer = setInterval(writeSlot, HEARTBEAT_MS);
+            try { bc?.postMessage({ type: 'claim', id: myId }); } catch {}
+          }
+        }
+      };
+    }
+
+    const onBeforeUnloadGuard = () => {
+      try { bc?.postMessage({ type: 'release', id: myId }); } catch {}
+      clearSlot();
+    };
+    window.addEventListener('beforeunload', onBeforeUnloadGuard);
+    window.addEventListener('pagehide', onBeforeUnloadGuard);
+
+    return () => {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      try { bc?.close(); } catch {}
+      window.removeEventListener('beforeunload', onBeforeUnloadGuard);
+      window.removeEventListener('pagehide', onBeforeUnloadGuard);
+      onBeforeUnloadGuard();
+    };
+  }, []);
 
   // v5.20 Phase 2: deploy lock state machine. Must be declared AFTER
   // currentUser is initialized (it depends on currentUser). Currently
@@ -6625,6 +6750,55 @@ function App() {
 
   return (
     <>
+      {/* v5.51: single-tab lock UI. When another tab of this app is already
+          open, this tab gets blocked and shows a friendly explanation. The
+          user can close THIS tab or close the other one (this screen will
+          reload automatically when the other tab's heartbeat goes stale). */}
+      {tabBlocked && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999999,
+          background: 'var(--bg)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 24,
+        }}>
+          <div style={{
+            maxWidth: 360, textAlign: 'center',
+            padding: 28, borderRadius: 16,
+            background: 'var(--surface)', border: '1px solid var(--line)',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+          }}>
+            <div style={{fontSize: 48, marginBottom: 12}}>🚫</div>
+            <h2 style={{margin: '0 0 12px', fontSize: 18, color: 'var(--text)'}}>
+              เปิดแอปอยู่อีกหน้าแล้ว
+            </h2>
+            <p style={{fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.5, margin: '0 0 18px'}}>
+              ป้องกันความขัดแย้งของข้อมูล — แอปนี้รองรับเพียง 1 หน้าต่างเท่านั้น
+              <br/><br/>
+              กรุณาปิดหน้านี้ หรือปิดหน้าเดิมก่อน
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                padding: '10px 20px', borderRadius: 10,
+                background: 'var(--primary)', color: '#fff',
+                border: 'none', fontSize: 14, fontWeight: 600,
+                cursor: 'pointer', width: '100%',
+              }}>
+              ลองอีกครั้ง
+            </button>
+            <button
+              onClick={() => window.close()}
+              style={{
+                marginTop: 8, padding: '10px 20px', borderRadius: 10,
+                background: 'transparent', color: 'var(--text-dim)',
+                border: '1px solid var(--line)', fontSize: 13,
+                cursor: 'pointer', width: '100%',
+              }}>
+              ปิดหน้านี้
+            </button>
+          </div>
+        </div>
+      )}
       <main>
         {/* v5.0: profile banner — shows current user with admin badge if applicable */}
         {appProfileId && currentUser && (
@@ -8762,7 +8936,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.50 · Toast เหนือ modal + ค้นซ้ำ trigger 🔝</div>
+      <div className="vstrip">my money · v5.51 · กันเปิดซ้อน 1 หน้าเท่านั้น 🚫</div>
 
       {showLessonsEditor && (
         <LessonsEditor
