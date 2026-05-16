@@ -4178,8 +4178,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.54';
-const APP_VERSION_TAG = 'ลบ count display ออกถาวร (TxSheet + Manager)';
+const APP_VERSION = 'v5.55';
+const APP_VERSION_TAG = 'Autocomplete: เพิ่ม limit (item 50, account 30, note 20) — scroll ได้';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -8936,7 +8936,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.54 · ลบเลข count ออก 🧹</div>
+      <div className="vstrip">my money · v5.55 · เพิ่ม dropdown limit (scroll ได้) 📜</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -9536,7 +9536,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
         if (ra !== rb) return ra - rb;
         return a.label.localeCompare(b.label, 'th');
       })
-      .slice(0, 8);
+      .slice(0, 30);  // v5.55: was 8
   }, [accountName, accountMap]);
   const accountExactExists = useMemo(() => {
     const q = accountName.trim().toLowerCase();
@@ -9553,7 +9553,11 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
     // user has a long catalogue and wanted to scan results in dictionary
     // order so "od 3mm / 5mm / 6mm / 6.5mm" line up naturally instead of
     // jumping around by how often each variant has been picked.
-    if (!q) return entries.sort((a, b) => a.label.localeCompare(b.label, 'th')).slice(0, 6);
+    // v5.55: bumped limit from 6 → 50 so users with long catalogues can
+    // still scroll all matching items (e.g. typing "power" missing rows
+    // that contained but did not start with the query because slice cut
+    // them). Dropdown is overflow-scroll, so a tall list still works.
+    if (!q) return entries.sort((a, b) => a.label.localeCompare(b.label, 'th')).slice(0, 50);
     // Match-quality first (exact > prefix > substring), then alphabetical
     // INSIDE each tier. Count-based ranking removed.
     const rank = (label) => {
@@ -9570,7 +9574,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
         if (ra !== rb) return ra - rb;
         return a.label.localeCompare(b.label, 'th');
       })
-      .slice(0, 6);
+      .slice(0, 50);  // v5.55: was 6
   }, [item, itemMap]);
   const itemExactExists = useMemo(() => {
     const q = item.trim().toLowerCase();
@@ -9597,7 +9601,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
         if (ra !== rb) return ra - rb;
         return la.localeCompare(lb, 'th');
       })
-      .slice(0, 5)
+      .slice(0, 20)  // v5.55: was 5
       .map(([label, count]) => ({ label, count }));
   }, [note, noteMap]);
 
