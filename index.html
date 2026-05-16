@@ -4178,8 +4178,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.51';
-const APP_VERSION_TAG = 'Single-tab lock — กันเปิดซ้อน 2 หน้าต่าง';
+const APP_VERSION = 'v5.52';
+const APP_VERSION_TAG = 'Autocomplete + Manager: เรียงตามพจนานุกรม (ไม่ใช่จำนวนใช้งาน)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -8936,7 +8936,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.51 · กันเปิดซ้อน 1 หน้าเท่านั้น 🚫</div>
+      <div className="vstrip">my money · v5.52 · เรียงพจนานุกรม (ก-ฮ, 0-9) 📖</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -9517,13 +9517,12 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
     const q = accountName.trim().toLowerCase();
     const entries = Array.from(accountMap.entries()).map(([label, count]) => ({ label, count }));
     if (!q) {
-      // No query — show all permitted accounts, most-used first
-      return entries.sort((a, b) => {
-        if (b.count !== a.count) return b.count - a.count;
-        return a.label.localeCompare(b.label, 'th');
-      });
+      // v5.52: no query → alphabetical (was usage-count first). User asked
+      // for dictionary-order browsing.
+      return entries.sort((a, b) => a.label.localeCompare(b.label, 'th'));
     }
-    // v5.47: rank by match-quality (exact > prefix > substring), then usage
+    // Match-quality first (exact > prefix > substring), then alphabetical
+    // inside each tier. Count-based ranking removed.
     const rank = (label) => {
       const l = label.toLowerCase();
       if (l === q) return 0;
@@ -9536,7 +9535,6 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
         const ra = rank(a.label);
         const rb = rank(b.label);
         if (ra !== rb) return ra - rb;
-        if (b.count !== a.count) return b.count - a.count;
         return a.label.localeCompare(b.label, 'th');
       })
       .slice(0, 8);
@@ -9552,14 +9550,13 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
     const q = item.trim().toLowerCase();
     const entries = Array.from(itemMap.entries())
       .map(([label, count]) => ({ label, count }));
-    if (!q) return entries.sort((a, b) => b.count - a.count).slice(0, 6);
-    // v5.47: rank by match-quality first, usage-count second. The previous
-    // sort was count-only, so a high-use item that merely *contained* the
-    // query mid-string would float above an exact or prefix match. Now:
-    //   tier 0 = exact match  (label === q)
-    //   tier 1 = prefix match (label starts with q)
-    //   tier 2 = substring    (label contains q somewhere else)
-    // Within the same tier, more-used items win.
+    // v5.52: alphabetical within each match tier (was usage-count). The
+    // user has a long catalogue and wanted to scan results in dictionary
+    // order so "od 3mm / 5mm / 6mm / 6.5mm" line up naturally instead of
+    // jumping around by how often each variant has been picked.
+    if (!q) return entries.sort((a, b) => a.label.localeCompare(b.label, 'th')).slice(0, 6);
+    // Match-quality first (exact > prefix > substring), then alphabetical
+    // INSIDE each tier. Count-based ranking removed.
     const rank = (label) => {
       const l = label.toLowerCase();
       if (l === q) return 0;
@@ -9572,7 +9569,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
         const ra = rank(a.label);
         const rb = rank(b.label);
         if (ra !== rb) return ra - rb;
-        return b.count - a.count;
+        return a.label.localeCompare(b.label, 'th');
       })
       .slice(0, 6);
   }, [item, itemMap]);
@@ -9585,8 +9582,9 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
   const noteMatches = useMemo(() => {
     const q = note.trim().toLowerCase();
     if (!q) return [];
-    // v5.47: prefix matches above substring; exact match excluded (no point
-    // in suggesting what the user already typed). Within tier, more-used wins.
+    // v5.52: alphabetical within match tier (was usage-count). Same change
+    // as item/account matches for consistency. Prefix matches still come
+    // before substring matches; exact match remains excluded.
     const rank = (label) => {
       const l = label.toLowerCase();
       if (l.startsWith(q)) return 0;
@@ -9594,11 +9592,11 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
     };
     return Array.from(noteMap.entries())
       .filter(([label]) => label.toLowerCase().includes(q) && label.toLowerCase() !== q)
-      .sort(([la, ca], [lb, cb]) => {
+      .sort(([la], [lb]) => {
         const ra = rank(la);
         const rb = rank(lb);
         if (ra !== rb) return ra - rb;
-        return cb - ca;
+        return la.localeCompare(lb, 'th');
       })
       .slice(0, 5)
       .map(([label, count]) => ({ label, count }));
@@ -12119,9 +12117,7 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
         const tb = matchTier(b.name);
         if (ta !== tb) return ta - tb;
       }
-      const ca = usageMap.get(a.name) || 0;
-      const cb = usageMap.get(b.name) || 0;
-      if (ca !== cb) return cb - ca;
+      // v5.52: dictionary order only (count tiebreaker removed).
       return a.name.localeCompare(b.name, 'th');
     });
     return list;
@@ -12368,9 +12364,7 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
         const tb = matchTier(b.name);
         if (ta !== tb) return ta - tb;
       }
-      const ca = usageMap.get(a.name) || 0;
-      const cb = usageMap.get(b.name) || 0;
-      if (ca !== cb) return cb - ca;
+      // v5.52: dictionary order only (count tiebreaker removed).
       return a.name.localeCompare(b.name, 'th');
     });
     return list;
@@ -12757,9 +12751,7 @@ function ProjectsManager({ projects, transactions, onClose, onAdd, onUpdate, onR
         const tb = matchTier(b.name);
         if (ta !== tb) return ta - tb;
       }
-      const ca = usageMap.get(a.name) || 0;
-      const cb = usageMap.get(b.name) || 0;
-      if (ca !== cb) return cb - ca;
+      // v5.52: dictionary order only (count tiebreaker removed).
       return a.name.localeCompare(b.name, 'th');
     });
     return list;
