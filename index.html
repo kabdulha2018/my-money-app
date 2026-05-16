@@ -4178,8 +4178,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.53';
-const APP_VERSION_TAG = 'Manager ค้นกรองตรง + เปลี่ยน pending → รอโหลด';
+const APP_VERSION = 'v5.54';
+const APP_VERSION_TAG = 'ลบ count display ออกถาวร (TxSheet + Manager)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -8936,7 +8936,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.53 · กรองเฉพาะที่ match + "รอโหลด" 🇹🇭</div>
+      <div className="vstrip">my money · v5.54 · ลบเลข count ออก 🧹</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -9354,7 +9354,6 @@ function MasterFieldManager({ mode, allTx, onClose, onRename, onDelete, onSelect
                   <>
                     <button className="manager-pick" onClick={() => { onSelect?.(e.name); onClose(); }}>
                       <span className="mgr-name">{e.name}</span>
-                      <span className="mgr-count">{e.count}×</span>
                     </button>
                     <button className="mgr-mini" onClick={() => startEdit(e.name)}
                             title="แก้ไข">
@@ -9969,7 +9968,6 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
                     className="autocomplete-item"
                     onMouseDown={(e) => { e.preventDefault(); setAccountName(m.label); setAccountFocused(false); }}>
                     <span>{highlight(m.label, accountName.trim())}</span>
-                    <span className="count">{m.count}×</span>
                   </button>
                 ))}
                 {accountName.trim() && !accountExactExists && (
@@ -10068,8 +10066,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
                       className="autocomplete-item"
                       onMouseDown={(e) => { e.preventDefault(); setItem(m.label); setItemFocused(false); }}>
                       <span>{highlight(m.label, item.trim())}</span>
-                      <span className="count">{m.count}×</span>
-                    </button>
+                      </button>
                   ))}
                   {item.trim() && !itemExactExists && (
                     <button type="button"
@@ -10103,8 +10100,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
                       className="autocomplete-item"
                       onMouseDown={(e) => { e.preventDefault(); setNote(m.label); setNoteFocused(false); }}>
                       <span>{highlight(m.label, note.trim())}</span>
-                      <span className="count">{m.count}×</span>
-                    </button>
+                      </button>
                   ))}
                 </div>
               )}
@@ -12266,7 +12262,6 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
                               })()}
                             </div>
                             <div className="meta">
-                              {usage > 0 ? `ใช้ ${usage} ครั้ง` : 'ยังไม่ถูกใช้'}
                             </div>
                           </div>
                           <div className="actions">
@@ -12647,7 +12642,6 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
                               })()}
                             </div>
                             <div className="meta">
-                              {usage > 0 ? `ใช้ ${usage} ครั้ง` : 'ยังไม่ถูกใช้'}
                               {' · '}
                               ทศนิยม {dec} ตำแหน่ง
                             </div>
@@ -12885,7 +12879,6 @@ function ProjectsManager({ projects, transactions, onClose, onAdd, onUpdate, onR
                                 ) : null;
                               })()}
                             </div>
-                            <div className="meta">{usage > 0 ? `ใช้ ${usage} ครั้ง` : 'ยังไม่ถูกใช้'}</div>
                           </div>
                           <div className="actions">
                             <button className="edit-btn" onClick={() => startEdit(p)} title="แก้ไข">
@@ -13105,7 +13098,6 @@ function CategoriesManager({ categories, transactions, onClose, onAdd, onUpdate,
                                 ) : null;
                               })()}
                             </div>
-                            <div className="meta">{usage > 0 ? `ใช้ ${usage} ครั้ง` : 'ยังไม่ถูกใช้'}</div>
                           </div>
                         </div>
                         <div className="actions">
@@ -13142,7 +13134,6 @@ function CategoriesManager({ categories, transactions, onClose, onAdd, onUpdate,
                     <span style={{fontSize: 22, flexShrink: 0}}>{c.icon}</span>
                     <div style={{flex: 1, minWidth: 0}}>
                       <div className="name">{c.label}</div>
-                      <div className="meta">{usage > 0 ? `ใช้ ${usage} ครั้ง` : 'ยังไม่ถูกใช้'}</div>
                     </div>
                   </div>
                 </div>
