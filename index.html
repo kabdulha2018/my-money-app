@@ -4178,8 +4178,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.52';
-const APP_VERSION_TAG = 'Autocomplete + Manager: เรียงตามพจนานุกรม (ไม่ใช่จำนวนใช้งาน)';
+const APP_VERSION = 'v5.53';
+const APP_VERSION_TAG = 'Manager ค้นกรองตรง + เปลี่ยน pending → รอโหลด';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -8936,7 +8936,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.52 · เรียงพจนานุกรม (ก-ฮ, 0-9) 📖</div>
+      <div className="vstrip">my money · v5.53 · กรองเฉพาะที่ match + "รอโหลด" 🇹🇭</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -9063,7 +9063,7 @@ function TxRow({ t, onClick, delay = 0, accounts, customCats, pendingOp = null }
                     color: '#fff',
                     fontWeight: 600,
                   }}>
-              {pendingMeta.label} pending
+              {pendingMeta.label} รอโหลด
             </span>
           )}
         </div>
@@ -12111,7 +12111,14 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
       if (n.startsWith(q)) return 1;  // prefix
       return 2;                        // substring
     };
-    list.sort((a, b) => {
+    // v5.53: when the user is typing in "เพิ่มรายการใหม่", filter to ONLY
+    // matching rows. Before, all 1,158 items stayed on screen and matches
+    // just bubbled to the top — but with a list that long the user could
+    // still scroll into non-matching rows and think the sort was broken.
+    // Now: query present → show only matches; query empty → show full
+    // alphabetical list. Mirrors how the TxSheet item dropdown behaves.
+    const filtered = q ? list.filter(it => matchTier(it.name) < 3) : list;
+    filtered.sort((a, b) => {
       if (q) {
         const ta = matchTier(a.name);
         const tb = matchTier(b.name);
@@ -12120,7 +12127,7 @@ function ItemsManager({ items, transactions, onClose, onAdd, onUpdate, onRemove,
       // v5.52: dictionary order only (count tiebreaker removed).
       return a.name.localeCompare(b.name, 'th');
     });
-    return list;
+    return filtered;
   }, [items, usageMap, newName]);
 
   const handleAdd = () => {
@@ -12358,7 +12365,9 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
       if (n.startsWith(q)) return 1;
       return 2;
     };
-    list.sort((a, b) => {
+    // v5.53: filter to matches only when query present (same as ItemsManager).
+    const filtered = q ? list.filter(a => matchTier(a.name) < 3) : list;
+    filtered.sort((a, b) => {
       if (q) {
         const ta = matchTier(a.name);
         const tb = matchTier(b.name);
@@ -12367,7 +12376,7 @@ function AccountsManager({ accounts, transactions, users, onClose, onAdd, onUpda
       // v5.52: dictionary order only (count tiebreaker removed).
       return a.name.localeCompare(b.name, 'th');
     });
-    return list;
+    return filtered;
   }, [accounts, usageMap, newName]);
 
   const handleAdd = () => {
@@ -12745,7 +12754,9 @@ function ProjectsManager({ projects, transactions, onClose, onAdd, onUpdate, onR
       if (n.startsWith(q)) return 1;
       return 2;
     };
-    list.sort((a, b) => {
+    // v5.53: filter to matches only when query present (same as ItemsManager).
+    const filtered = q ? list.filter(p => matchTier(p.name) < 3) : list;
+    filtered.sort((a, b) => {
       if (q) {
         const ta = matchTier(a.name);
         const tb = matchTier(b.name);
@@ -12754,7 +12765,7 @@ function ProjectsManager({ projects, transactions, onClose, onAdd, onUpdate, onR
       // v5.52: dictionary order only (count tiebreaker removed).
       return a.name.localeCompare(b.name, 'th');
     });
-    return list;
+    return filtered;
   }, [projects, usageMap, newName]);
 
   const handleAdd = () => {
