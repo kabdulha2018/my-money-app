@@ -9,8 +9,12 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="my money">
 <title>my money</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%23D4A574'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-size='36' font-family='serif' fill='%232A1B0A' font-weight='700'%3E฿%3C/text%3E%3C/svg%3E">
-<link rel="manifest" href='data:application/json,{"name":"my money","short_name":"my money","theme_color":"%230E0C0A","background_color":"%230E0C0A","display":"standalone","orientation":"portrait","start_url":".","scope":".","icons":[{"src":"data:image/svg+xml,%253Csvg xmlns%253D%2527http%253A%252F%252Fwww.w3.org%252F2000%252Fsvg%2527 viewBox%253D%25270 0 512 512%2527%253E%253Crect width%253D%2527512%2527 height%253D%2527512%2527 fill%253D%2527%25230E0C0A%2527/%253E%253Ccircle cx%253D%2527256%2527 cy%253D%2527256%2527 r%253D%2527180%2527 fill%253D%2527%2523D4A574%2527/%253E%253Ctext x%253D%2527256%2527 y%253D%2527340%2527 text-anchor%253D%2527middle%2527 font-size%253D%2527240%2527 font-family%253D%2527serif%2527 fill%253D%2527%25232A1B0A%2527 font-weight%253D%2527700%2527%253E%25E0%25B8%25BF%253C/text%253E%253C/svg%253E","sizes":"512x512","type":"image/svg+xml"}]}'>
+<!-- v5.57: favicon updated from a "฿" baht-symbol disc to a wallet
+     pictogram so the icon reads as a money/wallet app immediately
+     instead of being a generic browser icon. SVG drawn inline so no
+     external assets are needed and the icon stays crisp at any size. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='6' y='14' width='52' height='40' rx='8' fill='%23D4A574' stroke='%232A1B0A' stroke-width='2'/%3E%3Cpath d='M6 22 Q6 14 14 14 L40 14 Q44 14 44 18 L44 24 L6 24 Z' fill='%23B8895B'/%3E%3Ccircle cx='46' cy='34' r='5' fill='%232A1B0A'/%3E%3Ccircle cx='46' cy='34' r='2' fill='%23D4A574'/%3E%3C/svg%3E">
+<link rel="manifest" href='data:application/json,{"name":"my money","short_name":"my money","theme_color":"%230E0C0A","background_color":"%230E0C0A","display":"standalone","orientation":"portrait","start_url":".","scope":".","icons":[{"src":"data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%253D%2522http%253A%252F%252Fwww.w3.org%252F2000%252Fsvg%2522%2520viewBox%253D%25220%25200%2520512%2520512%2522%253E%253Crect%2520width%253D%2522512%2522%2520height%253D%2522512%2522%2520fill%253D%2522%25230E0C0A%2522%252F%253E%253Crect%2520x%253D%252260%2522%2520y%253D%2522130%2522%2520width%253D%2522392%2522%2520height%253D%2522290%2522%2520rx%253D%252248%2522%2520fill%253D%2522%2523D4A574%2522%2520stroke%253D%2522%25232A1B0A%2522%2520stroke-width%253D%252214%2522%252F%253E%253Cpath%2520d%253D%2522M60%2520188%2520Q60%2520130%2520118%2520130%2520L320%2520130%2520Q352%2520130%2520352%2520162%2520L352%2520210%2520L60%2520210%2520Z%2522%2520fill%253D%2522%2523B8895B%2522%252F%253E%253Ccircle%2520cx%253D%2522378%2522%2520cy%253D%2522280%2522%2520r%253D%252238%2522%2520fill%253D%2522%25232A1B0A%2522%252F%253E%253Ccircle%2520cx%253D%2522378%2522%2520cy%253D%2522280%2522%2520r%253D%252216%2522%2520fill%253D%2522%2523D4A574%2522%252F%253E%253C%252Fsvg%253E","sizes":"512x512","type":"image/svg+xml"}]}'>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=Noto+Serif+Thai:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -621,9 +625,12 @@ body:has(.sheet-backdrop) nav.tabbar {
   letter-spacing: 0;
 }
 
-/* v5.12 (revised v5.13): Per-digit spinner — each ^/v button is 26px wide,
-   matching the IBM Plex Mono character width at 38px font-size, so the
-   buttons sit directly above/below the matching digit in the input. */
+/* v5.12 (revised v5.13 → fixed v5.56): Per-digit spinner — buttons sit
+   directly above/below each digit in the input. The IBM Plex Mono character
+   width at 38px is ~22.8px (font ratio ≈ 0.6), not 26 as previously assumed.
+   With tabular-nums set on the input, every digit uses tabular width which
+   is ~23px in this font. Setting both spinner-step and gap to those values
+   makes the ^ row, the digits, and the v row line up across the track. */
 .amount-spinner-stack {
   position: relative;
   display: flex;
@@ -640,7 +647,7 @@ body:has(.sheet-backdrop) nav.tabbar {
   /* width is intrinsic — depends on number of step cells inside */
 }
 .amount-spinner-row .step {
-  width: 26px; height: 24px;
+  width: 23px; height: 24px;
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--text-faint);
   font-size: 16px; font-weight: 600;
@@ -660,8 +667,8 @@ body:has(.sheet-backdrop) nav.tabbar {
 }
 .amount-spinner-row .step:active { transform: scale(0.85); }
 .amount-spinner-row .gap {
-  /* matches the visual width of "." at IBM Plex Mono 38px (~14px wide) */
-  width: 14px; height: 24px;
+  /* matches the visual width of "." at IBM Plex Mono 38px (~12px) */
+  width: 12px; height: 24px;
   display: inline-flex; align-items: center; justify-content: center;
   color: transparent;
   font-size: 22px; font-weight: 600;
@@ -2551,7 +2558,16 @@ const fmtAmount = (amount, isIn, accountName, accounts) => {
   if (position === 'after') return `${sign}${num} ${symbol}`;
   return `${sign}${symbol}${num}`;
 };
-const todayISO = () => new Date().toISOString().slice(0, 10);
+// v5.56: timezone-correct "today". The old version did
+//   new Date().toISOString().slice(0, 10)
+// which converts to UTC first. In Thailand (UTC+7), at 00:23 local on May 17
+// that returns "2026-05-16" because UTC is still on the 16th. Result: pressing
+// "วันนี้" gave yesterday's date for any tx logged shortly after midnight.
+// Fix: build the YYYY-MM-DD string from local Date components.
+const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const nowTime = () => {
   const d = new Date();
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
@@ -4178,8 +4194,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.55';
-const APP_VERSION_TAG = 'Autocomplete: เพิ่ม limit (item 50, account 30, note 20) — scroll ได้';
+const APP_VERSION = 'v5.57';
+const APP_VERSION_TAG = '#2 icon กระเป๋าตังค์ + #4 เครื่องคิดเลขใน TxSheet';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -5689,6 +5705,7 @@ function App() {
   const [showUsersManager, setShowUsersManager] = useState(false); // v5.0: admin-only
   const [showSearch, setShowSearch] = useState(false); // v5.5: advanced search
   const [showManagePending, setShowManagePending] = useState(false); // v5.19 Phase 1
+  const [showDebugOverlay, setShowDebugOverlay] = useState(false); // v5.56: admin-only inspector, now banner-triggered
   // v5.21 Phase 3: result of the most recent deploy. Shown in a modal once
   // the deploy completes (success/cancelled/retry-later breakdown).
   const [deployResult, setDeployResult] = useState(null);
@@ -6856,6 +6873,26 @@ function App() {
                 <span style={{flex: 1, color: 'var(--text)'}}>
                   <b>{pendingOps.length} รายการ</b> รอ อัพโหลด
                 </span>
+                {/* v5.56: admin-only debug icon, now placed inside the
+                    pending banner. Previously this was a floating button in
+                    the bottom-right of every screen; the user wanted it to
+                    surface only when there are ops to inspect. Tap → opens
+                    the same DebugOverlay that compares pending ops to vault. */}
+                {isAdmin && (
+                  <button
+                    onClick={() => setShowDebugOverlay(true)}
+                    title="ตรวจสอบรายการรออัพโหลด"
+                    style={{
+                      width: 32, height: 32, padding: 0,
+                      background: 'transparent',
+                      border: '1px solid var(--line-strong, var(--line))',
+                      borderRadius: 8, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 14,
+                    }}>
+                    🔍
+                  </button>
+                )}
                 <button
                   onClick={() => setShowManagePending(true)}
                   style={{
@@ -7160,7 +7197,16 @@ function App() {
           corresponding tx from OneDrive to highlight which field is causing
           drift (the retry-later loop bug from v5.38). Port of a user-supplied
           inspector script, integrated with the app's React state. */}
-      {isAdmin && <DebugFloatingIcon currentUserId={currentUser?.id} pushToast={pushToast} />}
+      {/* v5.56: removed the always-on floating 🔍 icon. The same debug
+          overlay is now triggered by an icon inside the "รายการรอ อัพโหลด"
+          banner (admin only). DebugOverlay renders here when toggled on. */}
+      {isAdmin && showDebugOverlay && (
+        <DebugOverlay
+          currentUserId={currentUser?.id}
+          onClose={() => setShowDebugOverlay(false)}
+          pushToast={pushToast}
+        />
+      )}
 
       {(showAdd || editing) && (() => {
         // v5.15 (rule 1ข): for non-admin members, the item dropdown should
@@ -8340,7 +8386,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const ts = new Date().toISOString().slice(0, 10);
+      const ts = todayISO();  // v5.56: use local-date helper (was UTC slice)
       a.href = url; a.download = `my-money-lessons-${ts}.md`;
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
@@ -8936,7 +8982,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.55 · เพิ่ม dropdown limit (scroll ได้) 📜</div>
+      <div className="vstrip">my money · v5.57 · icon กระเป๋า + เครื่องคิดเลข 🧮</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -9381,9 +9427,259 @@ function MasterFieldManager({ mode, allTx, onClose, onRename, onDelete, onSelect
   );
 }
 
+// ============ v5.57: Quick Calculator Modal ============
+// Lightweight calculator overlay launched from TxSheet's amount field.
+// Supports basic arithmetic (+ − × ÷), decimals, negation, parens, and
+// percent. On apply, the displayed value is pushed back into the tx
+// amount field with the account's decimal precision.
+//
+// Implementation note: we evaluate by tokenising the expression and
+// running Shunting-yard → RPN. We do NOT use new Function() / eval()
+// — even in this trusted single-user app, an injected operator could
+// crash the page; the explicit parser is safer and gives clean error
+// messages ("expression incomplete" etc.).
+function CalcModal({ initial, decimals, onClose, onApply }) {
+  // The expression buffer the user is building. Starts from the current
+  // amount value so they can immediately add/subtract from it.
+  const [expr, setExpr] = useState(() => {
+    const n = parseFloat(initial);
+    return Number.isFinite(n) && initial ? String(n) : '';
+  });
+  const [error, setError] = useState(null);
+
+  const append = (s) => {
+    setError(null);
+    setExpr(prev => {
+      // Light guards: don't allow two operators in a row, only one decimal
+      // per number token, and require a digit before an operator.
+      const ops = '+−×÷';
+      const last = prev.slice(-1);
+      if (ops.includes(s) && (prev === '' || ops.includes(last))) return prev;
+      if (s === '.' && /\.\d*$/.test(prev.split(/[+−×÷()]/).pop() || '')) return prev;
+      return prev + s;
+    });
+  };
+  const backspace = () => { setError(null); setExpr(p => p.slice(0, -1)); };
+  const clear     = () => { setError(null); setExpr(''); };
+  const toggleSign = () => {
+    // Toggle the sign of the LAST number in the expression. We scan back
+    // until we hit an operator or paren or the start of the buffer.
+    setError(null);
+    setExpr(prev => {
+      const m = prev.match(/(-?\d*\.?\d*)$/);
+      if (!m || m[1] === '') return prev;
+      const before = prev.slice(0, prev.length - m[1].length);
+      const negated = m[1].startsWith('-') ? m[1].slice(1) : '-' + m[1];
+      return before + negated;
+    });
+  };
+
+  // Tokenise the expression. We accept digits, the operators +−×÷, parens,
+  // unary minus directly after an operator or at the start, decimals, and
+  // percent (treated as ×0.01 on the preceding number).
+  const evalExpr = () => {
+    let s = expr;
+    if (!s.trim()) return null;
+    // Normalise operators to ASCII for parsing.
+    s = s.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
+    // Percent post-fix: "50%" → "(50*0.01)"
+    s = s.replace(/(\d+(?:\.\d+)?)%/g, '($1*0.01)');
+    const tokens = [];
+    let i = 0;
+    while (i < s.length) {
+      const ch = s[i];
+      if (ch === ' ') { i++; continue; }
+      if ('+-*/()'.includes(ch)) {
+        // Unary minus: at start or after an operator/'('
+        if (ch === '-' && (tokens.length === 0 || ['+','-','*','/','('].includes(tokens[tokens.length-1]))) {
+          // Consume the number that follows
+          let j = i + 1, num = '-';
+          while (j < s.length && (/[0-9.]/.test(s[j]))) { num += s[j]; j++; }
+          if (num === '-') return 'parse error';
+          tokens.push(parseFloat(num));
+          i = j;
+          continue;
+        }
+        tokens.push(ch);
+        i++;
+        continue;
+      }
+      if (/[0-9.]/.test(ch)) {
+        let j = i, num = '';
+        while (j < s.length && /[0-9.]/.test(s[j])) { num += s[j]; j++; }
+        tokens.push(parseFloat(num));
+        i = j;
+        continue;
+      }
+      return 'parse error';
+    }
+    // Shunting-yard → RPN
+    const out = [], opStack = [];
+    const prec = { '+': 1, '-': 1, '*': 2, '/': 2 };
+    for (const t of tokens) {
+      if (typeof t === 'number') out.push(t);
+      else if (t === '(') opStack.push(t);
+      else if (t === ')') {
+        while (opStack.length && opStack[opStack.length-1] !== '(') out.push(opStack.pop());
+        if (!opStack.length) return 'paren mismatch';
+        opStack.pop();
+      } else {
+        while (opStack.length && opStack[opStack.length-1] !== '(' && prec[opStack[opStack.length-1]] >= prec[t]) {
+          out.push(opStack.pop());
+        }
+        opStack.push(t);
+      }
+    }
+    while (opStack.length) {
+      const op = opStack.pop();
+      if (op === '(') return 'paren mismatch';
+      out.push(op);
+    }
+    // Evaluate RPN
+    const stack = [];
+    for (const t of out) {
+      if (typeof t === 'number') stack.push(t);
+      else {
+        const b = stack.pop(), a = stack.pop();
+        if (a === undefined || b === undefined) return 'incomplete';
+        switch (t) {
+          case '+': stack.push(a + b); break;
+          case '-': stack.push(a - b); break;
+          case '*': stack.push(a * b); break;
+          case '/':
+            if (b === 0) return 'divide by zero';
+            stack.push(a / b);
+            break;
+        }
+      }
+    }
+    if (stack.length !== 1) return 'incomplete';
+    if (!Number.isFinite(stack[0])) return 'invalid';
+    return stack[0];
+  };
+
+  // Live preview of the current expression's result. If parsing fails we
+  // suppress the error here (the user is mid-typing) and only surface it
+  // when they actually press =.
+  const livePreview = (() => {
+    const r = evalExpr();
+    return typeof r === 'number' ? r : null;
+  })();
+
+  const onEqual = () => {
+    const r = evalExpr();
+    if (typeof r === 'number') {
+      setExpr(String(r));
+    } else {
+      setError(r || 'invalid');
+    }
+  };
+
+  const onConfirm = () => {
+    const r = evalExpr();
+    if (typeof r !== 'number') { setError(r || 'invalid'); return; }
+    onApply(r);
+  };
+
+  const btn = (label, onClick, opts = {}) => (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '14px 0', fontSize: 18, fontWeight: 600,
+        background: opts.accent ? 'var(--gold)' : 'var(--surface2)',
+        color: opts.accent ? 'var(--bg)' : 'var(--text)',
+        border: '1px solid var(--line)',
+        borderRadius: 10, cursor: 'pointer',
+      }}>{label}</button>
+  );
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+      zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 16,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: 'var(--surface)', borderRadius: 16,
+        width: '100%', maxWidth: 320, padding: 16,
+        border: '1px solid var(--line)',
+      }}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 10}}>
+          <h3 style={{margin:0, fontSize:16}}>🧮 เครื่องคิดเลข</h3>
+          <button onClick={onClose} style={{
+            background:'transparent', border:'none', color:'var(--text-dim)',
+            cursor:'pointer', fontSize: 20, padding: 4,
+          }}>✕</button>
+        </div>
+
+        {/* Expression display */}
+        <div style={{
+          background: 'var(--bg)', border: '1px solid var(--line)',
+          borderRadius: 8, padding: '10px 12px', marginBottom: 4,
+          minHeight: 24, fontSize: 16, fontFamily: 'IBM Plex Mono, monospace',
+          color: 'var(--text)', wordBreak: 'break-all',
+        }}>{expr || <span style={{color:'var(--text-faint)'}}>0</span>}</div>
+
+        {/* Live preview / error */}
+        <div style={{
+          fontSize: 12, color: error ? 'var(--expense-soft)' : 'var(--text-faint)',
+          textAlign: 'right', minHeight: 16, marginBottom: 10,
+          fontFamily: 'IBM Plex Mono, monospace',
+        }}>
+          {error ? `⚠️ ${error}` : (livePreview != null && livePreview !== parseFloat(expr) ? `= ${livePreview.toFixed(Math.min(decimals + 2, 6))}` : '\u00A0')}
+        </div>
+
+        {/* Keypad */}
+        <div style={{display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap: 6}}>
+          {btn('C', clear)}
+          {btn('⌫', backspace)}
+          {btn('±', toggleSign)}
+          {btn('÷', () => append('÷'))}
+
+          {btn('7', () => append('7'))}
+          {btn('8', () => append('8'))}
+          {btn('9', () => append('9'))}
+          {btn('×', () => append('×'))}
+
+          {btn('4', () => append('4'))}
+          {btn('5', () => append('5'))}
+          {btn('6', () => append('6'))}
+          {btn('−', () => append('−'))}
+
+          {btn('1', () => append('1'))}
+          {btn('2', () => append('2'))}
+          {btn('3', () => append('3'))}
+          {btn('+', () => append('+'))}
+
+          {btn('0', () => append('0'))}
+          {btn('.', () => append('.'))}
+          {btn('%', () => append('%'))}
+          {btn('=', onEqual, {accent: true})}
+        </div>
+
+        {/* Apply / cancel */}
+        <div style={{display:'flex', gap:8, marginTop: 12}}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: '10px', borderRadius: 10,
+            background:'transparent', color:'var(--text-dim)',
+            border:'1px solid var(--line)', cursor:'pointer', fontSize: 14,
+          }}>ยกเลิก</button>
+          <button onClick={onConfirm} style={{
+            flex: 1, padding: '10px', borderRadius: 10,
+            background:'var(--primary)', color:'#fff',
+            border:'none', cursor:'pointer', fontSize: 14, fontWeight: 600,
+          }}>ใช้ค่านี้</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushToast, allTx, masterItems, masterAccounts, masterProjects, masterCategories, onOpenItemsManager, onRenameMaster, onDeleteMaster, isPendingNew = false }) {
   const [type, setType] = useState(initial?.type || 'expense');
   const [amount, setAmount] = useState(initial?.amount ? String(initial.amount) : '');
+  const [showCalc, setShowCalc] = useState(false); // v5.57: quick calculator overlay
   // Category is OPTIONAL. Existing tx keep whatever they had, including empty/null.
   const [category, setCategory] = useState(initial?.category ?? '');
   const [accountName, setAccountName] = useState(() => {
@@ -9869,8 +10165,12 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
                 the dot gap is 14px, matching the IBM Plex Mono font we use in
                 the input below. */}
             {(() => {
-              const STEP_W = 26;
-              const DOT_W = 14;
+              // v5.56: STEP_W 26→23 and DOT_W 14→12 to match the real char
+              // widths in IBM Plex Mono at 38px (which has ~0.6 em ratio).
+              // Previously the spinner caret buttons drifted right of each
+              // digit because the cells were ~3px too wide.
+              const STEP_W = 23;
+              const DOT_W = 12;
               const trackWidth = (spinnerLayout.ints.length * STEP_W)
                 + (spinnerLayout.hasDot ? DOT_W : 0)
                 + (spinnerLayout.decs.length * STEP_W);
@@ -9891,10 +10191,14 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
                     ))}
                   </div>
 
-                  {/* Input track — matches spinner row width so the digits
+                {/* Input track — matches spinner row width so the digits
                       appear directly under the buttons. The currency symbol
-                      sits beside the track, not inside it. */}
-                  <div className="amount-input-track">
+                      sits beside the track, not inside it.
+                      v5.57: also renders a small calculator icon to the
+                      right that opens a quick calc panel. Useful for
+                      entering "buy 3 items at 89 baht each = 267" without
+                      doing the math elsewhere. */}
+                  <div className="amount-input-track" style={{position: 'relative'}}>
                     {currentUnit.symbol && currentUnit.position === 'before' && (
                       <span className="cur">{currentUnit.symbol}</span>
                     )}
@@ -9910,6 +10214,25 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
                     {currentUnit.symbol && currentUnit.position === 'after' && (
                       <span className="cur after">{currentUnit.symbol}</span>
                     )}
+                    {/* v5.57: small calculator launcher. Positioned absolutely
+                        so it sits outside the centered digit track and never
+                        affects digit alignment with the spinner rows. */}
+                    <button
+                      type="button"
+                      onClick={() => setShowCalc(true)}
+                      title="เครื่องคิดเลข"
+                      style={{
+                        position: 'absolute',
+                        right: -8, top: '50%', transform: 'translateY(-50%)',
+                        width: 30, height: 30, padding: 0,
+                        background: 'var(--surface2)',
+                        border: '1px solid var(--line)',
+                        borderRadius: 8, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 14,
+                      }}>
+                      🧮
+                    </button>
                   </div>
 
                   {/* v row */}
@@ -10176,6 +10499,23 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
           </div>
         </div>
       </div>
+      {/* v5.57: quick calculator. Opens when the user taps 🧮 next to the
+          amount input. On confirm it pushes the result into the amount
+          field, formatted to the current account's decimal precision. */}
+      {showCalc && (
+        <CalcModal
+          initial={amount}
+          decimals={currentDecimals}
+          onClose={() => setShowCalc(false)}
+          onApply={(value) => {
+            // Allow negative, allow zero, allow decimals up to currentDecimals.
+            const n = parseFloat(value);
+            if (!Number.isFinite(n)) { setShowCalc(false); return; }
+            setAmount(n.toFixed(currentDecimals));
+            setShowCalc(false);
+          }}
+        />
+      )}
     </div>
   );
 }
