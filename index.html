@@ -643,6 +643,67 @@ body:has(.sheet-backdrop) nav.tabbar {
   flex-direction: column;
   align-items: center;
   margin-top: 8px;
+  /* v5.59: extra right padding reserves room for the absolutely-positioned
+     calc icon (32px wide) so the centred input/spinner track is shifted
+     left ~36px and the icon doesn't visually overlap. */
+  padding-right: 40px;
+}
+
+/* v5.60: Grid-based spinner layout. The legacy flex layout (.amount-spinner-row
+   + .amount-input-track) tried to use fixed pixel widths that had to match
+   the rendered char widths of IBM Plex Mono — which never quite worked across
+   devices and broke whenever the digit count, currency symbol, or decimals
+   precision changed. Grid eliminates the guesswork: each column is a single
+   cell, and all three rows (^/digit/v) sit in the same columns automatically.
+   It also handles 3+ decimal places (e.g. accounts that track 3-decimal
+   units like grams or 4-decimal exchange rates) with no math changes. */
+.amount-grid {
+  display: grid;
+  /* v5.60: rendering order is row-major (all-^, all-digit, all-v), so the
+     default grid-auto-flow: row is correct. Each declared column maps to
+     one digit/dot slot; rows are fixed at 24px-auto-24px. */
+  grid-template-rows: 24px auto 24px;
+  row-gap: 2px;
+  align-items: center;
+  justify-items: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+.amount-grid .cell-up,
+.amount-grid .cell-down {
+  width: 100%; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-faint);
+  font-size: 16px; font-weight: 600;
+  cursor: pointer; padding: 0;
+  border: none; background: transparent;
+  border-radius: 4px;
+  transition: background .15s, color .15s, transform .1s;
+}
+.amount-grid .cell-up:active, .amount-grid .cell-up:hover {
+  background: rgba(139,179,139,0.18); color: var(--income-soft);
+}
+.amount-grid .cell-down:active, .amount-grid .cell-down:hover {
+  background: rgba(184,88,66,0.18); color: var(--expense-soft);
+}
+.amount-grid .cell-up:active, .amount-grid .cell-down:active { transform: scale(0.85); }
+.amount-grid .cell-digit {
+  /* Each digit is rendered as plain text. The single shared row also hosts
+     the caret-style cursor when input is focused via the hidden text input. */
+  font-size: 38px; font-weight: 600; line-height: 1.2;
+  color: var(--text);
+  text-align: center; min-width: 0;
+  user-select: text;
+}
+.amount-grid .cell-digit.placeholder { color: var(--text-faint); }
+.amount-grid .cell-digit.income { color: var(--income-soft); }
+.amount-grid .cell-spacer {
+  /* Down-cell directly below the dot or above-cell above the dot —
+     visible but empty so grid alignment stays consistent. */
+}
+.amount-grid .cell-dot {
+  font-size: 38px; font-weight: 600; line-height: 1.2;
+  color: var(--text-dim);
 }
 .amount-spinner-row {
   display: flex; gap: 0;
@@ -4200,8 +4261,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.58';
-const APP_VERSION_TAG = '#1 calc icon ไม่ทับเลข + #2 apple-touch-icon';
+const APP_VERSION = 'v5.60';
+const APP_VERSION_TAG = 'Spinner: CSS Grid layout (รองรับทศนิยม >2 หลัก, alignment สมบูรณ์)';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -8988,7 +9049,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.58 · calc icon + apple-touch-icon 💼</div>
+      <div className="vstrip">my money · v5.60 · Spinner Grid: align ทุก digit 📐</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -9724,6 +9785,7 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
   const [attemptedSave, setAttemptedSave] = useState(false);
 
   const photoInputRef = useRef(null);
+  const hiddenAmountRef = useRef(null); // v5.60: hidden input for the grid spinner — focused when user taps any digit cell
   const isOnline = !!account && !skipSync;
 
   // When switching income/expense, clear category if it belongs to the other type.
@@ -10166,97 +10228,168 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
               )}
             </div>
 
-            {/* v5.13 revised: stack the up-row, input track, and down-row using
-                identical intrinsic widths. Each digit cell is 26px wide and
-                the dot gap is 14px, matching the IBM Plex Mono font we use in
-                the input below. */}
+            {/* v5.60: CSS Grid spinner. Each digit position gets its own
+                grid column with a fixed width; the ^ row, digit row, and v
+                row all share those columns, so they line up automatically
+                regardless of digit count, decimals precision, or font
+                rendering quirks. Old flex+px-width approach is gone.
+
+                Digits are rendered as plain text cells (not an <input>),
+                with a hidden <input> overlaid for keyboard typing —
+                tapping any digit focuses it. This sidesteps the eternal
+                problem of "the input's centred text doesn't align with the
+                fixed-width buttons because the font's reported char width
+                differs from what we set". */}
             {(() => {
-              // v5.56: STEP_W 26→23 and DOT_W 14→12 to match the real char
-              // widths in IBM Plex Mono at 38px (which has ~0.6 em ratio).
-              // Previously the spinner caret buttons drifted right of each
-              // digit because the cells were ~3px too wide.
-              const STEP_W = 23;
-              const DOT_W = 12;
-              const trackWidth = (spinnerLayout.ints.length * STEP_W)
-                + (spinnerLayout.hasDot ? DOT_W : 0)
-                + (spinnerLayout.decs.length * STEP_W);
+              // Build the column list: one entry per "slot" the user sees.
+              // Each entry is { kind: 'digit-int' | 'dot' | 'digit-dec', mag: ±1 ±0.1 etc }
+              // We render top-down with ^ buttons (or empty for dot), then the
+              // digit text, then v buttons.
+              const cols = [];
+              spinnerLayout.ints.forEach((mag, i) =>
+                cols.push({ kind: 'int', mag, idx: i, count: spinnerLayout.ints.length })
+              );
+              if (spinnerLayout.hasDot) cols.push({ kind: 'dot' });
+              spinnerLayout.decs.forEach((mag, i) =>
+                cols.push({ kind: 'dec', mag, idx: i, count: spinnerLayout.decs.length })
+              );
+
+              // Width per column. Digits are 1fr (equal share), dot is narrower.
+              // We use literal px so the layout doesn't shrink the digits when
+              // the parent container is narrow. 28px gives a comfortable tap
+              // target for the ^/v buttons too.
+              const DIGIT_W = 28;
+              const DOT_W = 14;
+              const template = cols.map(c => c.kind === 'dot' ? `${DOT_W}px` : `${DIGIT_W}px`).join(' ');
+
+              // Format the amount string for the digit row. We display
+              // currentDecimals places, padding with zeros if the user is
+              // mid-typing. If empty/NaN we show placeholder zeros.
+              // The string always has exactly the same number of characters
+              // as `cols` so the per-column mapping is 1:1.
+              const buildDisplay = () => {
+                const n = parseFloat(amount);
+                let intPart, decPart;
+                const isNeg = amount.trim().startsWith('-');
+                if (!Number.isFinite(n)) {
+                  intPart = '0'.repeat(spinnerLayout.ints.length);
+                  decPart = '0'.repeat(spinnerLayout.decs.length);
+                } else {
+                  const fixed = Math.abs(n).toFixed(spinnerLayout.decs.length);
+                  const [ip, dp] = fixed.split('.');
+                  intPart = ip.padStart(spinnerLayout.ints.length, '0');
+                  decPart = (dp || '').padEnd(spinnerLayout.decs.length, '0');
+                }
+                const placeholder = !amount || amount === '' || !Number.isFinite(n);
+                return { intPart, decPart, isNeg, placeholder };
+              };
+              const disp = buildDisplay();
+
+              const digitColor = type === 'income' ? 'var(--income-soft)' : 'var(--text)';
+
               return (
                 <div className="amount-spinner-stack">
-                  {/* ^ row */}
-                  <div className="amount-spinner-row" aria-hidden="true" style={{width: trackWidth}}>
-                    {spinnerLayout.ints.map((mag, i) => (
-                      <button key={`up-i-${i}`} type="button" className="step up"
-                              onClick={() => stepAmount(mag)} tabIndex={-1}
-                              title={`+${mag}`}>^</button>
-                    ))}
-                    {spinnerLayout.hasDot && <span className="gap"></span>}
-                    {spinnerLayout.decs.map((mag, i) => (
-                      <button key={`up-d-${i}`} type="button" className="step up"
-                              onClick={() => stepAmount(mag)} tabIndex={-1}
-                              title={`+${mag}`}>^</button>
-                    ))}
-                  </div>
-
-                {/* Input track — matches spinner row width so the digits
-                      appear directly under the buttons. The currency symbol
-                      sits beside the track, not inside it.
-                      v5.57: also renders a small calculator icon to the
-                      right that opens a quick calc panel.
-                      v5.58: calc icon moved OUT of the track (was
-                      position:absolute right:-8 which overlapped the
-                      rightmost digit when the track was narrow). Now it's
-                      a flex sibling of the track in an outer row, so digits
-                      are never covered. */}
-                  <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap: 12}}>
-                    <div className="amount-input-track">
-                      {currentUnit.symbol && currentUnit.position === 'before' && (
-                        <span className="cur">{currentUnit.symbol}</span>
-                      )}
-                      <span className="digit-input-shell" style={{width: trackWidth}}>
-                        <input inputMode="decimal" placeholder="0" value={amount} onChange={handleAmount}
-                               onBlur={() => {
-                                 if (amount !== '' && !isNaN(parseFloat(amount))) {
-                                   setAmount(parseFloat(amount).toFixed(currentDecimals));
-                                 }
-                               }}
-                               style={{color: type === 'income' ? 'var(--income-soft)' : 'var(--text)'}}/>
+                  {/* Currency symbol (before) and the grid itself sit in a flex
+                      row, with the calc icon absolutely positioned. */}
+                  <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap: 8}}>
+                    {currentUnit.symbol && currentUnit.position === 'before' && (
+                      <span style={{fontFamily:'IBM Plex Mono, monospace', fontSize: 20, color: 'var(--text-dim)'}}>
+                        {currentUnit.symbol}
                       </span>
-                      {currentUnit.symbol && currentUnit.position === 'after' && (
-                        <span className="cur after">{currentUnit.symbol}</span>
-                      )}
+                    )}
+                    <div className="amount-grid" style={{gridTemplateColumns: template}}>
+                      {/* ^ row */}
+                      {cols.map((c, i) => (
+                        c.kind === 'dot'
+                          ? <span key={`up-${i}`} className="cell-spacer" aria-hidden="true"></span>
+                          : <button key={`up-${i}`} type="button" className="cell-up"
+                                    onClick={() => stepAmount(c.mag)} tabIndex={-1}
+                                    title={`+${c.mag}`} aria-label={`เพิ่ม ${c.mag}`}>^</button>
+                      ))}
+                      {/* digit row */}
+                      {cols.map((c, i) => {
+                        if (c.kind === 'dot') {
+                          return <span key={`d-${i}`} className="cell-dot">.</span>;
+                        }
+                        const ch = c.kind === 'int' ? disp.intPart[c.idx] : disp.decPart[c.idx];
+                        // Show leading-zero ints in a faded color so the user
+                        // can tell the "real" digits from the padding.
+                        const isPadding = (() => {
+                          if (c.kind !== 'int') return false;
+                          // First non-zero int digit onward = real
+                          for (let j = 0; j < c.idx; j++) if (disp.intPart[j] !== '0') return false;
+                          // The last int digit is always shown as real even if 0
+                          if (c.idx === disp.intPart.length - 1) return false;
+                          return disp.intPart[c.idx] === '0';
+                        })();
+                        return (
+                          <span key={`d-${i}`}
+                                onClick={() => hiddenAmountRef.current?.focus()}
+                                className={`cell-digit ${isPadding ? 'placeholder' : ''}`}
+                                style={{color: isPadding ? 'var(--text-faint)' : digitColor}}>
+                            {ch}
+                          </span>
+                        );
+                      })}
+                      {/* v row */}
+                      {cols.map((c, i) => (
+                        c.kind === 'dot'
+                          ? <span key={`dn-${i}`} className="cell-spacer" aria-hidden="true"></span>
+                          : <button key={`dn-${i}`} type="button" className="cell-down"
+                                    onClick={() => stepAmount(-c.mag)} tabIndex={-1}
+                                    title={`−${c.mag}`} aria-label={`ลด ${c.mag}`}>v</button>
+                      ))}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowCalc(true)}
-                      title="เครื่องคิดเลข"
-                      style={{
-                        width: 32, height: 32, padding: 0,
-                        background: 'var(--surface2)',
-                        border: '1px solid var(--line)',
-                        borderRadius: 8, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 16, flexShrink: 0,
-                      }}>
-                      🧮
-                    </button>
+                    {currentUnit.symbol && currentUnit.position === 'after' && (
+                      <span style={{fontFamily:'IBM Plex Mono, monospace', fontSize: 16, color: 'var(--text-dim)'}}>
+                        {currentUnit.symbol}
+                      </span>
+                    )}
                   </div>
-
-                  {/* v row */}
-                  <div className="amount-spinner-row dot-row" aria-hidden="true" style={{width: trackWidth}}>
-                    {spinnerLayout.ints.map((mag, i) => (
-                      <button key={`dn-i-${i}`} type="button" className="step down"
-                              onClick={() => stepAmount(-mag)} tabIndex={-1}
-                              title={`−${mag}`}
-                              style={{transform:'rotate(180deg)'}}>^</button>
-                    ))}
-                    {spinnerLayout.hasDot && <span className="gap"></span>}
-                    {spinnerLayout.decs.map((mag, i) => (
-                      <button key={`dn-d-${i}`} type="button" className="step down"
-                              onClick={() => stepAmount(-mag)} tabIndex={-1}
-                              title={`−${mag}`}
-                              style={{transform:'rotate(180deg)'}}>^</button>
-                    ))}
-                  </div>
+                  {/* Negative sign indicator (since the digit cells are
+                      abs-valued, we surface the sign as a small badge so the
+                      user can still tell it's negative at a glance). */}
+                  {disp.isNeg && Number.isFinite(parseFloat(amount)) && (
+                    <div style={{fontSize: 12, color: 'var(--expense-soft)', marginTop: 2}}>
+                      ค่าติดลบ
+                    </div>
+                  )}
+                  {/* Hidden input — captures keyboard / numpad / paste. The
+                      visible cell-digit spans focus this on tap so the OS
+                      keyboard pops up. */}
+                  <input
+                    ref={hiddenAmountRef}
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={handleAmount}
+                    onBlur={() => {
+                      if (amount !== '' && !isNaN(parseFloat(amount))) {
+                        setAmount(parseFloat(amount).toFixed(currentDecimals));
+                      }
+                    }}
+                    style={{
+                      position: 'absolute', opacity: 0, pointerEvents: 'none',
+                      width: 1, height: 1, left: 0, top: 0,
+                    }}
+                    aria-label="จำนวนเงิน"
+                  />
+                  {/* Calculator icon — absolute right of the stack */}
+                  <button
+                    type="button"
+                    onClick={() => setShowCalc(true)}
+                    title="เครื่องคิดเลข"
+                    style={{
+                      position: 'absolute',
+                      right: 0, top: '50%', transform: 'translateY(-50%)',
+                      width: 32, height: 32, padding: 0,
+                      background: 'var(--surface2)',
+                      border: '1px solid var(--line)',
+                      borderRadius: 8, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 16,
+                    }}>
+                    🧮
+                  </button>
                 </div>
               );
             })()}
