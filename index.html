@@ -14,6 +14,12 @@
      instead of being a generic browser icon. SVG drawn inline so no
      external assets are needed and the icon stays crisp at any size. -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='6' y='14' width='52' height='40' rx='8' fill='%23D4A574' stroke='%232A1B0A' stroke-width='2'/%3E%3Cpath d='M6 22 Q6 14 14 14 L40 14 Q44 14 44 18 L44 24 L6 24 Z' fill='%23B8895B'/%3E%3Ccircle cx='46' cy='34' r='5' fill='%232A1B0A'/%3E%3Ccircle cx='46' cy='34' r='2' fill='%23D4A574'/%3E%3C/svg%3E">
+<!-- v5.58: apple-touch-icon so iOS/iPadOS use the wallet pictogram on the
+     home screen instead of falling back to a screenshot. Also helps some
+     Android launchers that recognise this hint. Same SVG content as the
+     manifest icon (square wallet on dark background), encoded so it can
+     live inline. -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%230E0C0A'/%3E%3Crect x='60' y='130' width='392' height='290' rx='48' fill='%23D4A574' stroke='%232A1B0A' stroke-width='14'/%3E%3Cpath d='M60 188 Q60 130 118 130 L320 130 Q352 130 352 162 L352 210 L60 210 Z' fill='%23B8895B'/%3E%3Ccircle cx='378' cy='280' r='38' fill='%232A1B0A'/%3E%3Ccircle cx='378' cy='280' r='16' fill='%23D4A574'/%3E%3C/svg%3E">
 <link rel="manifest" href='data:application/json,{"name":"my money","short_name":"my money","theme_color":"%230E0C0A","background_color":"%230E0C0A","display":"standalone","orientation":"portrait","start_url":".","scope":".","icons":[{"src":"data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%253D%2522http%253A%252F%252Fwww.w3.org%252F2000%252Fsvg%2522%2520viewBox%253D%25220%25200%2520512%2520512%2522%253E%253Crect%2520width%253D%2522512%2522%2520height%253D%2522512%2522%2520fill%253D%2522%25230E0C0A%2522%252F%253E%253Crect%2520x%253D%252260%2522%2520y%253D%2522130%2522%2520width%253D%2522392%2522%2520height%253D%2522290%2522%2520rx%253D%252248%2522%2520fill%253D%2522%2523D4A574%2522%2520stroke%253D%2522%25232A1B0A%2522%2520stroke-width%253D%252214%2522%252F%253E%253Cpath%2520d%253D%2522M60%2520188%2520Q60%2520130%2520118%2520130%2520L320%2520130%2520Q352%2520130%2520352%2520162%2520L352%2520210%2520L60%2520210%2520Z%2522%2520fill%253D%2522%2523B8895B%2522%252F%253E%253Ccircle%2520cx%253D%2522378%2522%2520cy%253D%2522280%2522%2520r%253D%252238%2522%2520fill%253D%2522%25232A1B0A%2522%252F%253E%253Ccircle%2520cx%253D%2522378%2522%2520cy%253D%2522280%2522%2520r%253D%252216%2522%2520fill%253D%2522%2523D4A574%2522%252F%253E%253C%252Fsvg%253E","sizes":"512x512","type":"image/svg+xml"}]}'>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -4194,8 +4200,8 @@ async function clearPhotoCache() {
 // Stores each new version of index.html in OneDrive /Apps/my money/versions/
 // and maintains a CHANGELOG.md so user can audit & downgrade later.
 
-const APP_VERSION = 'v5.57';
-const APP_VERSION_TAG = '#2 icon กระเป๋าตังค์ + #4 เครื่องคิดเลขใน TxSheet';
+const APP_VERSION = 'v5.58';
+const APP_VERSION_TAG = '#1 calc icon ไม่ทับเลข + #2 apple-touch-icon';
 
 // Check whether a file exists in the app folder
 async function odriveFileExists(path) {
@@ -8982,7 +8988,7 @@ function SettingsView({ account, skipSync, status, lastSync, errMsg, state, setS
       )}
 
       {/* Version pill — visible to everyone for support/debugging */}
-      <div className="vstrip">my money · v5.57 · icon กระเป๋า + เครื่องคิดเลข 🧮</div>
+      <div className="vstrip">my money · v5.58 · calc icon + apple-touch-icon 💼</div>
 
       {showLessonsEditor && (
         <LessonsEditor
@@ -10195,41 +10201,41 @@ function TxSheet({ initial, onClose, onSave, onDelete, account, skipSync, pushTo
                       appear directly under the buttons. The currency symbol
                       sits beside the track, not inside it.
                       v5.57: also renders a small calculator icon to the
-                      right that opens a quick calc panel. Useful for
-                      entering "buy 3 items at 89 baht each = 267" without
-                      doing the math elsewhere. */}
-                  <div className="amount-input-track" style={{position: 'relative'}}>
-                    {currentUnit.symbol && currentUnit.position === 'before' && (
-                      <span className="cur">{currentUnit.symbol}</span>
-                    )}
-                    <span className="digit-input-shell" style={{width: trackWidth}}>
-                      <input inputMode="decimal" placeholder="0" value={amount} onChange={handleAmount}
-                             onBlur={() => {
-                               if (amount !== '' && !isNaN(parseFloat(amount))) {
-                                 setAmount(parseFloat(amount).toFixed(currentDecimals));
-                               }
-                             }}
-                             style={{color: type === 'income' ? 'var(--income-soft)' : 'var(--text)'}}/>
-                    </span>
-                    {currentUnit.symbol && currentUnit.position === 'after' && (
-                      <span className="cur after">{currentUnit.symbol}</span>
-                    )}
-                    {/* v5.57: small calculator launcher. Positioned absolutely
-                        so it sits outside the centered digit track and never
-                        affects digit alignment with the spinner rows. */}
+                      right that opens a quick calc panel.
+                      v5.58: calc icon moved OUT of the track (was
+                      position:absolute right:-8 which overlapped the
+                      rightmost digit when the track was narrow). Now it's
+                      a flex sibling of the track in an outer row, so digits
+                      are never covered. */}
+                  <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap: 12}}>
+                    <div className="amount-input-track">
+                      {currentUnit.symbol && currentUnit.position === 'before' && (
+                        <span className="cur">{currentUnit.symbol}</span>
+                      )}
+                      <span className="digit-input-shell" style={{width: trackWidth}}>
+                        <input inputMode="decimal" placeholder="0" value={amount} onChange={handleAmount}
+                               onBlur={() => {
+                                 if (amount !== '' && !isNaN(parseFloat(amount))) {
+                                   setAmount(parseFloat(amount).toFixed(currentDecimals));
+                                 }
+                               }}
+                               style={{color: type === 'income' ? 'var(--income-soft)' : 'var(--text)'}}/>
+                      </span>
+                      {currentUnit.symbol && currentUnit.position === 'after' && (
+                        <span className="cur after">{currentUnit.symbol}</span>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={() => setShowCalc(true)}
                       title="เครื่องคิดเลข"
                       style={{
-                        position: 'absolute',
-                        right: -8, top: '50%', transform: 'translateY(-50%)',
-                        width: 30, height: 30, padding: 0,
+                        width: 32, height: 32, padding: 0,
                         background: 'var(--surface2)',
                         border: '1px solid var(--line)',
                         borderRadius: 8, cursor: 'pointer',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 14,
+                        fontSize: 16, flexShrink: 0,
                       }}>
                       🧮
                     </button>
